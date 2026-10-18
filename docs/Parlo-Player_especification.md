@@ -285,8 +285,11 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 | **6** | **Artistas favoritos** | Cards de artista (quadrados). | `getStarred2` → `artist[]`. |
 
 * Seções vazias mostram uma mensagem curta explicando como preenchê-las.
+* **Dois formatos de seção** (referência: YouTube Music, "Escolha a dedo" e página "Ouvir novamente"):
+  * **Seções de faixas** (Músicas favoritas, Favoritos esquecidos): **lista em 3 colunas × 4 linhas** (12 faixas por página), cada linha com capa pequena, título e "artista • álbum". As setas < > passam para as próximas 12. No canto superior direito, botão **Tocar tudo**, que toca a lista completa da seção na ordem.
+  * **Seções de álbuns e artistas** (Ouvir de novo, Álbuns mais escutados, Álbuns favoritos, Artistas favoritos): carrossel de cards (até 20) e, no canto superior direito, botão **Ver mais**, que abre uma página com o título da seção e **todos os itens em grade**, com rolagem contínua.
 * **Regras detalhadas:**
-  * Cada carrossel mostra até **20 itens**.
+  * Seções de faixas mostram até 4 páginas (48 faixas) no carrossel; "Tocar tudo" sempre toca a lista inteira.
   * **Ouvir de novo:** álbuns e faixas misturados, do mais recente para o mais antigo. Uma faixa não aparece se o álbum dela já estiver na fileira. Os álbuns vêm do servidor (vale para reproduções em outros apps); as faixas, do histórico local.
   * **Favoritos esquecidos:** só faixas.
   * **Clique em faixa:** toca a lista completa que o carrossel representa, na mesma ordem, a partir dela (ex.: todas as músicas favoritas, "Tocando de: Músicas favoritas"; em Ouvir de novo, as faixas da fileira).
@@ -621,3 +624,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Restauração da fila: a mais recente vence (local ou servidor), permitindo continuar de outro dispositivo; filas grandes salvas por POST. |
 | 18/10/2026 | Baixados oculto na sidebar até a v0.2; capas servidas pelo backend via protocolo próprio com cache; fonte empacotada. |
 | 18/10/2026 | Regras detalhadas da Home: 20 itens por carrossel, mistura de Ouvir de novo, contexto ao clicar em faixa, origem dos dados. Home construída antes das demais telas. |
+| 18/10/2026 | Home: seções de faixas em lista 3×4 com "Tocar tudo"; seções de álbuns/artistas com "Ver mais" abrindo grade completa (referência YouTube Music). |

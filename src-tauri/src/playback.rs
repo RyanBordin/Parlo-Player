@@ -180,6 +180,17 @@ impl Playback {
         result
     }
 
+    /// Plays a whole album from its first song (Play button on a card, spec
+    /// 5.2), in disc and track order, "Playing from" the album name.
+    pub fn play_album(&self, album_id: &str) -> Result<(), PlaybackError> {
+        let library = self.library()?;
+        let (name, ids) = read_db(&library.db_path, |conn| db::home::album_songs(conn, album_id))?;
+        if ids.is_empty() {
+            return Err(PlaybackError::NoSongs);
+        }
+        self.play_context(ids, 0, name.unwrap_or_default())
+    }
+
     pub fn next(&self) -> Result<(), PlaybackError> {
         self.step(Queue::next)
     }

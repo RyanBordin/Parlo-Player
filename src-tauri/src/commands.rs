@@ -8,12 +8,13 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::library::{self, LibraryStats, PlaylistSummary, SongSummary};
 use crate::db::{self, DbError};
+use crate::home::{self, HomeActivity, HomeLibrary, ROW_SIZE};
 use crate::playback::{Playback, PlaybackError, QueueState};
 use crate::player::queue::RepeatMode;
 use crate::player::{PlayerError, PlayerState};
 use crate::session::{self, SavedSession, SessionError};
 use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
-use crate::subsonic::{ServerInfo, SubsonicClient, SubsonicError};
+use crate::subsonic::{AlbumListType, ServerInfo, SubsonicClient, SubsonicError};
 use crate::sync::{self, SyncError, SyncProgress};
 
 /// Event with a `SyncProgress` payload, sent while a sync runs.
@@ -247,6 +248,29 @@ pub async fn list_songs(
     .await
 }
 
+/// Home rows from the local cache: favorites (spec 6.1).
+#[tauri::command]
+pub async fn get_home_library(state: State<'_, Arc<AppState>>) -> Result<HomeLibrary, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || home::library(&db::open(&active.db_path)?)).await
+}
+
+/// Home rows asked from the server ("Listen again", "Most played albums"),
+/// with the local cache standing in when it cannot be reached (spec 6.1).
+#[tauri::command]
+pub async fn get_home_activity(state: State<'_, Arc<AppState>>) -> Result<HomeActivity, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let client = &active.client;
+    let recent = client.get_album_list2(AlbumListType::Recent, ROW_SIZE as u32).await;
+    // If the server did not answer, do not wait for it a second time.
+    let frequent = match &recent {
+        Err(SubsonicError::Http(_)) => None,
+        _ => client.get_album_list2(AlbumListType::Frequent, ROW_SIZE as u32).await.ok(),
+    };
+    let recent = recent.ok();
+    run_blocking(move || home::activity(&db::open(&active.db_path)?, recent, frequent)).await
+}
+
 /// Playlists from the local cache, by name (sidebar, spec 4.2).
 #[tauri::command]
 pub async fn list_playlists(state: State<'_, Arc<AppState>>) -> Result<Vec<PlaylistSummary>, CommandError> {
@@ -282,6 +306,16 @@ pub async fn play_context(
 #[tauri::command]
 pub async fn restore_queue(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {
     Ok(playback_of(&playback)?.restore().await?)
+}
+
+/// Plays a whole album (Play button on its card).
+#[tauri::command]
+pub async fn play_album(playback: State<'_, PlaybackSlot>, album_id: String) -> Result<(), CommandError> {
+    let playback = playback_of(&playback)?;
+    tauri::async_runtime::spawn_blocking(move || playback.play_album(&album_id))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
 }
 
 #[tauri::command]

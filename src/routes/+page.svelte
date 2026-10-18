@@ -1,208 +1,160 @@
 <script lang="ts">
-  // Home (spec 6.1). The carousels come in step 7; for now it keeps the
-  // temporary list of recently added songs, the queue and the library status.
-  import { getLibraryStatus, listSongs, playContext, type LibraryStatus, type SongSummary } from "#lib/api.ts";
-  import QueueList from "#lib/components/QueueList.svelte";
+  // Home (spec 6.1): six rows of cards, in this order.
+  import {
+    getHomeActivity,
+    getHomeLibrary,
+    playContext,
+    type HomeActivity,
+    type HomeLibrary,
+    type SongRow,
+  } from "#lib/api.ts";
+  import AlbumCard from "#lib/components/cards/AlbumCard.svelte";
+  import ArtistCard from "#lib/components/cards/ArtistCard.svelte";
+  import Carousel from "#lib/components/cards/Carousel.svelte";
+  import TrackCard from "#lib/components/cards/TrackCard.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
-  import { formatDateTime, formatDuration, formatNumber } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
-  import { player } from "#lib/player.svelte.ts";
-  import { phaseLabel, progressLabel, startSync, syncState } from "#lib/sync.svelte.ts";
+  import { syncState } from "#lib/sync.svelte.ts";
 
-  const SONG_LIST_SIZE = 20;
+  /** Cover width of the standard and the large ("Listen again") cards. */
+  const CARD = 160;
+  const LARGE_CARD = 200;
 
-  let status = $state<LibraryStatus | null>(null);
-  let songs = $state<SongSummary[]>([]);
+  let library = $state<HomeLibrary | null>(null);
+  let activity = $state<HomeActivity | null>(null);
   let error = $state<ErrorMessage | null>(null);
 
-  let syncError = $derived(syncState.error ? describeError(syncState.error) : null);
-  let lastSync = $derived.by(() => {
-    const dates = [status?.lastFullSyncAt, status?.lastLightSyncAt].filter((d) => d != null);
-    return dates.length ? Math.max(...dates) : null;
-  });
+  // The songs of "Listen again", in the row's order: a click plays them.
+  let listenAgainSongs = $derived(
+    (activity?.listenAgain ?? []).flatMap((item) => (item.kind === "song" ? [item.id] : [])),
+  );
 
-  // Reload the counts and songs on open and after every sync.
+  // Each time the page opens and after every sync (spec 6.1). The local rows
+  // come at once; the server ones when it answers.
   $effect(() => {
     void syncState.finishedCount;
-    getLibraryStatus()
-      .then((s) => (status = s))
+    error = null;
+    getHomeLibrary()
+      .then((rows) => (library = rows))
       .catch((e) => (error = describeError(e)));
-    listSongs(SONG_LIST_SIZE)
-      .then((list) => (songs = list))
+    getHomeActivity()
+      .then((rows) => (activity = rows))
       .catch((e) => (error = describeError(e)));
   });
 
-  // Spec 5.1: the queue becomes the whole list, starting at the clicked song.
-  async function play(index: number) {
+  function play(ids: string[], index: number, label: string) {
     error = null;
-    try {
-      await playContext(
-        songs.map((s) => s.id),
-        index,
-        m.songs_recent_title(),
-      );
-    } catch (e) {
-      error = describeError(e);
-    }
+    playContext(ids, index, label).catch((e) => (error = describeError(e)));
+  }
+
+  /** A click on a song of a row plays the whole list it stands for. */
+  function playRow(row: SongRow, index: number, label: string) {
+    play(row.allIds, index, label);
+  }
+
+  function showError(e: unknown) {
+    error = describeError(e);
   }
 </script>
 
 <div class="page">
   <h1 class="page-title">{m.nav_home()}</h1>
-
+  {#if activity && !activity.fromServer}
+    <p class="page-subtitle">{m.home_offline()}</p>
+  {/if}
   {#if error}
     <p class="error">{error.message}</p>
   {/if}
 
-  <section class="songs">
-    <h2 class="section-title">{m.songs_recent_title()}</h2>
-    {#if songs.length === 0}
-      <p class="muted">{m.songs_empty()}</p>
-    {:else}
-      <ol>
-        {#each songs as song, index (song.id)}
-          <li>
-            <button class:current={player.track?.id === song.id} onclick={() => play(index)}>
-              <span class="number">{index + 1}</span>
-              <span class="song-title">{song.title}</span>
-              <span class="muted">{song.artist ?? ""}</span>
-              <span class="muted duration">{formatDuration(song.duration)}</span>
-            </button>
-          </li>
-        {/each}
-      </ol>
-    {/if}
-  </section>
+  <div class="rows">
+    <Carousel
+      title={m.home_listen_again()}
+      count={activity?.listenAgain.length ?? 0}
+      loaded={activity !== null}
+      empty={m.home_listen_again_empty()}
+    >
+      {#each activity?.listenAgain ?? [] as item (`${item.kind}-${item.id}`)}
+        {#if item.kind === "album"}
+          <AlbumCard album={item} size={LARGE_CARD} large label={m.card_type_album()} onerror={showError} />
+        {:else}
+          <TrackCard
+            song={item}
+            size={LARGE_CARD}
+            large
+            label={m.card_type_song()}
+            onplay={() => play(listenAgainSongs, listenAgainSongs.indexOf(item.id), m.home_listen_again())}
+          />
+        {/if}
+      {/each}
+    </Carousel>
 
-  <QueueList />
+    <Carousel
+      title={m.home_most_played_albums()}
+      count={activity?.mostPlayedAlbums.length ?? 0}
+      loaded={activity !== null}
+      empty={m.home_most_played_albums_empty()}
+    >
+      {#each activity?.mostPlayedAlbums ?? [] as album (album.id)}
+        <AlbumCard {album} size={CARD} onerror={showError} />
+      {/each}
+    </Carousel>
 
-  <section class="library">
-    <h2 class="section-title">{m.home_library_title()}</h2>
-    {#if status}
-      <dl class="stats">
-        <div>
-          <dt>{m.home_stat_songs()}</dt>
-          <dd>{formatNumber(status.songs)}</dd>
-        </div>
-        <div>
-          <dt>{m.home_stat_albums()}</dt>
-          <dd>{formatNumber(status.albums)}</dd>
-        </div>
-        <div>
-          <dt>{m.home_stat_artists()}</dt>
-          <dd>{formatNumber(status.artists)}</dd>
-        </div>
-      </dl>
-    {/if}
+    <Carousel
+      title={m.home_starred_songs()}
+      count={library?.starredSongs.songs.length ?? 0}
+      loaded={library !== null}
+      empty={m.home_starred_songs_empty()}
+    >
+      {#each library?.starredSongs.songs ?? [] as song, index (song.id)}
+        <TrackCard {song} size={CARD} onplay={() => playRow(library!.starredSongs, index, m.home_starred_songs())} />
+      {/each}
+    </Carousel>
 
-    <div class="sync" aria-live="polite">
-      {#if syncState.running}
-        <p class="muted">
-          {m.home_syncing()} · {phaseLabel(syncState.progress)}
-          {#if progressLabel(syncState.progress)}({progressLabel(syncState.progress)}){/if}
-        </p>
-      {:else if lastSync !== null}
-        <p class="muted">{m.home_last_sync({ date: formatDateTime(lastSync) })}</p>
-      {:else}
-        <p class="muted">{m.home_never_synced()}</p>
-      {/if}
-      {#if syncError}
-        <p class="error">{syncError.message}</p>
-      {/if}
-      <button class="button button-secondary" onclick={() => startSync(true)} disabled={syncState.running}>
-        {syncState.running ? m.home_syncing() : m.home_sync_now()}
-      </button>
-    </div>
-  </section>
+    <Carousel
+      title={m.home_starred_albums()}
+      count={library?.starredAlbums.length ?? 0}
+      loaded={library !== null}
+      empty={m.home_starred_albums_empty()}
+    >
+      {#each library?.starredAlbums ?? [] as album (album.id)}
+        <AlbumCard {album} size={CARD} onerror={showError} />
+      {/each}
+    </Carousel>
+
+    <Carousel
+      title={m.home_forgotten_starred()}
+      count={library?.forgottenStarred.songs.length ?? 0}
+      loaded={library !== null}
+      empty={m.home_forgotten_starred_empty()}
+    >
+      {#each library?.forgottenStarred.songs ?? [] as song, index (song.id)}
+        <TrackCard {song} size={CARD} onplay={() => playRow(library!.forgottenStarred, index, m.home_forgotten_starred())} />
+      {/each}
+    </Carousel>
+
+    <Carousel
+      title={m.home_starred_artists()}
+      count={library?.starredArtists.length ?? 0}
+      loaded={library !== null}
+      empty={m.home_starred_artists_empty()}
+    >
+      {#each library?.starredArtists ?? [] as artist (artist.id)}
+        <ArtistCard {artist} size={CARD} />
+      {/each}
+    </Carousel>
+  </div>
 </div>
 
 <style>
-  .page {
+  .rows {
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-  }
-
-  ol {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  li button {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 2.5em 2fr 1.5fr auto;
-    gap: var(--space-4);
-    padding: var(--space-2) var(--space-3);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--color-text);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  li button:hover {
-    background: var(--color-surface);
-  }
-
-  li button span {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .number,
-  .duration {
-    color: var(--color-text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Current song: accent color, like the track indicator of spec 5.5. */
-  li button.current .song-title,
-  li button.current .number {
-    color: var(--color-accent-text);
-  }
-
-  .stats {
-    display: flex;
-    gap: var(--space-4);
-    margin: 0 0 var(--space-4);
-  }
-
-  .stats div {
-    min-width: 140px;
-    padding: var(--space-4) var(--space-5);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
-  }
-
-  dt {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-  }
-
-  dd {
-    margin: var(--space-1) 0 0;
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-  }
-
-  .sync {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-    font-size: var(--font-size-sm);
-  }
-
-  .muted {
-    color: var(--color-text-muted);
+    margin-top: var(--space-6);
   }
 
   .error {
+    margin-top: var(--space-3);
     color: var(--color-error);
     font-size: var(--font-size-sm);
   }

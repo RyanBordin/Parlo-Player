@@ -103,6 +103,43 @@ export type SongSummary = {
   starred: boolean;
 };
 
+/** Mirrors `AlbumCard` in src-tauri/src/db/home.rs. */
+export type AlbumCard = {
+  id: string;
+  name: string;
+  artist: string | null;
+  artistId: string | null;
+  coverArt: string | null;
+};
+
+/** Mirrors `ArtistCard`: without a photo, the latest album's cover stands in. */
+export type ArtistCard = {
+  id: string;
+  name: string;
+  coverArt: string | null;
+  fallbackCoverArt: string | null;
+};
+
+/** A "Listen again" card: an album or a song. */
+export type ListenAgainItem = ({ kind: "album" } & AlbumCard) | ({ kind: "song" } & SongSummary);
+
+/** The cards of a song row and every song of the list it stands for. */
+export type SongRow = { songs: SongSummary[]; allIds: string[] };
+
+export type HomeLibrary = {
+  starredSongs: SongRow;
+  starredAlbums: AlbumCard[];
+  forgottenStarred: SongRow;
+  starredArtists: ArtistCard[];
+};
+
+export type HomeActivity = {
+  listenAgain: ListenAgainItem[];
+  mostPlayedAlbums: AlbumCard[];
+  /** False when the local cache stood in for the server. */
+  fromServer: boolean;
+};
+
 /** Mirrors `PlaylistSummary` in src-tauri/src/db/library.rs. */
 export type PlaylistSummary = {
   id: string;
@@ -153,6 +190,21 @@ export type QueueState = {
 
 export function listSongs(limit: number): Promise<SongSummary[]> {
   return invoke("list_songs", { limit });
+}
+
+/** Home rows from the local cache (favorites). */
+export function getHomeLibrary(): Promise<HomeLibrary> {
+  return invoke("get_home_library");
+}
+
+/** Home rows from the server, or the local cache without connection. */
+export function getHomeActivity(): Promise<HomeActivity> {
+  return invoke("get_home_activity");
+}
+
+/** Plays a whole album in disc and track order. */
+export function playAlbum(albumId: string): Promise<void> {
+  return invoke("play_album", { albumId });
 }
 
 /** Playlists from the local cache, by name. */

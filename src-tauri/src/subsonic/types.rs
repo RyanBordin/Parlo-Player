@@ -197,6 +197,13 @@ impl TryFrom<RawLibraryItems> for LibraryItems {
     }
 }
 
+/// `getAlbumList2` returns `{ "albumList2": { "album": [...] } }`.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct RawAlbumList {
+    #[serde(default)]
+    pub album: Vec<Value>,
+}
+
 /// `getPlaylists` returns `{ "playlists": { "playlist": [...] } }`.
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct RawPlaylists {

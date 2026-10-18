@@ -133,6 +133,20 @@ mod tests {
     }
 
     #[test]
+    fn takes_album_list2() {
+        use crate::subsonic::types::{Album, RawAlbumList, with_raw_json};
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "albumList2":{"album":[{"id":"al1","name":"One","artist":"A","artistId":"ar1",
+            "coverArt":"al-al1","played":"2026-10-18T10:00:00Z","playCount":7}]}}}"#;
+        let raw: RawAlbumList = parse_response(json).unwrap().take("albumList2").unwrap();
+        let albums: Vec<Album> = with_raw_json(raw.album).unwrap();
+        assert_eq!(albums[0].id, "al1");
+        assert_eq!(albums[0].played.as_deref(), Some("2026-10-18T10:00:00Z"));
+        assert_eq!(albums[0].play_count, Some(7));
+    }
+
+    #[test]
     fn takes_play_queue() {
         use crate::subsonic::types::PlayQueue;
 

@@ -226,10 +226,10 @@ pub struct SongSummary {
     pub starred: bool,
 }
 
-const SONG_SUMMARY_COLUMNS: &str =
+pub(super) const SONG_SUMMARY_COLUMNS: &str =
     "id, title, artist, album, artist_id, album_id, cover_art, duration, starred IS NOT NULL";
 
-fn song_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SongSummary> {
+pub(super) fn song_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SongSummary> {
     Ok(SongSummary {
         id: row.get(0)?,
         title: row.get(1)?,

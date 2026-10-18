@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use tauri::{Manager, RunEvent};
 
-use covers::CoverCache;
+use covers::{CoverCache, Covers};
 use playback::Playback;
 use state::{AppState, PlaybackSlot};
 
 mod commands;
 mod covers;
 mod db;
+mod home;
 mod locale;
 mod playback;
 mod player;
@@ -16,6 +17,7 @@ mod session;
 mod state;
 pub mod subsonic;
 mod sync;
+mod time;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,7 +28,7 @@ pub fn run() {
         .setup(|app| {
             // Spec 12.4: covers on disk, 500 MB at most.
             let dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir()).join("covers");
-            app.manage(Arc::new(CoverCache::new(dir, covers::DEFAULT_LIMIT_BYTES)));
+            app.manage(Arc::new(Covers::new(CoverCache::new(dir, covers::DEFAULT_LIMIT_BYTES))));
 
             let playback = Playback::start(app.handle().clone()).map_err(|e| e.to_string());
             app.manage(PlaybackSlot(playback));
@@ -41,6 +43,9 @@ pub fn run() {
             commands::sync_library,
             commands::list_songs,
             commands::list_playlists,
+            commands::get_home_library,
+            commands::get_home_activity,
+            commands::play_album,
             commands::play_context,
             commands::restore_queue,
             commands::next,

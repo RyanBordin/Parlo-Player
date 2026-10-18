@@ -93,3 +93,29 @@ async fn server_takes_post_forms_and_reads_the_play_queue() {
         assert!(queue.changed.is_some());
     }
 }
+
+#[tokio::test]
+#[ignore = "requires a Navidrome server configured in .env"]
+async fn artists_without_a_photo_get_the_server_placeholder() {
+    let server = test_server();
+    let client = SubsonicClient::new(server.url, server.user, server.password).unwrap();
+
+    // Read-only: an ID that cannot exist gives the generic artist image.
+    let placeholder = client.get_cover_art("ar-parlo-missing-placeholder", 128).await;
+    let placeholder = match placeholder {
+        Ok(bytes) => bytes,
+        Err(error) => panic!("unknown artist ID did not give an image: {error}"),
+    };
+
+    let artists = client.search3(SearchPage::artists(40, 0)).await.unwrap().artists;
+    let (mut same, mut different) = (0, 0);
+    for artist in artists.iter().filter_map(|a| a.cover_art.as_deref()) {
+        match client.get_cover_art(artist, 128).await {
+            Ok(bytes) if bytes == placeholder => same += 1,
+            Ok(_) => different += 1,
+            Err(_) => {}
+        }
+    }
+    println!("placeholder: {} bytes; artists with it: {same}, with a photo: {different}", placeholder.len());
+    assert!(same + different > 0);
+}

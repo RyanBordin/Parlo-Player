@@ -7,19 +7,22 @@
 
   let {
     id,
+    fallback = null,
     size,
     alt = "",
     radius = "var(--radius-md)",
   }: {
     /** `coverArt` from the library; empty shows the placeholder. */
     id: string | null | undefined;
+    /** Cover used when `id` has no real image (artists without a photo). */
+    fallback?: string | null;
     /** Width shown, in CSS pixels (picks the image size to ask for). */
     size: number;
     alt?: string;
     radius?: string;
   } = $props();
 
-  let src = $derived(id ? coverUrl(id, size) : null);
+  let src = $derived(id ? coverUrl(id, size, fallback) : fallback ? coverUrl(fallback, size) : null);
   // The URL that failed, so a new cover starts without the old error.
   let failedSrc = $state<string | null>(null);
   let showImage = $derived(src !== null && src !== failedSrc);

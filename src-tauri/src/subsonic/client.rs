@@ -9,8 +9,8 @@ use super::error::SubsonicError;
 use super::response::{ResponseBody, parse_response};
 use super::secret_url::SecretUrl;
 use super::types::{
-    Extension, LibraryItems, PlayQueue, Playlist, RawLibraryItems, RawPlaylists, ScanStatus,
-    with_raw_json,
+    Album, Extension, LibraryItems, PlayQueue, Playlist, RawAlbumList, RawLibraryItems, RawPlaylists,
+    ScanStatus, with_raw_json,
 };
 
 const API_VERSION: &str = "1.16.1";
@@ -43,6 +43,24 @@ impl SearchPage {
 
     pub fn songs(count: u32, offset: u32) -> Self {
         Self { song_count: count, song_offset: offset, ..Self::default() }
+    }
+}
+
+/// Orders of `getAlbumList2` used by the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlbumListType {
+    /// Recently played, newest first (also by other apps).
+    Recent,
+    /// Most played.
+    Frequent,
+}
+
+impl AlbumListType {
+    fn as_str(self) -> &'static str {
+        match self {
+            AlbumListType::Recent => "recent",
+            AlbumListType::Frequent => "frequent",
+        }
     }
 }
 
@@ -131,6 +149,13 @@ impl SubsonicClient {
         ];
         let mut body = self.get("search3", &params, LIBRARY_TIMEOUT).await?;
         body.take::<RawLibraryItems>("searchResult3")?.try_into()
+    }
+
+    /// `GET /rest/getAlbumList2` — the first `size` albums in that order.
+    pub async fn get_album_list2(&self, kind: AlbumListType, size: u32) -> Result<Vec<Album>, SubsonicError> {
+        let params = [("type", kind.as_str().to_string()), ("size", size.to_string())];
+        let mut body = self.get("getAlbumList2", &params, REQUEST_TIMEOUT).await?;
+        with_raw_json(body.take::<RawAlbumList>("albumList2")?.album)
     }
 
     /// `GET /rest/getStarred2` — starred artists, albums and songs.
