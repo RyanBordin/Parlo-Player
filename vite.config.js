@@ -1,12 +1,31 @@
 import { defineConfig } from "vite";
+import adapter from "@sveltejs/adapter-static";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [sveltekit()],
+  plugins: [
+    // Keep `strategy` in sync with the "i18n" script in package.json.
+    // Locale: the one saved by the language selector, otherwise English.
+    paraglideVitePlugin({
+      project: "./project.inlang",
+      outdir: "./src/lib/paraglide",
+      strategy: ["localStorage", "baseLocale"],
+    }),
+    // Tauri has no Node.js server for SSR, so adapter-static with a fallback
+    // to index.html runs the app in SPA mode.
+    // See: https://svelte.dev/docs/kit/single-page-apps
+    // See: https://v2.tauri.app/start/frontend/sveltekit/
+    sveltekit({
+      adapter: adapter({
+        fallback: "index.html",
+      }),
+    }),
+  ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

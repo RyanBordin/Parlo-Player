@@ -40,6 +40,27 @@ O projeto nasce da análise prática de vários players, extraindo os pontos for
 
 ---
 
+## 1.1. Identidade Visual
+
+* **Logo:** duas claves de sol em branco, uma invertida em relação à outra, cada uma com um arco em índigo que forma um "P". O par forma "PP" (**P**arlo **P**layer) com simetria de rotação.
+* **Versões:** símbolo sozinho (ícone do app, barra lateral) e símbolo + nome "PARLO PLAYER" em serifa (tela de login, Sobre, instalador).
+* **Arquivos:** `assets/logo/` com as versões com fundo preto e sem fundo (`-SF`), de símbolo e de símbolo + nome.
+* **Paleta base:**
+
+| Uso | Cor | Contraste |
+| --- | --- | --- |
+| Fundo do app | `#000000` (preto puro) | — |
+| Texto principal | `#FFFFFF` | 21:1 sobre o preto |
+| **Destaque (fundos):** pílulas, rótulos, botões ativos | `#3E4095` (índigo do logo) | texto branco sobre ele: 8,9:1 |
+| **Destaque (texto e ícones)** sobre o preto: faixa atual, rótulos de tipo | `#8183CB` (mesmo matiz, mais claro) | 6,0:1 sobre o preto |
+
+  * O índigo do logo **nunca** é usado como cor de texto sobre o preto (contraste de só 2,4:1).
+* **Ícone na bandeja:** versão simplificada, só as claves em branco sobre fundo transparente, para ficar legível em 16 px.
+* **Tipografia:** a serifa fica só no logotipo; a interface continua em sans-serif limpa, no estilo Swing Music.
+* **Barra lateral:** o símbolo aparece no topo, junto ao nome do app, como no Swing Music.
+
+---
+
 ## 2. Princípios do Produto
 
 * **O servidor é a fonte da verdade.** Tudo o que o usuário cria ou marca é salvo no servidor e fica sincronizado com qualquer app Subsonic (Symfonium, Feishin etc.):
@@ -466,7 +487,13 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 ### 12.4. Cache e dados locais (SQLite)
 
 * Metadados da biblioteca, histórico de reproduções (com data e hora), preferências e estado das playlists automáticas.
-* Sincronização completa no primeiro login; depois, atualiza quando a data do último scan (`getScanStatus`) muda.
+* **Um banco por servidor + usuário**, na pasta de dados do app. "Sair" apaga as credenciais, mas **não** o banco, para o histórico de reproduções não se perder.
+* **Sincronização em dois níveis:**
+  * **Completa:** artistas, álbuns e faixas. Roda no primeiro login, quando a data do último scan do servidor (`getScanStatus`) muda, e no máximo uma vez por dia (para pegar `playCount` alterado por outros apps).
+  * **Leve:** favoritos (`getStarred2`) e playlists (`getPlaylists`). Roda a cada abertura do app, porque mudam sem novo scan do servidor (ex.: favoritar no Symfonium).
+* Itens removidos do servidor são apagados do cache ao final de uma sincronização completa bem-sucedida.
+* Cada registro guarda as colunas usadas pelo app e o **JSON original** da API, para aproveitar campos novos sem ressincronizar.
+* Na primeira sincronização, a interface mostra o progresso (Seção 6.11); as seguintes rodam em segundo plano.
 * Capas em cache no disco, limite configurável (padrão: 500 MB).
 
 ### 12.5. Segurança
@@ -568,3 +595,6 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Stack: Tauri 2 + Svelte + Rust + libmpv + souvlaki + SQLite. |
 | 18/10/2026 | App roda em segundo plano ao fechar a janela, com aviso ao usuário. |
 | 18/10/2026 | Escopo v0.1 / v0.2 / depois. |
+| 18/10/2026 | Logo definido (duas claves formando "PP"); índigo do logo vira a cor de destaque. |
+| 18/10/2026 | Paleta base: fundo `#000000`, destaque `#3E4095` (fundos) e `#8183CB` (texto/ícones). |
+| 18/10/2026 | Sincronização em dois níveis (completa e leve); um banco por servidor + usuário, preservado ao sair. |

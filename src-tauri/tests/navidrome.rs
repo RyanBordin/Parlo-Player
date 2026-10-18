@@ -7,7 +7,7 @@
 //! cargo test -- --ignored
 //! ```
 
-use parlo_player_lib::subsonic::{SubsonicClient, SubsonicError};
+use parlo_player_lib::subsonic::{SearchPage, SubsonicClient, SubsonicError};
 
 struct TestServer {
     url: String,
@@ -50,4 +50,31 @@ async fn ping_fails_with_wrong_password() {
         Err(SubsonicError::Api { code, .. }) => assert_eq!(code, 40),
         other => panic!("expected error 40, got {other:?}"),
     }
+}
+
+#[tokio::test]
+#[ignore = "requires a Navidrome server configured in .env"]
+async fn empty_search3_returns_library_pages() {
+    let server = test_server();
+    let client = SubsonicClient::new(server.url, server.user, server.password).unwrap();
+
+    let first = client.search3(SearchPage::songs(10, 0)).await.unwrap();
+    assert!(!first.songs.is_empty(), "empty query should return songs");
+    assert!(first.artists.is_empty() && first.albums.is_empty(), "count 0 skips other types");
+
+    // Pages must not overlap: natural order is stable.
+    let second = client.search3(SearchPage::songs(10, 10)).await.unwrap();
+    if let (Some(a), Some(b)) = (first.songs.last(), second.songs.first()) {
+        assert_ne!(a.id, b.id);
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires a Navidrome server configured in .env"]
+async fn scan_status_reports_song_count() {
+    let server = test_server();
+    let client = SubsonicClient::new(server.url, server.user, server.password).unwrap();
+
+    let status = client.get_scan_status().await.unwrap();
+    assert!(status.count.unwrap_or(0) > 0);
 }

@@ -25,6 +25,8 @@ reqwest = { version = "0.13.5", default-features = false, features = ["rustls", 
 md-5 = "0.11.0"
 rand = "0.10.3"
 thiserror = "2.0.21"
+keyring = "4.2.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

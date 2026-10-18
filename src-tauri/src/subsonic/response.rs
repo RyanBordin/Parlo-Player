@@ -3,6 +3,8 @@
 //! Convention: every ID coming from the API is a `String`, never a number.
 
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde_json::{Map, Value};
 
 use super::error::SubsonicError;
 
@@ -37,6 +39,21 @@ pub struct ResponseBody {
     pub server_version: Option<String>,
     pub open_subsonic: Option<bool>,
     pub error: Option<ApiError>,
+    /// Endpoint-specific data, e.g. `searchResult3` or `playlists`.
+    #[serde(flatten)]
+    pub payload: Map<String, Value>,
+}
+
+impl ResponseBody {
+    /// Removes and parses one endpoint-specific field. A missing field gives
+    /// the default value (servers omit empty results).
+    pub fn take<T: DeserializeOwned + Default>(&mut self, key: &str) -> Result<T, SubsonicError> {
+        match self.payload.remove(key) {
+            Some(value) => serde_json::from_value(value)
+                .map_err(|e| SubsonicError::InvalidResponse(format!("{key}: {e}"))),
+            None => Ok(T::default()),
+        }
+    }
 }
 
 /// Parses a raw JSON body. A `failed` status becomes `SubsonicError::Api`.
@@ -72,6 +89,47 @@ mod tests {
         assert_eq!(body.server_type.as_deref(), Some("navidrome"));
         assert_eq!(body.server_version.as_deref(), Some("0.58.0 (abc1234)"));
         assert_eq!(body.open_subsonic, Some(true));
+    }
+
+    #[test]
+    fn takes_search3_payload() {
+        use crate::subsonic::types::{LibraryItems, RawLibraryItems};
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "searchResult3":{
+                "artist":[{"id":"ar1","name":"Artist","albumCount":2}],
+                "album":[{"id":"al1","name":"Album","artistId":"ar1","year":2001}],
+                "song":[{"id":"s1","title":"Song","albumId":"al1","suffix":"mp3"}]}}}"#;
+
+        let mut body = parse_response(json).unwrap();
+        let items: LibraryItems = body.take::<RawLibraryItems>("searchResult3").unwrap().try_into().unwrap();
+        assert_eq!(items.artists[0].album_count, Some(2));
+        assert_eq!(items.albums[0].artist_id.as_deref(), Some("ar1"));
+        assert_eq!(items.songs[0].suffix.as_deref(), Some("mp3"));
+        assert!(items.songs[0].raw_json.contains("\"albumId\":\"al1\""));
+    }
+
+    #[test]
+    fn empty_search3_result_gives_no_items() {
+        use crate::subsonic::types::{LibraryItems, RawLibraryItems};
+
+        // Navidrome sends an empty object when a page has no more items.
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1","searchResult3":{}}}"#;
+        let mut body = parse_response(json).unwrap();
+        let items: LibraryItems = body.take::<RawLibraryItems>("searchResult3").unwrap().try_into().unwrap();
+        assert_eq!(items, LibraryItems::default());
+    }
+
+    #[test]
+    fn takes_scan_status_with_navidrome_extension() {
+        use crate::subsonic::types::ScanStatus;
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "scanStatus":{"scanning":false,"count":5120,"folderCount":3,
+            "lastScan":"2026-10-17T22:10:00Z"}}}"#;
+        let status: ScanStatus = parse_response(json).unwrap().take("scanStatus").unwrap();
+        assert_eq!(status.count, Some(5120));
+        assert_eq!(status.last_scan.as_deref(), Some("2026-10-17T22:10:00Z"));
     }
 
     #[test]

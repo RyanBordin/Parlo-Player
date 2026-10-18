@@ -1,0 +1,33 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "language_name": "Português (Brasil)",
+  "language_label": "Idioma",
+
+  "login_logo_alt": "Parlo Player",
+  "login_title": "Conecte-se ao seu servidor",
+  "login_subtitle": "Servidor Subsonic ou OpenSubsonic, como o Navidrome.",
+  "login_server_url": "URL do servidor",
+  "login_username": "Usuário",
+  "login_password": "Senha",
+  "login_test_connection": "Testar conexão",
+  "login_testing": "Testando...",
+  "login_sign_in": "Entrar",
+  "login_signing_in": "Entrando...",
+  "login_test_first": "Teste a conexão antes de entrar.",
+  "login_connected": "Conectado a {server} (API {apiVersion}).",
+  "login_unknown_server": "Servidor Subsonic",
+  "login_http_warning": "Esta conexão não é criptografada (HTTP). Use apenas na sua rede local.",
+
+  "home_connected_as": "Conectado como {username} em {server}",
+  "home_sign_out": "Sair",
+
+  "error_invalid_url": "URL do servidor inválida.",
+  "error_timeout": "O servidor demorou demais para responder.",
+  "error_http_status": "O servidor respondeu com erro HTTP {status}.",
+  "error_network": "Não foi possível conectar ao servidor.",
+  "error_invalid_response": "A URL respondeu, mas não parece ser um servidor Subsonic.",
+  "error_wrong_credentials": "Usuário ou senha incorretos.",
+  "error_api": "Erro do servidor {code}: {message}",
+  "error_storage": "Não foi possível salvar o login neste computador.",
+  "error_unknown": "Algo deu errado."
+}
