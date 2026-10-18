@@ -136,7 +136,7 @@ Exatamente **7 itens**, nesta ordem:
 3. **`Músicas`** *(Nota musical)* — Seção 6.3.
 4. **`Álbuns`** *(Disco)* — Seção 6.4.
 5. **`Artistas`** *(Microfone)* — Seção 6.6.
-6. **`Baixados`** *(Seta para baixo)* — Seção 6.8. Sempre disponível, com ou sem conexão.
+6. **`Baixados`** *(Seta para baixo)* — Seção 6.8. Sempre disponível, com ou sem conexão. **Oculto na v0.1**; aparece a partir da v0.2, junto com os downloads.
 7. **`Configurações`** *(Engrenagem)* — Seção 6.10.
 
 Sem itens de Pastas, Gêneros ou Rádios.
@@ -256,11 +256,8 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 * Implementação: `savePlayQueue` / `getPlayQueue` (fila, faixa atual e posição no servidor) + registro local para o que a API não guarda (nome do contexto, shuffle, repeat, volume).
 * **Quando salvar:** ao mudar a fila ou a faixa, ao pausar, a cada 30 s tocando e ao fechar o app.
 * **Continuar de outro dispositivo:** ao abrir, se a fila do servidor foi alterada **depois** da última gravação local por outro app (campos `changed` / `changedBy` de `getPlayQueue`), o Parlo usa a fila do servidor, com o contexto "Continuando de [app]". Senão, usa o estado local completo.
-  * Se a fila do servidor tem as mesmas faixas, na mesma ordem e com a mesma faixa atual que a gravação local, ela é a cópia da nossa própria gravação: vale a local, mesmo que a data do servidor pareça mais nova (relógios diferentes).
-  * Fila vinda do servidor: a ordem dela vira a ordem original (shuffle desligado, porque a API não guarda a ordem original); repeat e volume vêm do registro local.
 * **Filas grandes:** a fila pode ter milhares de faixas (ex.: tocar a partir da página Músicas). Como não cabem numa URL, `savePlayQueue` é enviado por **POST** (extensão OpenSubsonic `formPost`).
-* Faixas da fila salva que não existem mais no servidor são ignoradas na restauração. Se a faixa atual sumiu, a próxima que existe vira a atual, desde o início.
-* Sair da conta não grava a fila (gravar a fila vazia apagaria a do servidor).
+* Faixas da fila salva que não existem mais no servidor são ignoradas na restauração.
 
 ### 5.7. Scrobble
 
@@ -288,6 +285,13 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 | **6** | **Artistas favoritos** | Cards de artista (quadrados). | `getStarred2` → `artist[]`. |
 
 * Seções vazias mostram uma mensagem curta explicando como preenchê-las.
+* **Regras detalhadas:**
+  * Cada carrossel mostra até **20 itens**.
+  * **Ouvir de novo:** álbuns e faixas misturados, do mais recente para o mais antigo. Uma faixa não aparece se o álbum dela já estiver na fileira. Os álbuns vêm do servidor (vale para reproduções em outros apps); as faixas, do histórico local.
+  * **Favoritos esquecidos:** só faixas.
+  * **Clique em faixa:** toca a lista completa que o carrossel representa, na mesma ordem, a partir dela (ex.: todas as músicas favoritas, "Tocando de: Músicas favoritas"; em Ouvir de novo, as faixas da fileira).
+  * **Dados:** "Ouvir de novo" e "Álbuns mais escutados" são pedidos ao servidor ao abrir a página, com o banco local como reserva sem conexão; favoritos vêm do banco local (sincronização leve).
+  * A página se atualiza ao voltar para ela e ao fim de cada sincronização.
 
 ### 6.2. Favoritos
 
@@ -508,7 +512,8 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 * Itens removidos do servidor são apagados do cache ao final de uma sincronização completa bem-sucedida.
 * Cada registro guarda as colunas usadas pelo app e o **JSON original** da API, para aproveitar campos novos sem ressincronizar.
 * Na primeira sincronização, a interface mostra o progresso (Seção 6.11); as seguintes rodam em segundo plano.
-* Capas em cache no disco, limite configurável (padrão: 500 MB).
+* Capas em cache no disco, limite configurável (padrão: 500 MB). A interface pede as capas ao backend por um **protocolo próprio do app** (ex.: `cover://<id>?size=300`); o backend busca no servidor com `getCoverArt`, guarda no cache e devolve a imagem. Assim, as credenciais nunca aparecem em URLs da interface e as capas funcionam offline depois de carregadas.
+* **Fonte da interface** empacotada junto com o app (sem depender de serviços externos de fontes).
 
 ### 12.5. Segurança
 
@@ -614,4 +619,5 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Sincronização em dois níveis (completa e leve); um banco por servidor + usuário, preservado ao sair. |
 | 18/10/2026 | Anterior volta ao início da faixa após 3 s; fim da fila para sem repeat; scrobble conta tempo realmente ouvido e reenvia se falhar. |
 | 18/10/2026 | Restauração da fila: a mais recente vence (local ou servidor), permitindo continuar de outro dispositivo; filas grandes salvas por POST. |
-| 18/10/2026 | Fila do servidor igual à local (faixas, ordem e faixa atual) conta como nossa própria gravação; faixa atual removida passa para a próxima. |
+| 18/10/2026 | Baixados oculto na sidebar até a v0.2; capas servidas pelo backend via protocolo próprio com cache; fonte empacotada. |
+| 18/10/2026 | Regras detalhadas da Home: 20 itens por carrossel, mistura de Ouvir de novo, contexto ao clicar em faixa, origem dos dados. Home construída antes das demais telas. |

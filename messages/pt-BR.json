@@ -16,7 +16,6 @@
   "login_connected": "Conectado a {server} (API {apiVersion}).",
   "login_unknown_server": "Servidor Subsonic",
   "login_http_warning": "Esta conexão não é criptografada (HTTP). Use apenas na sua rede local.",
-  "home_connected_as": "Conectado como {username} em {server}",
   "home_sign_out": "Sair",
   "error_invalid_url": "URL do servidor inválida.",
   "error_timeout": "O servidor demorou demais para responder.",
@@ -68,5 +67,57 @@
   "queue_playing_from": "Tocando de: {label}",
   "queue_empty": "Clique numa música para começar.",
   "queue_continuing_from": "Continuando de {app}",
-  "queue_continuing_from_other": "Continuando de outro app"
+  "queue_continuing_from_other": "Continuando de outro app",
+  "app_name": "Parlo Player",
+  "nav_label": "Navegação principal",
+  "nav_home": "Início",
+  "nav_favorites": "Favoritos",
+  "nav_songs": "Músicas",
+  "nav_albums": "Álbuns",
+  "nav_artists": "Artistas",
+  "nav_downloads": "Baixados",
+  "nav_settings": "Configurações",
+  "playlists_label": "Playlists",
+  "playlists_new": "Nova playlist",
+  "playlists_empty": "Suas playlists aparecem aqui.",
+  "playlist_song_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} faixa",
+        "countPlural=other": "{countText} faixas"
+      }
+    }
+  ],
+  "playlist_page_title": "Playlist",
+  "topbar_back": "Voltar",
+  "topbar_forward": "Avançar",
+  "search_label": "Buscar",
+  "search_placeholder": "Pesquise músicas, álbuns, artistas...",
+  "profile_label": "Perfil",
+  "profile_user": "Usuário",
+  "profile_server": "Servidor",
+  "under_construction_title": "Em construção",
+  "under_construction_text": "Esta página chega numa próxima etapa.",
+  "home_library_title": "Biblioteca",
+  "playlist_song_count_zero": "Nenhuma faixa",
+  "search_shortcut": "Ctrl K",
+  "player_expand_cover": "Mostrar capa grande",
+  "player_collapse_cover": "Mostrar capa pequena",
+  "player_favorite": "Favoritar",
+  "player_unfavorite": "Remover dos favoritos",
+  "player_add_to_playlist": "Adicionar à playlist",
+  "player_more": "Mais opções",
+  "player_mute": "Silenciar",
+  "player_unmute": "Ativar som",
+  "player_now_playing": "Tocando agora",
+  "album_page_title": "Álbum",
+  "artist_page_title": "Artista"
 }

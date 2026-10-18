@@ -18,12 +18,13 @@ export const player = $state<{
   status: PlayerState["status"];
   track: Track | null;
   volume: number;
+  muted: boolean;
   /** Seconds. */
   position: number;
   /** Seconds; from mpv once the song loads, from the library before that. */
   duration: number | null;
   error: PlayerError | null;
-}>({ status: "idle", track: null, volume: 100, position: 0, duration: null, error: null });
+}>({ status: "idle", track: null, volume: 100, muted: false, position: 0, duration: null, error: null });
 
 /** The queue as the backend has it (source of truth). */
 export const queue = $state<QueueState>({
@@ -63,6 +64,7 @@ function applyState(state: PlayerState) {
   const newTrack = state.track?.id !== player.track?.id;
   player.status = state.status;
   player.volume = state.volume;
+  player.muted = state.muted;
   player.track = state.track;
   if (newTrack) {
     player.position = 0;

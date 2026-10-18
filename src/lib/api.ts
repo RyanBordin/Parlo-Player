@@ -95,7 +95,20 @@ export type SongSummary = {
   title: string;
   artist: string | null;
   album: string | null;
+  artistId: string | null;
+  albumId: string | null;
+  /** ID for the `cover` protocol (see #lib/covers.ts). */
+  coverArt: string | null;
   duration: number | null;
+  starred: boolean;
+};
+
+/** Mirrors `PlaylistSummary` in src-tauri/src/db/library.rs. */
+export type PlaylistSummary = {
+  id: string;
+  name: string;
+  owner: string | null;
+  songCount: number | null;
 };
 
 /** Mirrors `Track` in src-tauri/src/player/events.rs. */
@@ -105,7 +118,9 @@ export type Track = SongSummary;
 export type PlayerState = {
   status: "idle" | "loading" | "playing" | "paused";
   track: Track | null;
+  /** Kept while muted. */
   volume: number;
+  muted: boolean;
 };
 
 /** Payload of `player-position`. Seconds. */
@@ -138,6 +153,11 @@ export type QueueState = {
 
 export function listSongs(limit: number): Promise<SongSummary[]> {
   return invoke("list_songs", { limit });
+}
+
+/** Playlists from the local cache, by name. */
+export function listPlaylists(): Promise<PlaylistSummary[]> {
+  return invoke("list_playlists");
 }
 
 /**
@@ -188,6 +208,21 @@ export function togglePause(): Promise<void> {
 
 export function seek(seconds: number): Promise<void> {
   return invoke("seek", { seconds });
+}
+
+/** Jumps `seconds` forward (negative: back). */
+export function seekBy(seconds: number): Promise<void> {
+  return invoke("seek_by", { seconds });
+}
+
+/** Mutes or unmutes, keeping the volume. Resolves to the new state. */
+export function toggleMute(): Promise<boolean> {
+  return invoke("toggle_mute");
+}
+
+/** Star / unstar a song on the server and in the local cache. */
+export function setSongStarred(songId: string, starred: boolean): Promise<void> {
+  return invoke("set_song_starred", { songId, starred });
 }
 
 /** Resolves to the volume actually applied (0–100). */

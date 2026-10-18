@@ -209,6 +209,15 @@ impl Playback {
         Ok(mode)
     }
 
+    /// The song was starred or unstarred: update the queue and the player, so
+    /// the UI shows it without reloading.
+    pub fn song_starred(&self, song_id: &str, starred: bool) {
+        if let Some(track) = self.lock().tracks.get_mut(song_id) {
+            track.starred = starred;
+        }
+        self.player.update_track(song_id, |track| track.starred = starred);
+    }
+
     pub fn queue_state(&self) -> QueueState {
         queue_state(&self.lock())
     }
@@ -601,7 +610,11 @@ fn track_of(song: SongSummary) -> Track {
         title: song.title,
         artist: song.artist,
         album: song.album,
+        artist_id: song.artist_id,
+        album_id: song.album_id,
+        cover_art: song.cover_art,
         duration: song.duration.map(|d| d as f64),
+        starred: song.starred,
     }
 }
 

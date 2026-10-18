@@ -1,6 +1,32 @@
 <script lang="ts">
-  // Temporary player bar (step 5). The real Player Bar comes with the app shell.
-  import { cycleRepeat, next, previous, seek, setShuffle, setVolume, togglePause } from "#lib/api.ts";
+  // Player Bar (spec 4.3): track | transport and progress | song actions | audio and queue.
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import Ellipsis from "@lucide/svelte/icons/ellipsis";
+  import Heart from "@lucide/svelte/icons/heart";
+  import ListPlus from "@lucide/svelte/icons/list-plus";
+  import Pause from "@lucide/svelte/icons/pause";
+  import Play from "@lucide/svelte/icons/play";
+  import Repeat from "@lucide/svelte/icons/repeat";
+  import Repeat1 from "@lucide/svelte/icons/repeat-1";
+  import Shuffle from "@lucide/svelte/icons/shuffle";
+  import SkipBack from "@lucide/svelte/icons/skip-back";
+  import SkipForward from "@lucide/svelte/icons/skip-forward";
+  import Volume1 from "@lucide/svelte/icons/volume-1";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import VolumeX from "@lucide/svelte/icons/volume-x";
+  import {
+    cycleRepeat,
+    next,
+    previous,
+    seek,
+    setShuffle,
+    setSongStarred,
+    setVolume,
+    toggleMute,
+    togglePause,
+  } from "#lib/api.ts";
+  import Cover from "#lib/components/Cover.svelte";
+  import { coverMode, setCoverExpanded } from "#lib/cover-mode.svelte.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
@@ -9,10 +35,14 @@
   // While dragging, the bar follows the mouse instead of the playback position.
   let dragging = $state<number | null>(null);
   let commandError = $state<ErrorMessage | null>(null);
+  let starring = $state(false);
 
+  let track = $derived(player.track);
   let shownPosition = $derived(dragging ?? player.position);
-  let canControl = $derived(player.track !== null && player.status !== "idle");
+  let canControl = $derived(track !== null && player.status !== "idle");
   let hasQueue = $derived(queue.tracks.length > 0);
+  let progress = $derived(player.duration ? Math.min(shownPosition / player.duration, 1) * 100 : 0);
+  let silent = $derived(player.muted || player.volume === 0);
   let repeatLabel = $derived(
     queue.repeat === "one"
       ? m.player_repeat_one()
@@ -47,30 +77,188 @@
   function onVolumeInput(event: Event) {
     const volume = Number((event.currentTarget as HTMLInputElement).value);
     player.volume = volume;
+    player.muted = false;
     run(() => setVolume(volume));
+  }
+
+  // The heart changes at once and goes back if the server refuses.
+  async function toggleStar() {
+    const current = player.track;
+    if (!current || starring) return;
+    const starred = !current.starred;
+    current.starred = starred;
+    starring = true;
+    commandError = null;
+    try {
+      await setSongStarred(current.id, starred);
+    } catch (e) {
+      if (player.track?.id === current.id) player.track.starred = !starred;
+      commandError = describeError(e);
+    } finally {
+      starring = false;
+    }
   }
 </script>
 
 <footer class="bar">
-  <div class="track">
-    {#if player.track}
-      <p class="title">{player.track.title}</p>
-      <p class="muted">
-        {player.status === "loading" ? m.player_loading() : (player.track.artist ?? "")}
-      </p>
-    {:else}
-      <p class="muted">{m.player_nothing_playing()}</p>
+  <!-- Zone 1: the song -->
+  <div class="zone track">
+    {#if track && !coverMode.expanded}
+      <div class="thumb">
+        <Cover id={track.coverArt} size={56} radius="var(--radius-sm)" />
+        <button
+          class="cover-toggle"
+          type="button"
+          onclick={() => setCoverExpanded(true)}
+          aria-label={m.player_expand_cover()}
+          title={m.player_expand_cover()}
+        >
+          <ChevronUp />
+        </button>
+      </div>
     {/if}
-    {#if playbackError ?? commandError}
-      {@const error = (playbackError ?? commandError)!}
-      <p class="error" title={error.detail}>{error.message}</p>
-    {/if}
+    <div class="meta">
+      {#if track}
+        <p class="title" title={track.title}>{track.title}</p>
+        {#if player.status === "loading"}
+          <p class="artist">{m.player_loading()}</p>
+        {:else}
+          {#if track.artist}
+            {#if track.artistId}
+              <a class="artist" href={`/artists/${encodeURIComponent(track.artistId)}`}>{track.artist}</a>
+            {:else}
+              <p class="artist">{track.artist}</p>
+            {/if}
+          {/if}
+          {#if track.album}
+            {#if track.albumId}
+              <a class="album" href={`/albums/${encodeURIComponent(track.albumId)}`}>{track.album}</a>
+            {:else}
+              <p class="album">{track.album}</p>
+            {/if}
+          {/if}
+        {/if}
+      {:else}
+        <p class="artist">{m.player_nothing_playing()}</p>
+      {/if}
+      {#if playbackError ?? commandError}
+        {@const error = (playbackError ?? commandError)!}
+        <p class="error" title={error.detail}>{error.message}</p>
+      {/if}
+    </div>
   </div>
 
-  <div class="transport">
+  <!-- Zone 2: transport and progress -->
+  <div class="zone transport">
     <div class="controls">
+      <button class="icon" onclick={() => run(previous)} disabled={!hasQueue} aria-label={m.player_previous()} title={m.player_previous()}>
+        <SkipBack size={20} />
+      </button>
       <button
-        class="icon"
+        class="play"
+        onclick={() => run(togglePause)}
+        disabled={!canControl}
+        aria-label={player.status === "playing" ? m.player_pause() : m.player_play()}
+        title={player.status === "playing" ? m.player_pause() : m.player_play()}
+      >
+        {#if player.status === "playing"}
+          <Pause size={20} fill="currentColor" />
+        {:else}
+          <Play size={20} fill="currentColor" />
+        {/if}
+      </button>
+      <button class="icon" onclick={() => run(next)} disabled={!hasQueue} aria-label={m.player_next()} title={m.player_next()}>
+        <SkipForward size={20} />
+      </button>
+    </div>
+
+    <div class="progress">
+      <span class="time">{formatDuration(canControl ? shownPosition : null)}</span>
+      <input
+        class="slider"
+        type="range"
+        min="0"
+        max={player.duration ?? 0}
+        step="1"
+        value={shownPosition}
+        style:--fill={`${progress}%`}
+        disabled={!canControl || !player.duration}
+        aria-label={m.player_seek()}
+        oninput={onSeekInput}
+        onchange={onSeekChange}
+      />
+      <span class="time">{formatDuration(canControl ? player.duration : null)}</span>
+    </div>
+  </div>
+
+  <div class="zone right">
+    <!-- Zone 3: actions on the current song (menus come in step 8) -->
+    <div class="actions">
+      <button
+        class="icon favorite"
+        class:active={track?.starred}
+        onclick={toggleStar}
+        disabled={!track || starring}
+        aria-label={track?.starred ? m.player_unfavorite() : m.player_favorite()}
+        aria-pressed={track?.starred ?? false}
+        title={track?.starred ? m.player_unfavorite() : m.player_favorite()}
+      >
+        <Heart fill={track?.starred ? "currentColor" : "none"} />
+      </button>
+      <button class="icon add" type="button" disabled={!track} aria-label={m.player_add_to_playlist()} title={m.player_add_to_playlist()}>
+        <ListPlus />
+      </button>
+      <button class="icon" type="button" disabled={!track} aria-label={m.player_more()} title={m.player_more()}>
+        <Ellipsis />
+      </button>
+    </div>
+
+    <!-- Zone 4: audio, queue modes and Now Playing -->
+    <div class="audio">
+      <div class="volume">
+        <button
+          class="icon"
+          onclick={() => run(toggleMute)}
+          aria-label={player.muted ? m.player_unmute() : m.player_mute()}
+          aria-pressed={player.muted}
+          title={player.muted ? m.player_unmute() : m.player_mute()}
+        >
+          {#if silent}
+            <VolumeX />
+          {:else if player.volume < 50}
+            <Volume1 />
+          {:else}
+            <Volume2 />
+          {/if}
+        </button>
+        <input
+          class="slider volume-slider"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value={player.volume}
+          style:--fill={`${player.muted ? 0 : player.volume}%`}
+          aria-label={m.player_volume()}
+          oninput={onVolumeInput}
+        />
+      </div>
+      <button
+        class="icon mode"
+        class:active={queue.repeat !== "off"}
+        onclick={() => run(cycleRepeat)}
+        disabled={!hasQueue}
+        aria-label={repeatLabel}
+        title={repeatLabel}
+      >
+        {#if queue.repeat === "one"}
+          <Repeat1 />
+        {:else}
+          <Repeat />
+        {/if}
+      </button>
+      <button
+        class="icon mode"
         class:active={queue.shuffle}
         onclick={() => run(() => setShuffle(!queue.shuffle))}
         disabled={!hasQueue}
@@ -78,113 +266,103 @@
         aria-pressed={queue.shuffle}
         title={m.player_shuffle()}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M16 4h4v4l-1.5-1.5-3.6 3.6-1.4-1.4 3.6-3.6zM4 17.6 15.6 6l1.4 1.4L5.4 19zM14.5 15.9l1.4-1.4 2.6 2.6L20 15.6V20h-4.4l1.5-1.5z" />
-        </svg>
+        <Shuffle />
       </button>
-      <button
-        class="icon"
-        onclick={() => run(previous)}
-        disabled={!hasQueue}
-        aria-label={m.player_previous()}
-        title={m.player_previous()}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
+      <!-- The Now Playing screen comes in step 8. -->
+      <button class="icon" type="button" disabled={!track} aria-label={m.player_now_playing()} title={m.player_now_playing()}>
+        <ChevronUp />
       </button>
-      <button
-        class="play"
-        onclick={() => run(togglePause)}
-        disabled={!canControl}
-        aria-label={player.status === "playing" ? m.player_pause() : m.player_play()}
-      >
-        {#if player.status === "playing"}
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-        {:else}
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-        {/if}
-      </button>
-      <button
-        class="icon"
-        onclick={() => run(next)}
-        disabled={!hasQueue}
-        aria-label={m.player_next()}
-        title={m.player_next()}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" /></svg>
-      </button>
-      <button
-        class="icon"
-        class:active={queue.repeat !== "off"}
-        onclick={() => run(cycleRepeat)}
-        disabled={!hasQueue}
-        aria-label={repeatLabel}
-        title={repeatLabel}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" />
-          {#if queue.repeat === "one"}
-            <text x="12" y="15" text-anchor="middle" font-size="8" font-weight="700">1</text>
-          {/if}
-        </svg>
-      </button>
-    </div>
-
-    <div class="progress">
-      <span class="time">{formatDuration(shownPosition)}</span>
-      <input
-        type="range"
-        min="0"
-        max={player.duration ?? 0}
-        step="1"
-        value={shownPosition}
-        disabled={!canControl || !player.duration}
-        aria-label={m.player_seek()}
-        oninput={onSeekInput}
-        onchange={onSeekChange}
-      />
-      <span class="time">{formatDuration(player.duration)}</span>
     </div>
   </div>
-
-  <label class="volume">
-    <span class="visually-hidden">{m.player_volume()}</span>
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 9v6h4l5 4V5L8 9zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" />
-    </svg>
-    <input type="range" min="0" max="100" step="1" value={player.volume} oninput={onVolumeInput} />
-  </label>
 </footer>
 
 <style>
   .bar {
-    position: fixed;
-    inset: auto 0 0 0;
+    height: 100%;
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 560px) minmax(0, 1fr);
     align-items: center;
     gap: var(--space-5);
-    padding: var(--space-3) var(--space-5);
+    padding: 0 var(--space-4);
     border-top: 1px solid var(--color-border);
     background: var(--color-bg);
   }
 
-  .track {
+  .zone {
     min-width: 0;
   }
 
-  .track p {
+  /* Zone 1 */
+  .track {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .thumb {
+    position: relative;
+    flex: none;
+    width: 56px;
+  }
+
+  /* Spec 4.3: the ˄ arrow shows on hover. */
+  .cover-toggle {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: rgb(0 0 0 / 55%);
+    color: var(--color-text);
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+  }
+
+  .thumb:hover .cover-toggle,
+  .cover-toggle:focus-visible {
+    opacity: 1;
+  }
+
+  .meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .meta > * {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .title {
-    font-weight: var(--font-weight-medium);
+    font-size: 14px;
+    font-weight: var(--font-weight-bold);
   }
 
-  .muted {
-    color: var(--color-text-muted);
+  .artist,
+  .album {
+    width: fit-content;
+    max-width: 100%;
     font-size: var(--font-size-sm);
+    text-decoration: none;
+  }
+
+  .artist {
+    color: var(--color-text-muted);
+  }
+
+  .album {
+    color: var(--color-text-subtle);
+  }
+
+  a.artist:hover,
+  a.album:hover {
+    color: var(--color-text);
+    text-decoration: underline;
   }
 
   .error {
@@ -192,49 +370,18 @@
     font-size: var(--font-size-xs);
   }
 
+  /* Zone 2 */
   .transport {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1);
   }
 
   .controls {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-  }
-
-  .icon {
-    width: 32px;
-    height: 32px;
-    display: grid;
-    place-items: center;
-    border: none;
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-  }
-
-  .icon:not(:disabled):hover {
-    color: var(--color-text);
-  }
-
-  .icon:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .icon svg {
-    width: 20px;
-    height: 20px;
-    fill: currentColor;
-  }
-
-  /* Shuffle / repeat on: accent for text and icons (spec 1.1). */
-  .icon.active {
-    color: var(--color-accent-text);
+    gap: var(--space-4);
   }
 
   .play {
@@ -247,17 +394,16 @@
     background: var(--color-text);
     color: var(--color-text-inverse);
     cursor: pointer;
+    transition: transform var(--transition-fast);
+  }
+
+  .play:not(:disabled):hover {
+    transform: scale(1.05);
   }
 
   .play:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-
-  .play svg {
-    width: 20px;
-    height: 20px;
-    fill: currentColor;
   }
 
   .progress {
@@ -267,7 +413,7 @@
     gap: var(--space-3);
   }
 
-  .progress input {
+  .progress .slider {
     flex: 1;
   }
 
@@ -279,28 +425,124 @@
     text-align: center;
   }
 
-  .volume {
-    justify-self: end;
+  /* Zones 3 and 4 */
+  .right {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    justify-content: space-between;
+    gap: var(--space-3);
   }
 
-  .volume svg {
-    width: 20px;
-    height: 20px;
-    fill: var(--color-text-muted);
+  .actions,
+  .audio,
+  .volume {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
   }
 
-  input[type="range"] {
-    accent-color: var(--color-accent-text);
+  .audio {
+    margin-left: auto;
   }
 
-  .visually-hidden {
+  .volume-slider {
+    width: 96px;
+    margin-right: var(--space-2);
+  }
+
+  .icon {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+  }
+
+  .icon:not(:disabled):hover {
+    color: var(--color-text);
+  }
+
+  .icon:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .favorite.active {
+    color: var(--color-text);
+  }
+
+  /* Repeat / shuffle on: accent color and a dot below (spec 1.1). */
+  .mode.active {
+    color: var(--color-accent-text);
+  }
+
+  .mode.active::after {
+    content: "";
     position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
+    bottom: 2px;
+    width: 4px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: currentColor;
+  }
+
+  /* Thin bars: white up to the current value, grey after it. */
+  .slider {
+    height: 16px;
+    margin: 0;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .slider:disabled {
+    cursor: default;
+  }
+
+  .slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(
+      to right,
+      var(--color-text) var(--fill, 0%),
+      var(--color-border) var(--fill, 0%)
+    );
+  }
+
+  .slider::-webkit-slider-thumb {
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    appearance: none;
+    border-radius: var(--radius-pill);
+    background: var(--color-text);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .slider:not(:disabled):hover::-webkit-slider-thumb,
+  .slider:focus-visible::-webkit-slider-thumb {
+    opacity: 1;
+  }
+
+  /* Spec 4.3, narrow window: first the volume slider goes, then the song
+     actions (they will be in the "..." menu, step 8). */
+  @media (max-width: 1199px) {
+    .volume-slider {
+      display: none;
+    }
+  }
+
+  @media (max-width: 1099px) {
+    .favorite,
+    .add {
+      display: none;
+    }
   }
 </style>

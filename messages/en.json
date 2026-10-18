@@ -16,7 +16,6 @@
   "login_connected": "Connected to {server} (API {apiVersion}).",
   "login_unknown_server": "Subsonic server",
   "login_http_warning": "This connection is not encrypted (HTTP). Use it only on your local network.",
-  "home_connected_as": "Connected as {username} on {server}",
   "home_sign_out": "Sign out",
   "error_invalid_url": "Invalid server URL.",
   "error_timeout": "The server took too long to respond.",
@@ -68,5 +67,57 @@
   "queue_playing_from": "Playing from: {label}",
   "queue_empty": "Click a song to start playing.",
   "queue_continuing_from": "Continuing from {app}",
-  "queue_continuing_from_other": "Continuing from another app"
+  "queue_continuing_from_other": "Continuing from another app",
+  "app_name": "Parlo Player",
+  "nav_label": "Main navigation",
+  "nav_home": "Home",
+  "nav_favorites": "Favorites",
+  "nav_songs": "Songs",
+  "nav_albums": "Albums",
+  "nav_artists": "Artists",
+  "nav_downloads": "Downloads",
+  "nav_settings": "Settings",
+  "playlists_label": "Playlists",
+  "playlists_new": "New playlist",
+  "playlists_empty": "Your playlists show up here.",
+  "playlist_song_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} song",
+        "countPlural=other": "{countText} songs"
+      }
+    }
+  ],
+  "playlist_page_title": "Playlist",
+  "topbar_back": "Back",
+  "topbar_forward": "Forward",
+  "search_label": "Search",
+  "search_placeholder": "Search songs, albums, artists...",
+  "profile_label": "Profile",
+  "profile_user": "User",
+  "profile_server": "Server",
+  "under_construction_title": "Under construction",
+  "under_construction_text": "This page comes in a later step.",
+  "home_library_title": "Library",
+  "playlist_song_count_zero": "No songs",
+  "search_shortcut": "Ctrl K",
+  "player_expand_cover": "Show large cover",
+  "player_collapse_cover": "Show small cover",
+  "player_favorite": "Add to favorites",
+  "player_unfavorite": "Remove from favorites",
+  "player_add_to_playlist": "Add to playlist",
+  "player_more": "More options",
+  "player_mute": "Mute",
+  "player_unmute": "Unmute",
+  "player_now_playing": "Now playing",
+  "album_page_title": "Album",
+  "artist_page_title": "Artist"
 }

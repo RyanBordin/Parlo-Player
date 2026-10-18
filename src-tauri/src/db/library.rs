@@ -218,11 +218,16 @@ pub struct SongSummary {
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub artist_id: Option<String>,
+    pub album_id: Option<String>,
+    pub cover_art: Option<String>,
     /// Seconds.
     pub duration: Option<i64>,
+    pub starred: bool,
 }
 
-const SONG_SUMMARY_COLUMNS: &str = "id, title, artist, album, duration";
+const SONG_SUMMARY_COLUMNS: &str =
+    "id, title, artist, album, artist_id, album_id, cover_art, duration, starred IS NOT NULL";
 
 fn song_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SongSummary> {
     Ok(SongSummary {
@@ -230,8 +235,31 @@ fn song_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SongSummary> {
         title: row.get(1)?,
         artist: row.get(2)?,
         album: row.get(3)?,
-        duration: row.get(4)?,
+        artist_id: row.get(4)?,
+        album_id: row.get(5)?,
+        cover_art: row.get(6)?,
+        duration: row.get(7)?,
+        starred: row.get(8)?,
     })
+}
+
+/// Records a star / unstar done in the app, in the column and in the original
+/// JSON, as the next light sync would. The date is now, in the API's format.
+pub fn set_song_starred(conn: &Connection, song_id: &str, starred: bool) -> DbResult<()> {
+    if starred {
+        conn.execute(
+            "UPDATE songs SET starred = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                              raw_json = json_set(raw_json, '$.starred', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+             WHERE id = ?1",
+            [song_id],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE songs SET starred = NULL, raw_json = json_remove(raw_json, '$.starred') WHERE id = ?1",
+            [song_id],
+        )?;
+    }
+    Ok(())
 }
 
 /// Most recently added songs first (default order of the Songs screen, spec 6.3).
@@ -257,6 +285,34 @@ pub fn song_summaries(conn: &Connection, ids: &[String]) -> DbResult<HashMap<Str
         .map(|row| row.map(|song| (song.id.clone(), song)))
         .collect::<Result<_, _>>()?;
     Ok(songs)
+}
+
+/// Playlist fields shown in the sidebar (spec 4.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistSummary {
+    pub id: String,
+    pub name: String,
+    pub owner: Option<String>,
+    pub song_count: Option<i64>,
+}
+
+/// Every playlist, by name (case-insensitive).
+pub fn playlists(conn: &Connection) -> DbResult<Vec<PlaylistSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, owner, song_count FROM playlists ORDER BY name COLLATE NOCASE, id",
+    )?;
+    let playlists = stmt
+        .query_map([], |row| {
+            Ok(PlaylistSummary {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                owner: row.get(2)?,
+                song_count: row.get(3)?,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    Ok(playlists)
 }
 
 pub fn stats(conn: &Connection) -> DbResult<LibraryStats> {
@@ -614,6 +670,54 @@ mod tests {
             .unwrap();
         assert_eq!(playlists, ["p2"]);
         assert_eq!(stats(&conn).unwrap().last_light_sync_at, Some(1600));
+    }
+
+    #[test]
+    fn starring_a_song_updates_the_column_and_the_json() {
+        let mut conn = open_in_memory().unwrap();
+        let mut s1 = song("s1", "al1");
+        s1.raw_json = r#"{"id":"s1","title":"s1"}"#.into();
+        full_sync(&mut conn, &[library(vec![s1])], 1000);
+        let read = |conn: &Connection| -> (Option<String>, String) {
+            conn.query_row("SELECT starred, raw_json FROM songs WHERE id = 's1'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap()
+        };
+
+        set_song_starred(&conn, "s1", true).unwrap();
+        let (starred, raw) = read(&conn);
+        let starred = starred.expect("starred date");
+        assert!(starred.ends_with('Z') && starred.contains('T'), "{starred}");
+        assert!(raw.contains(&format!("\"starred\":\"{starred}\"")), "{raw}");
+        assert!(song_summaries(&conn, &["s1".into()]).unwrap()["s1"].starred);
+
+        set_song_starred(&conn, "s1", false).unwrap();
+        let (starred, raw) = read(&conn);
+        assert_eq!(starred, None);
+        assert!(!raw.contains("starred"));
+        assert!(!song_summaries(&conn, &["s1".into()]).unwrap()["s1"].starred);
+    }
+
+    #[test]
+    fn playlists_are_listed_by_name() {
+        let mut conn = open_in_memory().unwrap();
+        let playlist = |id: &str, name: &str, songs: i64| Playlist {
+            id: id.into(),
+            name: name.into(),
+            owner: Some("ryan".into()),
+            song_count: Some(songs),
+            raw_json: "{}".into(),
+            ..Default::default()
+        };
+        let all = [playlist("p1", "rock", 3), playlist("p2", "Jazz", 1), playlist("p3", "Blues", 12)];
+        apply_light_sync(&mut conn, &LibraryItems::default(), &all, 1000).unwrap();
+
+        let listed = playlists(&conn).unwrap();
+        let names: Vec<&str> = listed.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Blues", "Jazz", "rock"]);
+        assert_eq!(listed[0].owner.as_deref(), Some("ryan"));
+        assert_eq!(listed[0].song_count, Some(12));
     }
 
     #[test]

@@ -5,15 +5,20 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 /// Song being played, with what the UI shows.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub artist_id: Option<String>,
+    pub album_id: Option<String>,
+    /// ID for the `cover` protocol (spec 12.4).
+    pub cover_art: Option<String>,
     /// Seconds, from the library cache (mpv reports the exact value later).
     pub duration: Option<f64>,
+    pub starred: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -31,8 +36,9 @@ pub enum PlaybackStatus {
 pub struct PlayerState {
     pub status: PlaybackStatus,
     pub track: Option<Track>,
-    /// 0–100.
+    /// 0–100. Kept while muted.
     pub volume: f64,
+    pub muted: bool,
 }
 
 /// Payload of `player-position`. Seconds.
@@ -139,17 +145,24 @@ mod tests {
                 id: "s1".into(),
                 title: "Song".into(),
                 artist: Some("Artist".into()),
-                album: None,
+                cover_art: Some("al-1".into()),
                 duration: Some(215.0),
+                ..Track::default()
             }),
             volume: 80.0,
+            muted: false,
         };
         assert_eq!(
             serde_json::to_value(&state).unwrap(),
             json!({
                 "status": "playing",
-                "track": { "id": "s1", "title": "Song", "artist": "Artist", "album": null, "duration": 215.0 },
-                "volume": 80.0
+                "track": {
+                    "id": "s1", "title": "Song", "artist": "Artist", "album": null,
+                    "artistId": null, "albumId": null, "coverArt": "al-1",
+                    "duration": 215.0, "starred": false
+                },
+                "volume": 80.0,
+                "muted": false
             })
         );
         assert_eq!(

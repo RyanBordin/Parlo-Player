@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use tauri::{Manager, RunEvent};
 
+use covers::CoverCache;
 use playback::Playback;
 use state::{AppState, PlaybackSlot};
 
 mod commands;
+mod covers;
 mod db;
+mod locale;
 mod playback;
 mod player;
 mod session;
@@ -16,9 +19,15 @@ mod sync;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .manage(Arc::new(AppState::default()))
+    let builder = tauri::Builder::default()
+        .plugin(locale::plugin())
+        .manage(Arc::new(AppState::default()));
+    covers::register(builder)
         .setup(|app| {
+            // Spec 12.4: covers on disk, 500 MB at most.
+            let dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir()).join("covers");
+            app.manage(Arc::new(CoverCache::new(dir, covers::DEFAULT_LIMIT_BYTES)));
+
             let playback = Playback::start(app.handle().clone()).map_err(|e| e.to_string());
             app.manage(PlaybackSlot(playback));
             Ok(())
@@ -31,6 +40,7 @@ pub fn run() {
             commands::get_library_status,
             commands::sync_library,
             commands::list_songs,
+            commands::list_playlists,
             commands::play_context,
             commands::restore_queue,
             commands::next,
@@ -39,8 +49,11 @@ pub fn run() {
             commands::set_shuffle,
             commands::cycle_repeat,
             commands::get_queue,
+            commands::set_song_starred,
             commands::toggle_pause,
             commands::seek,
+            commands::seek_by,
+            commands::toggle_mute,
             commands::set_volume,
             commands::get_player_state,
         ])

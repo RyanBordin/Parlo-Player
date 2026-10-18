@@ -73,6 +73,7 @@ struct Shared {
     /// Preloaded song, second entry of mpv's playlist.
     next: Option<Track>,
     volume: f64,
+    muted: bool,
     position: f64,
     duration: Option<f64>,
     throttle: PositionThrottle,
@@ -80,7 +81,7 @@ struct Shared {
 
 impl Shared {
     fn snapshot(&self) -> PlayerState {
-        PlayerState { status: self.status, track: self.track.clone(), volume: self.volume }
+        PlayerState { status: self.status, track: self.track.clone(), volume: self.volume, muted: self.muted }
     }
 
     fn start(&mut self, track: Track, status: PlaybackStatus) {
@@ -124,6 +125,7 @@ impl Player {
             track: None,
             next: None,
             volume,
+            muted: false,
             position: 0.0,
             duration: None,
             throttle: PositionThrottle::new(POSITION_INTERVAL),
@@ -196,17 +198,64 @@ impl Player {
         Ok(())
     }
 
-    /// Sets the volume (0–100) and returns the value applied.
+    /// Jumps `seconds` forward (or back, if negative) from the current position.
+    pub fn seek_by(&self, seconds: f64) -> Result<(), PlayerError> {
+        if !self.has_track() || !seconds.is_finite() {
+            return Ok(());
+        }
+        let offset = format!("{seconds:.3}");
+        self.mpv.command("seek", &[offset.as_str(), "relative"])?;
+        Ok(())
+    }
+
+    /// Sets the volume (0–100) and returns the value applied. Changing the
+    /// volume also turns mute off.
     pub fn set_volume(&self, volume: f64) -> Result<f64, PlayerError> {
         let volume = clamp_volume(volume);
         self.mpv.set_property("volume", volume)?;
+        self.mpv.set_property("mute", false)?;
         let state = {
             let mut shared = lock(&self.shared);
             shared.volume = volume;
+            shared.muted = false;
             shared.snapshot()
         };
         (self.sink)(PlayerEvent::State(state));
         Ok(volume)
+    }
+
+    /// Mutes or unmutes without touching the volume. Returns the new state.
+    pub fn toggle_mute(&self) -> Result<bool, PlayerError> {
+        let muted = !lock(&self.shared).muted;
+        self.mpv.set_property("mute", muted)?;
+        let state = {
+            let mut shared = lock(&self.shared);
+            shared.muted = muted;
+            shared.snapshot()
+        };
+        (self.sink)(PlayerEvent::State(state));
+        Ok(muted)
+    }
+
+    /// Changes the details of a loaded song (current or preloaded), e.g.
+    /// after it was starred.
+    pub fn update_track(&self, song_id: &str, change: impl Fn(&mut Track)) {
+        let state = {
+            let mut shared = lock(&self.shared);
+            if let Some(next) = shared.next.as_mut().filter(|t| t.id == song_id) {
+                change(next);
+            }
+            match shared.track.as_mut().filter(|t| t.id == song_id) {
+                Some(track) => {
+                    change(track);
+                    Some(shared.snapshot())
+                }
+                None => None,
+            }
+        };
+        if let Some(state) = state {
+            (self.sink)(PlayerEvent::State(state));
+        }
     }
 
     /// Stops playback and forgets the current song (e.g. on sign out).
@@ -404,7 +453,7 @@ mod tests {
     use std::sync::mpsc;
 
     fn track(id: &str, title: &str) -> Track {
-        Track { id: id.into(), title: title.into(), artist: None, album: None, duration: None }
+        Track { id: id.into(), title: title.into(), ..Track::default() }
     }
 
     /// A synthetic tone: no network and, with `ao=null`, no sound card.
@@ -423,6 +472,21 @@ mod tests {
 
     fn next_event(rx: &mpsc::Receiver<PlayerEvent>) -> PlayerEvent {
         rx.recv_timeout(Duration::from_secs(10)).expect("event before timeout")
+    }
+
+    /// Waits until mpv's position is near `target` (synthetic tones reach a
+    /// seek target a bit later when several tests share the CPU).
+    fn wait_for_position(player: &Player, target: f64) -> f64 {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut position = f64::NAN;
+        while Instant::now() < deadline {
+            position = player.mpv.get_property("time-pos").unwrap_or(f64::NAN);
+            if (position - target).abs() < 0.15 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        position
     }
 
     #[test]
@@ -507,8 +571,8 @@ mod tests {
                 break;
             }
         }
-        let position: f64 = player.mpv.get_property("time-pos").unwrap();
-        assert!((position - 0.6).abs() < 0.1, "time-pos {position}");
+        let position = wait_for_position(&player, 0.6);
+        assert!((position - 0.6).abs() < 0.15, "time-pos {position}");
     }
 
     #[test]
@@ -538,5 +602,51 @@ mod tests {
         assert_eq!(player.set_volume(150.0).unwrap(), 100.0);
         assert_eq!(player.set_volume(30.0).unwrap(), 30.0);
         assert_eq!(player.state().volume, 30.0);
+    }
+
+    #[test]
+    #[ignore = "starts libmpv; run with --ignored"]
+    fn mute_keeps_the_volume_and_a_volume_change_unmutes() {
+        let (player, _rx) = test_player();
+        player.set_volume(40.0).unwrap();
+        assert!(player.toggle_mute().unwrap());
+        assert!(player.mpv.get_property::<bool>("mute").unwrap());
+        assert_eq!(player.state().volume, 40.0);
+
+        player.set_volume(50.0).unwrap();
+        assert!(!player.state().muted);
+        assert!(!player.mpv.get_property::<bool>("mute").unwrap());
+    }
+
+    #[test]
+    #[ignore = "starts libmpv; run with --ignored"]
+    fn seeks_relative_to_the_position() {
+        let (player, rx) = test_player();
+        let long_tone = SecretUrl::for_test("av://lavfi:sine=frequency=440:duration=20");
+        player.play(track("a", "A"), &long_tone, None, 2.0, true).unwrap();
+        loop {
+            if let PlayerEvent::State(s) = next_event(&rx)
+                && s.status == PlaybackStatus::Paused
+            {
+                break;
+            }
+        }
+        let before = wait_for_position(&player, 2.0);
+        player.seek_by(5.0).unwrap();
+        let position = wait_for_position(&player, before + 5.0);
+        assert!((position - (before + 5.0)).abs() < 0.15, "from {before} to {position}");
+    }
+
+    #[test]
+    #[ignore = "starts libmpv; run with --ignored"]
+    fn updating_a_track_changes_only_that_song() {
+        let (player, _rx) = test_player();
+        let next = Some((track("b", "B"), tone(660)));
+        player.play(track("a", "A"), &tone(440), next, 0.0, true).unwrap();
+
+        player.update_track("other", |t| t.starred = true);
+        assert!(!player.state().track.unwrap().starred);
+        player.update_track("a", |t| t.starred = true);
+        assert!(player.state().track.unwrap().starred);
     }
 }

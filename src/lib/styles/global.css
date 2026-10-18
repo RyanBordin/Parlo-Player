@@ -24,6 +24,36 @@ p {
   margin: 0;
 }
 
+/* Thin dark scrollbars, like Swing Music. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* Page layout shared by every route: big bold title (Swing Music). */
+.page {
+  padding: var(--space-5) var(--page-gutter) var(--space-6);
+}
+
+.page-title {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.page-subtitle {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.section-title {
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
 /* --color-accent-text: the darker indigo is too faint on black (WCAG asks 3:1). */
 :focus-visible {
   outline: 2px solid var(--color-accent-text);

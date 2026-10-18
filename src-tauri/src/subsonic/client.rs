@@ -167,6 +167,44 @@ impl SubsonicClient {
         with_raw_json(body.take::<RawPlaylists>("playlists")?.playlist)
     }
 
+    /// `star` / `unstar` songs (spec 2: favorites live on the server).
+    pub async fn set_songs_starred(&self, song_ids: &[String], starred: bool) -> Result<(), SubsonicError> {
+        if song_ids.is_empty() {
+            return Ok(());
+        }
+        let endpoint = if starred { "star" } else { "unstar" };
+        self.get(endpoint, &id_params(song_ids), REQUEST_TIMEOUT).await?;
+        Ok(())
+    }
+
+    /// `GET /rest/getCoverArt` — the image bytes, resized by the server to
+    /// `size` pixels. On failure the server answers JSON instead of an image.
+    pub async fn get_cover_art(&self, cover_id: &str, size: u32) -> Result<Vec<u8>, SubsonicError> {
+        let url = format!("{}/rest/getCoverArt", self.base_url);
+        let auth = self.auth_params(&generate_salt());
+        let params = [("id", cover_id.to_string()), ("size", size.to_string())];
+        let response = self
+            .http
+            .get(url)
+            .query(&auth)
+            .query(&params)
+            .timeout(LIBRARY_TIMEOUT)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let is_json = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.contains("json") || v.contains("xml"));
+        if is_json {
+            parse_response(&response.text().await?)?;
+            return Err(SubsonicError::InvalidResponse("getCoverArt: no image".into()));
+        }
+        Ok(response.bytes().await?.to_vec())
+    }
+
     /// `GET /rest/getOpenSubsonicExtensions`.
     pub async fn get_open_subsonic_extensions(&self) -> Result<Vec<Extension>, SubsonicError> {
         let mut body = self.get("getOpenSubsonicExtensions", &[], REQUEST_TIMEOUT).await?;
@@ -276,6 +314,11 @@ fn scrobble_params(plays: &[(String, i64)], submission: bool) -> Vec<(&'static s
     params
 }
 
+/// `id` repeats once per item.
+fn id_params(ids: &[String]) -> Vec<(&'static str, String)> {
+    ids.iter().map(|id| ("id", id.clone())).collect()
+}
+
 /// `id` repeats once per song, in playback order.
 fn save_play_queue_params(song_ids: &[String], current: &str, position_ms: i64) -> Vec<(&'static str, String)> {
     let mut params: Vec<(&str, String)> = song_ids.iter().map(|id| ("id", id.clone())).collect();
@@ -357,6 +400,12 @@ mod tests {
             ]
         );
         assert_eq!(scrobble_params(&plays[..1], false)[0], ("submission", "false".to_string()));
+    }
+
+    #[test]
+    fn star_params_repeat_the_id() {
+        let ids = ["s1".to_string(), "s2".to_string()];
+        assert_eq!(id_params(&ids), [("id", "s1".to_string()), ("id", "s2".to_string())]);
     }
 
     #[test]

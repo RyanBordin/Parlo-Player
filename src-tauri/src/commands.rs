@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::db::library::{self, LibraryStats, SongSummary};
+use crate::db::library::{self, LibraryStats, PlaylistSummary, SongSummary};
 use crate::db::{self, DbError};
 use crate::playback::{Playback, PlaybackError, QueueState};
 use crate::player::queue::RepeatMode;
@@ -247,6 +247,17 @@ pub async fn list_songs(
     .await
 }
 
+/// Playlists from the local cache, by name (sidebar, spec 4.2).
+#[tauri::command]
+pub async fn list_playlists(state: State<'_, Arc<AppState>>) -> Result<Vec<PlaylistSummary>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        library::playlists(&conn)
+    })
+    .await
+}
+
 /// Replaces the queue with a whole context and plays from `start_index`
 /// (spec 5.1). `context_label` is the "Playing from" text.
 #[tauri::command]
@@ -305,6 +316,34 @@ pub fn get_queue(playback: State<'_, PlaybackSlot>) -> Result<QueueState, Comman
     Ok(playback_of(&playback)?.queue_state())
 }
 
+/// Stars or unstars a song on the server (spec 2), then in the local cache
+/// and in the player. The UI changes first and goes back if this fails.
+#[tauri::command]
+pub async fn set_song_starred(
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    song_id: String,
+    starred: bool,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    active.client.set_songs_starred(std::slice::from_ref(&song_id), starred).await?;
+
+    // The server already has it: a local failure is fixed by the next sync.
+    let (db_path, id) = (active.db_path.clone(), song_id.clone());
+    let saved = run_blocking(move || {
+        let conn = db::open(&db_path)?;
+        library::set_song_starred(&conn, &id, starred)
+    })
+    .await;
+    if let Err(error) = saved {
+        eprintln!("commands: star saved on the server but not locally: {error:?}");
+    }
+    if let Ok(playback) = &playback.0 {
+        playback.song_starred(&song_id, starred);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn toggle_pause(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {
     Ok(playback_of(&playback)?.player().toggle_pause()?)
@@ -313,6 +352,18 @@ pub fn toggle_pause(playback: State<'_, PlaybackSlot>) -> Result<(), CommandErro
 #[tauri::command]
 pub fn seek(playback: State<'_, PlaybackSlot>, seconds: f64) -> Result<(), CommandError> {
     Ok(playback_of(&playback)?.player().seek(seconds)?)
+}
+
+/// Jumps `seconds` forward (negative: back), e.g. ±5 s from the keyboard.
+#[tauri::command]
+pub fn seek_by(playback: State<'_, PlaybackSlot>, seconds: f64) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.player().seek_by(seconds)?)
+}
+
+/// Mutes or unmutes, keeping the volume. Returns the new state.
+#[tauri::command]
+pub fn toggle_mute(playback: State<'_, PlaybackSlot>) -> Result<bool, CommandError> {
+    Ok(playback_of(&playback)?.player().toggle_mute()?)
 }
 
 /// Sets the volume (0–100) and returns the value applied.
