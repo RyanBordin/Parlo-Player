@@ -4,12 +4,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::player::Player;
+use crate::playback::Playback;
 use crate::subsonic::SubsonicClient;
 
-/// The player, or why it could not start (e.g. libmpv failed to initialize).
-/// The app still opens without it; playback commands then return the error.
-pub struct PlayerSlot(pub Result<Player, String>);
+/// The playback controller, or why it could not start (e.g. libmpv failed to
+/// initialize). The app still opens without it; playback commands then
+/// return the error.
+pub struct PlaybackSlot(pub Result<Arc<Playback>, String>);
 
 /// The signed-in server and its library database.
 #[derive(Debug, Clone)]

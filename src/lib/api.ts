@@ -114,23 +114,72 @@ export type PlayerPosition = {
   duration: number | null;
 };
 
-/** Payload of `player-ended`. */
-export type PlayerEnded = { songId: string };
-
 /** Payload of `player-error`. */
 export type PlayerError = { songId: string | null; detail: string };
 
 export const PLAYER_STATE_EVENT = "player-state";
 export const PLAYER_POSITION_EVENT = "player-position";
-export const PLAYER_ENDED_EVENT = "player-ended";
 export const PLAYER_ERROR_EVENT = "player-error";
+export const QUEUE_CHANGED_EVENT = "queue-changed";
+
+/** Mirrors `RepeatMode` in src-tauri/src/player/queue.rs. */
+export type RepeatMode = "off" | "all" | "one";
+
+/** Payload of `queue-changed`. Tracks are in playback order. */
+export type QueueState = {
+  label: string;
+  /** Set when the queue was continued from another app (spec 5.6); shown instead of `label`. */
+  continuingFrom: string | null;
+  tracks: Track[];
+  currentIndex: number | null;
+  shuffle: boolean;
+  repeat: RepeatMode;
+};
 
 export function listSongs(limit: number): Promise<SongSummary[]> {
   return invoke("list_songs", { limit });
 }
 
-export function playSong(id: string): Promise<void> {
-  return invoke("play_song", { id });
+/**
+ * Replaces the queue with a whole context, in the order shown, and plays
+ * from `startIndex` (spec 5.1). `contextLabel` is the "Playing from" text.
+ */
+export function playContext(songIds: string[], startIndex: number, contextLabel: string): Promise<void> {
+  return invoke("play_context", { songIds, startIndex, contextLabel });
+}
+
+/**
+ * Resumes the saved queue (local or from the server), paused at the saved
+ * position (spec 5.6). Only the first call per library does something.
+ */
+export function restoreQueue(): Promise<void> {
+  return invoke("restore_queue");
+}
+
+export function next(): Promise<void> {
+  return invoke("next");
+}
+
+export function previous(): Promise<void> {
+  return invoke("previous");
+}
+
+/** Click on a song of the queue list: only jumps to it. */
+export function playQueueIndex(index: number): Promise<void> {
+  return invoke("play_queue_index", { index });
+}
+
+export function setShuffle(enabled: boolean): Promise<void> {
+  return invoke("set_shuffle", { enabled });
+}
+
+/** Off → repeat queue → repeat one. Resolves to the new mode. */
+export function cycleRepeat(): Promise<RepeatMode> {
+  return invoke("cycle_repeat");
+}
+
+export function getQueue(): Promise<QueueState> {
+  return invoke("get_queue");
 }
 
 export function togglePause(): Promise<void> {

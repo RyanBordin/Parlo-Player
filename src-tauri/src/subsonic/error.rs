@@ -5,7 +5,7 @@ use thiserror::Error;
 pub enum SubsonicError {
     /// Network failure, timeout, invalid URL or non-2xx HTTP status.
     #[error("connection error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(reqwest::Error),
 
     /// The server URL cannot be turned into a request URL.
     #[error("invalid URL: {0}")]
@@ -21,4 +21,12 @@ pub enum SubsonicError {
     /// 50 not authorized, 70 not found.
     #[error("error {code}: {message}")]
     Api { code: i32, message: String },
+}
+
+// reqwest puts the request URL in its error text, and GET URLs carry the
+// token and salt: drop it before the error can reach the UI or a log.
+impl From<reqwest::Error> for SubsonicError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Http(error.without_url())
+    }
 }

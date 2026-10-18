@@ -43,13 +43,6 @@ pub struct Position {
     pub duration: Option<f64>,
 }
 
-/// Payload of `player-ended`: the song played to its end.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Ended {
-    pub song_id: String,
-}
-
 /// Payload of `player-error`. `detail` comes from mpv's error code and never
 /// contains the stream URL.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -61,22 +54,18 @@ pub struct PlaybackError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerEvent {
+    /// Sent to the UI as `player-state`.
     State(PlayerState),
+    /// Sent to the UI as `player-position`.
     Position(Position),
-    Ended(Ended),
+    /// Sent to the UI as `player-error`.
     Error(PlaybackError),
-}
-
-impl PlayerEvent {
-    /// Tauri event name.
-    pub fn name(&self) -> &'static str {
-        match self {
-            PlayerEvent::State(_) => "player-state",
-            PlayerEvent::Position(_) => "player-position",
-            PlayerEvent::Ended(_) => "player-ended",
-            PlayerEvent::Error(_) => "player-error",
-        }
-    }
+    /// mpv moved to the preloaded next song, without a gap.
+    Advanced(Track),
+    /// The song ended and nothing was preloaded after it.
+    Finished { song_id: String },
+    /// The playback position was moved (seek), so it must not count as listened.
+    Seeked,
 }
 
 /// Limits `player-position` events: mpv reports the position many times per
@@ -164,9 +153,9 @@ mod tests {
             })
         );
         assert_eq!(
-            serde_json::to_value(Ended { song_id: "s1".into() }).unwrap(),
-            json!({ "songId": "s1" })
+            serde_json::to_value(PlaybackError { song_id: Some("s1".into()), detail: "x".into() })
+                .unwrap(),
+            json!({ "songId": "s1", "detail": "x" })
         );
-        assert_eq!(PlayerEvent::Position(Position { position: 1.0, duration: None }).name(), "player-position");
     }
 }

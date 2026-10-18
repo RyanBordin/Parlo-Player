@@ -57,5 +57,16 @@
   "player_seek": "Position",
   "player_volume": "Volume",
   "error_song_not_found": "This song is not in the library anymore. Try syncing.",
-  "error_playback": "Could not play this song."
+  "error_playback": "Could not play this song.",
+  "player_previous": "Previous",
+  "player_next": "Next",
+  "player_shuffle": "Shuffle",
+  "player_repeat_off": "Repeat: off",
+  "player_repeat_all": "Repeat: queue",
+  "player_repeat_one": "Repeat: one song",
+  "queue_title": "Queue",
+  "queue_playing_from": "Playing from: {label}",
+  "queue_empty": "Click a song to start playing.",
+  "queue_continuing_from": "Continuing from {app}",
+  "queue_continuing_from_other": "Continuing from another app"
 }

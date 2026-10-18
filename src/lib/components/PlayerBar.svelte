@@ -1,10 +1,10 @@
 <script lang="ts">
-  // Temporary player bar (step 5A). The real Player Bar comes with the app shell.
-  import { seek, setVolume, togglePause } from "#lib/api.ts";
+  // Temporary player bar (step 5). The real Player Bar comes with the app shell.
+  import { cycleRepeat, next, previous, seek, setShuffle, setVolume, togglePause } from "#lib/api.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
-  import { player } from "#lib/player.svelte.ts";
+  import { player, queue } from "#lib/player.svelte.ts";
 
   // While dragging, the bar follows the mouse instead of the playback position.
   let dragging = $state<number | null>(null);
@@ -12,6 +12,14 @@
 
   let shownPosition = $derived(dragging ?? player.position);
   let canControl = $derived(player.track !== null && player.status !== "idle");
+  let hasQueue = $derived(queue.tracks.length > 0);
+  let repeatLabel = $derived(
+    queue.repeat === "one"
+      ? m.player_repeat_one()
+      : queue.repeat === "all"
+        ? m.player_repeat_all()
+        : m.player_repeat_off(),
+  );
   let playbackError = $derived(
     player.error ? { message: m.error_playback(), detail: player.error.detail } : null,
   );
@@ -60,18 +68,66 @@
   </div>
 
   <div class="transport">
-    <button
-      class="play"
-      onclick={() => run(togglePause)}
-      disabled={!canControl}
-      aria-label={player.status === "playing" ? m.player_pause() : m.player_play()}
-    >
-      {#if player.status === "playing"}
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-      {:else}
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-      {/if}
-    </button>
+    <div class="controls">
+      <button
+        class="icon"
+        class:active={queue.shuffle}
+        onclick={() => run(() => setShuffle(!queue.shuffle))}
+        disabled={!hasQueue}
+        aria-label={m.player_shuffle()}
+        aria-pressed={queue.shuffle}
+        title={m.player_shuffle()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M16 4h4v4l-1.5-1.5-3.6 3.6-1.4-1.4 3.6-3.6zM4 17.6 15.6 6l1.4 1.4L5.4 19zM14.5 15.9l1.4-1.4 2.6 2.6L20 15.6V20h-4.4l1.5-1.5z" />
+        </svg>
+      </button>
+      <button
+        class="icon"
+        onclick={() => run(previous)}
+        disabled={!hasQueue}
+        aria-label={m.player_previous()}
+        title={m.player_previous()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
+      </button>
+      <button
+        class="play"
+        onclick={() => run(togglePause)}
+        disabled={!canControl}
+        aria-label={player.status === "playing" ? m.player_pause() : m.player_play()}
+      >
+        {#if player.status === "playing"}
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+        {:else}
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        {/if}
+      </button>
+      <button
+        class="icon"
+        onclick={() => run(next)}
+        disabled={!hasQueue}
+        aria-label={m.player_next()}
+        title={m.player_next()}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" /></svg>
+      </button>
+      <button
+        class="icon"
+        class:active={queue.repeat !== "off"}
+        onclick={() => run(cycleRepeat)}
+        disabled={!hasQueue}
+        aria-label={repeatLabel}
+        title={repeatLabel}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" />
+          {#if queue.repeat === "one"}
+            <text x="12" y="15" text-anchor="middle" font-size="8" font-weight="700">1</text>
+          {/if}
+        </svg>
+      </button>
+    </div>
 
     <div class="progress">
       <span class="time">{formatDuration(shownPosition)}</span>
@@ -141,6 +197,44 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-2);
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .icon {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .icon:not(:disabled):hover {
+    color: var(--color-text);
+  }
+
+  .icon:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .icon svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+
+  /* Shuffle / repeat on: accent for text and icons (spec 1.1). */
+  .icon.active {
+    color: var(--color-accent-text);
   }
 
   .play {

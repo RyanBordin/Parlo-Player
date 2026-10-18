@@ -57,5 +57,16 @@
   "player_seek": "Posição",
   "player_volume": "Volume",
   "error_song_not_found": "Esta música não está mais na biblioteca. Tente sincronizar.",
-  "error_playback": "Não foi possível tocar esta música."
+  "error_playback": "Não foi possível tocar esta música.",
+  "player_previous": "Anterior",
+  "player_next": "Próxima",
+  "player_shuffle": "Aleatório",
+  "player_repeat_off": "Repetir: desativado",
+  "player_repeat_all": "Repetir: fila",
+  "player_repeat_one": "Repetir: uma faixa",
+  "queue_title": "Fila",
+  "queue_playing_from": "Tocando de: {label}",
+  "queue_empty": "Clique numa música para começar.",
+  "queue_continuing_from": "Continuando de {app}",
+  "queue_continuing_from_other": "Continuando de outro app"
 }

@@ -10,4 +10,4 @@ mod types;
 pub use client::{SearchPage, ServerInfo, SubsonicClient};
 pub use error::SubsonicError;
 pub use secret_url::SecretUrl;
-pub use types::{Album, Artist, Genre, LibraryItems, Playlist, ScanStatus, Song};
+pub use types::{Album, Artist, Genre, LibraryItems, PlayQueue, PlayQueueEntry, Playlist, ScanStatus, Song};

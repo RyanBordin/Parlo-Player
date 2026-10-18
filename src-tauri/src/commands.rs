@@ -8,9 +8,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::library::{self, LibraryStats, SongSummary};
 use crate::db::{self, DbError};
-use crate::player::{Player, PlayerError, PlayerEvent, PlayerState, Track};
+use crate::playback::{Playback, PlaybackError, QueueState};
+use crate::player::queue::RepeatMode;
+use crate::player::{PlayerError, PlayerState};
 use crate::session::{self, SavedSession, SessionError};
-use crate::state::{ActiveLibrary, AppState, PlayerSlot};
+use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
 use crate::subsonic::{ServerInfo, SubsonicClient, SubsonicError};
 use crate::sync::{self, SyncError, SyncProgress};
 
@@ -40,6 +42,19 @@ pub enum CommandError {
 impl From<PlayerError> for CommandError {
     fn from(error: PlayerError) -> Self {
         Self::Playback { detail: error.to_string() }
+    }
+}
+
+impl From<PlaybackError> for CommandError {
+    fn from(error: PlaybackError) -> Self {
+        match error {
+            PlaybackError::Player(e) => e.into(),
+            PlaybackError::Db(e) => e.into(),
+            PlaybackError::Server(e) => e.into(),
+            PlaybackError::NotLoggedIn => Self::NotLoggedIn,
+            PlaybackError::NoSongs => Self::SongNotFound,
+            PlaybackError::Task(detail) => Self::Playback { detail },
+        }
     }
 }
 
@@ -163,15 +178,15 @@ pub async fn login(
 pub async fn logout(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
-    player: State<'_, PlayerSlot>,
+    playback: State<'_, PlaybackSlot>,
 ) -> Result<(), CommandError> {
     let dir = config_dir(&app)?;
     run_blocking(move || session::clear(&dir)).await?;
-    state.set_active(None);
     // The music would keep streaming with the signed-out credentials.
-    if let Ok(player) = &player.0 {
-        player.stop()?;
+    if let Ok(playback) = &playback.0 {
+        playback.stop()?;
     }
+    state.set_active(None);
     Ok(())
 }
 
@@ -232,74 +247,88 @@ pub async fn list_songs(
     .await
 }
 
-/// Streams a song from the server, replacing whatever is playing.
+/// Replaces the queue with a whole context and plays from `start_index`
+/// (spec 5.1). `context_label` is the "Playing from" text.
 #[tauri::command]
-pub async fn play_song(
-    state: State<'_, Arc<AppState>>,
-    player: State<'_, PlayerSlot>,
-    id: String,
+pub async fn play_context(
+    playback: State<'_, PlaybackSlot>,
+    song_ids: Vec<String>,
+    start_index: usize,
+    context_label: String,
 ) -> Result<(), CommandError> {
-    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
-    let player = player_of(&player)?;
-
-    let db_path = active.db_path.clone();
-    let song = run_blocking(move || {
-        let conn = db::open(&db_path)?;
-        library::song_summary(&conn, &id)
+    let playback = playback_of(&playback)?;
+    // Reads the library cache, so it runs outside the async runtime.
+    tauri::async_runtime::spawn_blocking(move || {
+        playback.play_context(song_ids, start_index, context_label)
     })
-    .await?
-    .ok_or(CommandError::SongNotFound)?;
-
-    let url = active.client.stream_url(&song.id)?;
-    player.play(track_of(song), &url)?;
+    .await
+    .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
     Ok(())
 }
 
+/// Resumes the queue saved locally or on the server, paused (spec 5.6). Only
+/// the first call per library does something.
 #[tauri::command]
-pub fn toggle_pause(player: State<'_, PlayerSlot>) -> Result<(), CommandError> {
-    Ok(player_of(&player)?.toggle_pause()?)
+pub async fn restore_queue(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.restore().await?)
 }
 
 #[tauri::command]
-pub fn seek(player: State<'_, PlayerSlot>, seconds: f64) -> Result<(), CommandError> {
-    Ok(player_of(&player)?.seek(seconds)?)
+pub fn next(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.next()?)
+}
+
+#[tauri::command]
+pub fn previous(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.previous()?)
+}
+
+/// Click on a song of the queue list: only jumps to it.
+#[tauri::command]
+pub fn play_queue_index(playback: State<'_, PlaybackSlot>, index: usize) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.jump_to(index)?)
+}
+
+#[tauri::command]
+pub fn set_shuffle(playback: State<'_, PlaybackSlot>, enabled: bool) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.set_shuffle(enabled)?)
+}
+
+/// Off → repeat queue → repeat one. Returns the new mode.
+#[tauri::command]
+pub fn cycle_repeat(playback: State<'_, PlaybackSlot>) -> Result<RepeatMode, CommandError> {
+    Ok(playback_of(&playback)?.cycle_repeat()?)
+}
+
+#[tauri::command]
+pub fn get_queue(playback: State<'_, PlaybackSlot>) -> Result<QueueState, CommandError> {
+    Ok(playback_of(&playback)?.queue_state())
+}
+
+#[tauri::command]
+pub fn toggle_pause(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.player().toggle_pause()?)
+}
+
+#[tauri::command]
+pub fn seek(playback: State<'_, PlaybackSlot>, seconds: f64) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.player().seek(seconds)?)
 }
 
 /// Sets the volume (0–100) and returns the value applied.
 #[tauri::command]
-pub fn set_volume(player: State<'_, PlayerSlot>, volume: f64) -> Result<f64, CommandError> {
-    Ok(player_of(&player)?.set_volume(volume)?)
+pub fn set_volume(playback: State<'_, PlaybackSlot>, volume: f64) -> Result<f64, CommandError> {
+    Ok(playback_of(&playback)?.player().set_volume(volume)?)
 }
 
 /// Current state, for a screen that opens while something is playing.
 #[tauri::command]
-pub fn get_player_state(player: State<'_, PlayerSlot>) -> Result<PlayerState, CommandError> {
-    Ok(player_of(&player)?.state())
+pub fn get_player_state(playback: State<'_, PlaybackSlot>) -> Result<PlayerState, CommandError> {
+    Ok(playback_of(&playback)?.player().state())
 }
 
-/// Sends a player event to the UI under its own Tauri event name.
-pub fn emit_player_event(app: &AppHandle, event: PlayerEvent) {
-    let name = event.name();
-    let _ = match event {
-        PlayerEvent::State(payload) => app.emit(name, payload),
-        PlayerEvent::Position(payload) => app.emit(name, payload),
-        PlayerEvent::Ended(payload) => app.emit(name, payload),
-        PlayerEvent::Error(payload) => app.emit(name, payload),
-    };
-}
-
-fn player_of<'a>(slot: &'a State<'_, PlayerSlot>) -> Result<&'a Player, CommandError> {
-    slot.0.as_ref().map_err(|detail| CommandError::Playback { detail: detail.clone() })
-}
-
-fn track_of(song: SongSummary) -> Track {
-    Track {
-        id: song.id,
-        title: song.title,
-        artist: song.artist,
-        album: song.album,
-        duration: song.duration.map(|d| d as f64),
-    }
+fn playback_of(slot: &State<'_, PlaybackSlot>) -> Result<Arc<Playback>, CommandError> {
+    slot.0.clone().map_err(|detail| CommandError::Playback { detail })
 }
 
 fn config_dir(app: &AppHandle) -> Result<PathBuf, CommandError> {

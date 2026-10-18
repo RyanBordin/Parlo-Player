@@ -78,3 +78,18 @@ async fn scan_status_reports_song_count() {
     let status = client.get_scan_status().await.unwrap();
     assert!(status.count.unwrap_or(0) > 0);
 }
+
+#[tokio::test]
+#[ignore = "requires a Navidrome server configured in .env"]
+async fn server_takes_post_forms_and_reads_the_play_queue() {
+    let server = test_server();
+    let client = SubsonicClient::new(server.url, server.user, server.password).unwrap();
+
+    // Large queues are saved by POST (spec 5.6). Read-only: the saved queue
+    // is not changed.
+    assert!(client.supports_form_post().await, "server should announce formPost");
+    if let Some(queue) = client.get_play_queue().await.unwrap() {
+        assert!(!queue.entry.is_empty());
+        assert!(queue.changed.is_some());
+    }
+}

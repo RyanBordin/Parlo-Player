@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -8,7 +9,8 @@ use super::error::SubsonicError;
 use super::response::{ResponseBody, parse_response};
 use super::secret_url::SecretUrl;
 use super::types::{
-    LibraryItems, Playlist, RawLibraryItems, RawPlaylists, ScanStatus, with_raw_json,
+    Extension, LibraryItems, PlayQueue, Playlist, RawLibraryItems, RawPlaylists, ScanStatus,
+    with_raw_json,
 };
 
 const API_VERSION: &str = "1.16.1";
@@ -16,6 +18,8 @@ const CLIENT_NAME: &str = "ParloPlayer";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Library pages (e.g. 500 songs) are much larger than a ping.
 const LIBRARY_TIMEOUT: Duration = Duration::from_secs(60);
+/// OpenSubsonic extension: every endpoint accepts its parameters as a POST form.
+const FORM_POST: &str = "formPost";
 
 /// One page of `search3`. A count of 0 skips that item type on Navidrome.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -57,6 +61,17 @@ pub struct SubsonicClient {
     username: String,
     password: String,
     http: reqwest::Client,
+    /// Whether the server announces `formPost`, asked once per client.
+    form_post: OnceLock<bool>,
+}
+
+/// How a request sends its parameters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Method {
+    /// In the URL query (credentials included).
+    Get,
+    /// In a form body, so long lists fit and the URL has no credentials.
+    Post,
 }
 
 impl SubsonicClient {
@@ -75,6 +90,7 @@ impl SubsonicClient {
             username: username.into(),
             password: password.into(),
             http,
+            form_post: OnceLock::new(),
         })
     }
 
@@ -134,10 +150,65 @@ impl SubsonicClient {
         Ok(SecretUrl::new(url))
     }
 
+    /// `GET /rest/scrobble`. With `submission=false` it only says "now playing";
+    /// with `true` it records plays (spec 5.7). Each play is a song ID and the
+    /// time it started, in Unix milliseconds; several can go in one request.
+    pub async fn scrobble(&self, plays: &[(String, i64)], submission: bool) -> Result<(), SubsonicError> {
+        if plays.is_empty() {
+            return Ok(());
+        }
+        self.get("scrobble", &scrobble_params(plays, submission), REQUEST_TIMEOUT).await?;
+        Ok(())
+    }
+
     /// `GET /rest/getPlaylists` — all playlists visible to the user.
     pub async fn get_playlists(&self) -> Result<Vec<Playlist>, SubsonicError> {
         let mut body = self.get("getPlaylists", &[], LIBRARY_TIMEOUT).await?;
         with_raw_json(body.take::<RawPlaylists>("playlists")?.playlist)
+    }
+
+    /// `GET /rest/getOpenSubsonicExtensions`.
+    pub async fn get_open_subsonic_extensions(&self) -> Result<Vec<Extension>, SubsonicError> {
+        let mut body = self.get("getOpenSubsonicExtensions", &[], REQUEST_TIMEOUT).await?;
+        body.take("openSubsonicExtensions")
+    }
+
+    /// Whether the server takes POST forms (`formPost`). A server that does
+    /// not know the endpoint simply has no extensions. A network failure is
+    /// not remembered, so the next call asks again.
+    pub async fn supports_form_post(&self) -> bool {
+        if let Some(&supported) = self.form_post.get() {
+            return supported;
+        }
+        let supported = match self.get_open_subsonic_extensions().await {
+            Ok(extensions) => extensions.iter().any(|e| e.name == FORM_POST),
+            Err(SubsonicError::Http(e)) if !e.is_status() => return false,
+            Err(_) => false,
+        };
+        *self.form_post.get_or_init(|| supported)
+    }
+
+    /// `getPlayQueue` — the queue saved on the server, `None` if there is none.
+    pub async fn get_play_queue(&self) -> Result<Option<PlayQueue>, SubsonicError> {
+        let mut body = self.get("getPlayQueue", &[], REQUEST_TIMEOUT).await?;
+        let queue: PlayQueue = body.take("playQueue")?;
+        Ok((!queue.entry.is_empty()).then_some(queue))
+    }
+
+    /// `savePlayQueue` — songs in playback order, the current one and the
+    /// position in milliseconds (spec 5.6). Sent by POST when the server
+    /// allows it, because the queue can have thousands of songs.
+    pub async fn save_play_queue(
+        &self,
+        song_ids: &[String],
+        current: &str,
+        position_ms: i64,
+        timeout: Duration,
+    ) -> Result<(), SubsonicError> {
+        let method = if self.supports_form_post().await { Method::Post } else { Method::Get };
+        let params = save_play_queue_params(song_ids, current, position_ms);
+        self.request(method, "savePlayQueue", &params, timeout).await?;
+        Ok(())
     }
 
     async fn get(
@@ -146,14 +217,31 @@ impl SubsonicClient {
         params: &[(&str, String)],
         timeout: Duration,
     ) -> Result<ResponseBody, SubsonicError> {
+        self.request(Method::Get, endpoint, params, timeout).await
+    }
+
+    async fn request(
+        &self,
+        method: Method,
+        endpoint: &str,
+        params: &[(&str, String)],
+        timeout: Duration,
+    ) -> Result<ResponseBody, SubsonicError> {
         let url = format!("{}/rest/{endpoint}", self.base_url);
         let auth = self.auth_params(&generate_salt());
 
-        let text = self
-            .http
-            .get(url)
-            .query(&auth)
-            .query(params)
+        let request = match method {
+            Method::Get => self.http.get(url).query(&auth).query(params),
+            Method::Post => {
+                let form: Vec<(&str, &str)> = auth
+                    .iter()
+                    .chain(params)
+                    .map(|(k, v)| (*k, v.as_str()))
+                    .collect();
+                self.http.post(url).form(&form)
+            }
+        };
+        let text = request
             .timeout(timeout)
             .send()
             .await?
@@ -176,6 +264,24 @@ impl SubsonicClient {
             ("f", "json".to_string()),
         ]
     }
+}
+
+/// `id` and `time` repeat once per play, in matching order.
+fn scrobble_params(plays: &[(String, i64)], submission: bool) -> Vec<(&'static str, String)> {
+    let mut params = vec![("submission", submission.to_string())];
+    for (id, time_ms) in plays {
+        params.push(("id", id.clone()));
+        params.push(("time", time_ms.to_string()));
+    }
+    params
+}
+
+/// `id` repeats once per song, in playback order.
+fn save_play_queue_params(song_ids: &[String], current: &str, position_ms: i64) -> Vec<(&'static str, String)> {
+    let mut params: Vec<(&str, String)> = song_ids.iter().map(|id| ("id", id.clone())).collect();
+    params.push(("current", current.to_string()));
+    params.push(("position", position_ms.max(0).to_string()));
+    params
 }
 
 // Hand-written so the password never ends up in logs or error messages.
@@ -235,6 +341,38 @@ mod tests {
         assert_eq!(get("p"), None, "plain password must never be sent");
         assert!(!url.expose().contains("sesame"));
         assert!(!url.to_string().contains(get("t").unwrap()), "Display must hide the token");
+    }
+
+    #[test]
+    fn scrobble_params_pair_ids_with_times() {
+        let plays = [("s1".to_string(), 1000), ("s2".to_string(), 2000)];
+        assert_eq!(
+            scrobble_params(&plays, true),
+            [
+                ("submission", "true".to_string()),
+                ("id", "s1".to_string()),
+                ("time", "1000".to_string()),
+                ("id", "s2".to_string()),
+                ("time", "2000".to_string()),
+            ]
+        );
+        assert_eq!(scrobble_params(&plays[..1], false)[0], ("submission", "false".to_string()));
+    }
+
+    #[test]
+    fn save_play_queue_params_keep_the_playback_order() {
+        let ids = ["s3".to_string(), "s1".to_string(), "s2".to_string()];
+        assert_eq!(
+            save_play_queue_params(&ids, "s1", 42_500),
+            [
+                ("id", "s3".to_string()),
+                ("id", "s1".to_string()),
+                ("id", "s2".to_string()),
+                ("current", "s1".to_string()),
+                ("position", "42500".to_string()),
+            ]
+        );
+        assert_eq!(save_play_queue_params(&ids, "s1", -5)[4], ("position", "0".to_string()));
     }
 
     #[test]

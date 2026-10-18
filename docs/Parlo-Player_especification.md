@@ -226,6 +226,11 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 * Não existe opção de tocar uma faixa isolada fora do seu contexto. Para adicionar sem trocar o contexto, usar *Tocar a seguir* / *Adicionar ao fim da fila* (Seção 8).
 * **Exceção:** clicar numa faixa dentro da aba `A SEGUIR` apenas pula para ela.
 
+### 5.1.1. Anterior, próxima e fim da fila
+
+* **Anterior:** se a faixa atual já tocou mais de 3 segundos, volta ao início dela; senão, vai para a faixa anterior da fila.
+* **Próxima** na última faixa: com repeat desligado, a reprodução para no fim da fila; com "repetir fila", volta à primeira.
+
 ### 5.2. Álbuns, artistas e cards
 
 * **Clique no card** de um álbum (Home, grade de Álbuns, página do artista): abre a página do álbum.
@@ -249,10 +254,19 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 * O app salva: fila completa, contexto de origem, faixa atual, posição exata, shuffle, repeat e volume.
 * Ao abrir, restaura tudo exatamente como estava, com a música **pausada**.
 * Implementação: `savePlayQueue` / `getPlayQueue` (fila, faixa atual e posição no servidor) + registro local para o que a API não guarda (nome do contexto, shuffle, repeat, volume).
+* **Quando salvar:** ao mudar a fila ou a faixa, ao pausar, a cada 30 s tocando e ao fechar o app.
+* **Continuar de outro dispositivo:** ao abrir, se a fila do servidor foi alterada **depois** da última gravação local por outro app (campos `changed` / `changedBy` de `getPlayQueue`), o Parlo usa a fila do servidor, com o contexto "Continuando de [app]". Senão, usa o estado local completo.
+  * Se a fila do servidor tem as mesmas faixas, na mesma ordem e com a mesma faixa atual que a gravação local, ela é a cópia da nossa própria gravação: vale a local, mesmo que a data do servidor pareça mais nova (relógios diferentes).
+  * Fila vinda do servidor: a ordem dela vira a ordem original (shuffle desligado, porque a API não guarda a ordem original); repeat e volume vêm do registro local.
+* **Filas grandes:** a fila pode ter milhares de faixas (ex.: tocar a partir da página Músicas). Como não cabem numa URL, `savePlayQueue` é enviado por **POST** (extensão OpenSubsonic `formPost`).
+* Faixas da fila salva que não existem mais no servidor são ignoradas na restauração. Se a faixa atual sumiu, a próxima que existe vira a atual, desde o início.
+* Sair da conta não grava a fila (gravar a fila vazia apagaria a do servidor).
 
 ### 5.7. Scrobble
 
-* Envia `scrobble` com `submission=true` quando a faixa passa de **50% ou 4 minutos**, e grava a reprodução no histórico local (Seção 12.4).
+* Ao começar uma faixa, envia `scrobble` com `submission=false` ("tocando agora", visível no Navidrome).
+* Envia `scrobble` com `submission=true` quando o **tempo realmente ouvido** passa de **50% da faixa ou 4 minutos** (pular com a barra de progresso não conta), e grava a reprodução no histórico local (Seção 12.4) com data e hora.
+* Se o envio ao servidor falhar, a reprodução fica pendente e é reenviada depois. O histórico local é gravado de qualquer forma.
 * O Navidrome **não** marca reproduções por chamadas a `stream`, só por `scrobble`. Sem isso, "mais escutados", "favoritos esquecidos" e recaps não funcionam.
 
 ---
@@ -598,3 +612,6 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Logo definido (duas claves formando "PP"); índigo do logo vira a cor de destaque. |
 | 18/10/2026 | Paleta base: fundo `#000000`, destaque `#3E4095` (fundos) e `#8183CB` (texto/ícones). |
 | 18/10/2026 | Sincronização em dois níveis (completa e leve); um banco por servidor + usuário, preservado ao sair. |
+| 18/10/2026 | Anterior volta ao início da faixa após 3 s; fim da fila para sem repeat; scrobble conta tempo realmente ouvido e reenvia se falhar. |
+| 18/10/2026 | Restauração da fila: a mais recente vence (local ou servidor), permitindo continuar de outro dispositivo; filas grandes salvas por POST. |
+| 18/10/2026 | Fila do servidor igual à local (faixas, ordem e faixa atual) conta como nossa própria gravação; faixa atual removida passa para a próxima. |

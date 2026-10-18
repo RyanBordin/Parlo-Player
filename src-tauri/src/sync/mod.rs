@@ -72,7 +72,7 @@ pub async fn run(
     force_full: bool,
     progress: &(dyn Fn(SyncProgress) + Send + Sync),
 ) -> Result<(), SyncError> {
-    let db = SyncDb::open(db_path).await?;
+    let db = SyncDb::open(db_path.clone()).await?;
     let scan = client.get_scan_status().await?;
     let state = db.call(|conn| library::sync_state(conn)).await?;
 
@@ -80,7 +80,7 @@ pub async fn run(
     if full {
         full::run(client, &db, &scan, progress).await?;
     }
-    light::run(client, &db, full, progress).await
+    light::run(client, &db, &db_path, full, progress).await
 }
 
 /// Whether a full sync is due (spec 12.4).

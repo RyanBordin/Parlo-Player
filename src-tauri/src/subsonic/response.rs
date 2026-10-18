@@ -133,6 +133,44 @@ mod tests {
     }
 
     #[test]
+    fn takes_play_queue() {
+        use crate::subsonic::types::PlayQueue;
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "playQueue":{"entry":[{"id":"s2","title":"Two"},{"id":"s1","title":"One"}],
+            "current":"s1","position":83500,"username":"alice",
+            "changed":"2026-10-18T12:34:56.789Z","changedBy":"Symfonium"}}}"#;
+        let queue: PlayQueue = parse_response(json).unwrap().take("playQueue").unwrap();
+        let ids: Vec<&str> = queue.entry.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["s2", "s1"]);
+        assert_eq!(queue.current.as_deref(), Some("s1"));
+        assert_eq!(queue.position, Some(83_500));
+        assert_eq!(queue.changed_by.as_deref(), Some("Symfonium"));
+    }
+
+    #[test]
+    fn no_saved_play_queue_gives_an_empty_one() {
+        use crate::subsonic::types::PlayQueue;
+
+        // Navidrome omits `playQueue` when nothing was saved.
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1"}}"#;
+        let queue: PlayQueue = parse_response(json).unwrap().take("playQueue").unwrap();
+        assert!(queue.entry.is_empty());
+    }
+
+    #[test]
+    fn takes_opensubsonic_extensions() {
+        use crate::subsonic::types::Extension;
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "openSubsonicExtensions":[{"name":"transcodeOffset","versions":[1]},
+            {"name":"formPost","versions":[1]}]}}"#;
+        let extensions: Vec<Extension> =
+            parse_response(json).unwrap().take("openSubsonicExtensions").unwrap();
+        assert!(extensions.iter().any(|e| e.name == "formPost" && e.versions == [1]));
+    }
+
+    #[test]
     fn parses_minimal_success_without_opensubsonic_fields() {
         let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1"}}"#;
 

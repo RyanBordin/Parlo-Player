@@ -10,7 +10,9 @@
 //! If the sync fails before step 3, the staging tables are dropped (TEMP tables
 //! also vanish when the connection closes) and the previous cache is intact.
 
-use rusqlite::{Connection, OptionalExtension, Statement, params};
+use std::collections::HashMap;
+
+use rusqlite::{Connection, Statement, params};
 use serde::Serialize;
 
 use super::DbResult;
@@ -242,9 +244,19 @@ pub fn recent_songs(conn: &Connection, limit: u32) -> DbResult<Vec<SongSummary>>
     Ok(songs)
 }
 
-pub fn song_summary(conn: &Connection, id: &str) -> DbResult<Option<SongSummary>> {
-    let sql = format!("SELECT {SONG_SUMMARY_COLUMNS} FROM songs WHERE id = ?1");
-    Ok(conn.query_row(&sql, [id], song_summary_from_row).optional()?)
+/// Several songs at once (e.g. a whole queue), keyed by ID. IDs that are not
+/// in the cache are simply absent.
+pub fn song_summaries(conn: &Connection, ids: &[String]) -> DbResult<HashMap<String, SongSummary>> {
+    let sql = format!(
+        "SELECT {SONG_SUMMARY_COLUMNS} FROM songs WHERE id IN (SELECT value FROM json_each(?1))"
+    );
+    let ids = serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_string());
+    let mut stmt = conn.prepare(&sql)?;
+    let songs = stmt
+        .query_map([ids], song_summary_from_row)?
+        .map(|row| row.map(|song| (song.id.clone(), song)))
+        .collect::<Result<_, _>>()?;
+    Ok(songs)
 }
 
 pub fn stats(conn: &Connection) -> DbResult<LibraryStats> {
@@ -628,13 +640,13 @@ mod tests {
     }
 
     #[test]
-    fn song_summary_finds_one_song() {
+    fn song_summaries_returns_the_songs_found() {
         let mut conn = open_in_memory().unwrap();
-        full_sync(&mut conn, &[library(vec![song("s1", "al1")])], 1000);
+        full_sync(&mut conn, &[library(vec![song("s1", "al1"), song("s2", "al1")])], 1000);
 
-        let found = song_summary(&conn, "s1").unwrap().expect("song exists");
-        assert_eq!(found.title, "Song s1");
-        assert_eq!(song_summary(&conn, "missing").unwrap(), None);
+        let found = song_summaries(&conn, &["s2".into(), "missing".into(), "s1".into()]).unwrap();
+        assert_eq!(found.len(), 2);
+        assert_eq!(found["s2"].title, "Song s2");
     }
 
     #[test]

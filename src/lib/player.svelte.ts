@@ -2,12 +2,15 @@
 import { listen } from "@tauri-apps/api/event";
 import {
   getPlayerState,
+  getQueue,
   PLAYER_ERROR_EVENT,
   PLAYER_POSITION_EVENT,
   PLAYER_STATE_EVENT,
+  QUEUE_CHANGED_EVENT,
   type PlayerError,
   type PlayerPosition,
   type PlayerState,
+  type QueueState,
   type Track,
 } from "#lib/api.ts";
 
@@ -22,6 +25,16 @@ export const player = $state<{
   error: PlayerError | null;
 }>({ status: "idle", track: null, volume: 100, position: 0, duration: null, error: null });
 
+/** The queue as the backend has it (source of truth). */
+export const queue = $state<QueueState>({
+  label: "",
+  continuingFrom: null,
+  tracks: [],
+  currentIndex: null,
+  shuffle: false,
+  repeat: "off",
+});
+
 let listening: Promise<void> | null = null;
 
 /** Subscribes to the player events once, then reads the current state. */
@@ -35,8 +48,10 @@ export function listenToPlayer(): Promise<void> {
     await listen<PlayerError>(PLAYER_ERROR_EVENT, (event) => {
       player.error = event.payload;
     });
+    await listen<QueueState>(QUEUE_CHANGED_EVENT, (event) => Object.assign(queue, event.payload));
     try {
       applyState(await getPlayerState());
+      Object.assign(queue, await getQueue());
     } catch {
       // Player unavailable: commands will report the error when used.
     }

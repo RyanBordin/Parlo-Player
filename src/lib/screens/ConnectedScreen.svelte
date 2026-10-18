@@ -1,15 +1,17 @@
 <script lang="ts">
-  // Temporary main screen (steps 3–5A). Replaced by the app shell in step 6.
+  // Temporary main screen (steps 3–5). Replaced by the app shell in step 6.
   import {
     getLibraryStatus,
     listSongs,
     logout,
-    playSong,
+    playContext,
+    restoreQueue,
     type LibraryStatus,
     type SavedSession,
     type SongSummary,
   } from "#lib/api.ts";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
+  import QueueList from "#lib/components/QueueList.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDateTime, formatDuration, formatNumber } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
@@ -42,14 +44,22 @@
       .catch((e) => (error = describeError(e)));
   });
 
+  // Listen first, so the resumed queue (spec 5.6) reaches the player bar.
   $effect(() => {
-    listenToPlayer();
+    listenToPlayer()
+      .then(restoreQueue)
+      .catch((e) => (error = describeError(e)));
   });
 
-  async function play(song: SongSummary) {
+  // Spec 5.1: the queue becomes the whole list, starting at the clicked song.
+  async function play(index: number) {
     error = null;
     try {
-      await playSong(song.id);
+      await playContext(
+        songs.map((s) => s.id),
+        index,
+        m.songs_recent_title(),
+      );
     } catch (e) {
       error = describeError(e);
     }
@@ -124,9 +134,9 @@
       <p class="muted">{m.songs_empty()}</p>
     {:else}
       <ol>
-        {#each songs as song (song.id)}
+        {#each songs as song, index (song.id)}
           <li>
-            <button class:current={player.track?.id === song.id} onclick={() => play(song)}>
+            <button class:current={player.track?.id === song.id} onclick={() => play(index)}>
               <span class="song-title">{song.title}</span>
               <span class="muted">{song.artist ?? ""}</span>
               <span class="muted duration">{formatDuration(song.duration)}</span>
@@ -136,6 +146,8 @@
       </ol>
     {/if}
   </section>
+
+  <QueueList />
 </div>
 
 <PlayerBar />

@@ -136,6 +136,36 @@ pub struct ScanStatus {
     pub last_scan: Option<String>,
 }
 
+/// `getPlayQueue`: the queue another client (or this one) saved on the server.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayQueue {
+    /// Songs in playback order. Only the IDs are used.
+    #[serde(default)]
+    pub entry: Vec<PlayQueueEntry>,
+    /// ID of the current song.
+    pub current: Option<String>,
+    /// Milliseconds into the current song.
+    pub position: Option<i64>,
+    /// When it was saved (ISO 8601, server clock).
+    pub changed: Option<String>,
+    /// Client name (`c` parameter) of the app that saved it.
+    pub changed_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct PlayQueueEntry {
+    pub id: String,
+}
+
+/// One item of `getOpenSubsonicExtensions`.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Extension {
+    pub name: String,
+    #[serde(default)]
+    pub versions: Vec<i64>,
+}
+
 /// Artists, albums and songs from `search3` or `getStarred2`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LibraryItems {

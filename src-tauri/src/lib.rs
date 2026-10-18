@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
-use player::Player;
-use state::{AppState, PlayerSlot};
+use playback::Playback;
+use state::{AppState, PlaybackSlot};
 
 mod commands;
 mod db;
+mod playback;
 mod player;
 mod session;
 mod state;
@@ -18,10 +19,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(AppState::default()))
         .setup(|app| {
-            let handle = app.handle().clone();
-            let player = Player::new(&[], move |event| commands::emit_player_event(&handle, event))
-                .map_err(|e| e.to_string());
-            app.manage(PlayerSlot(player));
+            let playback = Playback::start(app.handle().clone()).map_err(|e| e.to_string());
+            app.manage(PlaybackSlot(playback));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -32,12 +31,27 @@ pub fn run() {
             commands::get_library_status,
             commands::sync_library,
             commands::list_songs,
-            commands::play_song,
+            commands::play_context,
+            commands::restore_queue,
+            commands::next,
+            commands::previous,
+            commands::play_queue_index,
+            commands::set_shuffle,
+            commands::cycle_repeat,
+            commands::get_queue,
             commands::toggle_pause,
             commands::seek,
             commands::set_volume,
             commands::get_player_state,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Spec 5.6: save the queue one last time when the app closes.
+            if let RunEvent::Exit = event
+                && let Ok(playback) = &app.state::<PlaybackSlot>().0
+            {
+                playback.save_now();
+            }
+        });
 }
