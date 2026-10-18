@@ -27,6 +27,7 @@ rand = "0.10.3"
 thiserror = "2.0.21"
 keyring = "4.2.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+libmpv2 = { version = "6.0.0", default-features = false }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

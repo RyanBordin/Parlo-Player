@@ -4,6 +4,7 @@
 //! - Password: the OS credential store (Windows Credential Manager, Secret
 //!   Service on Linux). It is never written to disk by the app.
 
+use std::fmt;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -21,6 +22,23 @@ pub struct SavedSession {
     pub username: String,
 }
 
+/// A saved login with its password. Stays in the backend, never sent to the UI.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StoredLogin {
+    pub session: SavedSession,
+    pub password: String,
+}
+
+// Hand-written so the password never ends up in logs.
+impl fmt::Debug for StoredLogin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StoredLogin")
+            .field("session", &self.session)
+            .field("password", &"<hidden>")
+            .finish()
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SessionError {
     #[error("config file error: {0}")]
@@ -35,13 +53,13 @@ pub enum SessionError {
 
 /// Returns the saved session, or `None` if there is no config file or its
 /// password is missing from the credential store.
-pub fn load(config_dir: &Path) -> Result<Option<SavedSession>, SessionError> {
+pub fn load(config_dir: &Path) -> Result<Option<StoredLogin>, SessionError> {
     let Some(session) = read_config(config_dir)? else {
         return Ok(None);
     };
 
     match keyring_entry(&session)?.get_password() {
-        Ok(_) => Ok(Some(session)),
+        Ok(password) => Ok(Some(StoredLogin { session, password })),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(e.into()),
     }
@@ -172,7 +190,10 @@ mod tests {
         };
 
         save(&dir, &session, "not-a-real-password").unwrap();
-        assert_eq!(load(&dir).unwrap(), Some(session.clone()));
+        let stored = load(&dir).unwrap().expect("saved login");
+        assert_eq!(stored.session, session);
+        assert_eq!(stored.password, "not-a-real-password");
+        assert!(!format!("{stored:?}").contains("not-a-real-password"));
 
         clear(&dir).unwrap();
         assert_eq!(load(&dir).unwrap(), None);

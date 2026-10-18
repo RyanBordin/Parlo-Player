@@ -34,6 +34,14 @@ export function describeError(error: unknown): ErrorMessage {
       return { message: m.error_api({ code: error.code, message: error.message }) };
     case "storage":
       return { message: m.error_storage(), detail: error.detail };
+    case "notLoggedIn":
+      return { message: m.error_not_logged_in() };
+    case "emptyLibrary":
+      return { message: m.error_empty_library() };
+    case "songNotFound":
+      return { message: m.error_song_not_found() };
+    case "playback":
+      return { message: m.error_playback(), detail: error.detail };
   }
 }
 

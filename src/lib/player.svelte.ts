@@ -1,0 +1,57 @@
+// Reactive player state shared by every screen, fed by the backend events.
+import { listen } from "@tauri-apps/api/event";
+import {
+  getPlayerState,
+  PLAYER_ERROR_EVENT,
+  PLAYER_POSITION_EVENT,
+  PLAYER_STATE_EVENT,
+  type PlayerError,
+  type PlayerPosition,
+  type PlayerState,
+  type Track,
+} from "#lib/api.ts";
+
+export const player = $state<{
+  status: PlayerState["status"];
+  track: Track | null;
+  volume: number;
+  /** Seconds. */
+  position: number;
+  /** Seconds; from mpv once the song loads, from the library before that. */
+  duration: number | null;
+  error: PlayerError | null;
+}>({ status: "idle", track: null, volume: 100, position: 0, duration: null, error: null });
+
+let listening: Promise<void> | null = null;
+
+/** Subscribes to the player events once, then reads the current state. */
+export function listenToPlayer(): Promise<void> {
+  listening ??= (async () => {
+    await listen<PlayerState>(PLAYER_STATE_EVENT, (event) => applyState(event.payload));
+    await listen<PlayerPosition>(PLAYER_POSITION_EVENT, (event) => {
+      player.position = event.payload.position;
+      player.duration = event.payload.duration ?? player.duration;
+    });
+    await listen<PlayerError>(PLAYER_ERROR_EVENT, (event) => {
+      player.error = event.payload;
+    });
+    try {
+      applyState(await getPlayerState());
+    } catch {
+      // Player unavailable: commands will report the error when used.
+    }
+  })();
+  return listening;
+}
+
+function applyState(state: PlayerState) {
+  const newTrack = state.track?.id !== player.track?.id;
+  player.status = state.status;
+  player.volume = state.volume;
+  player.track = state.track;
+  if (newTrack) {
+    player.position = 0;
+    player.duration = state.track?.duration ?? null;
+  }
+  if (state.status === "loading") player.error = null;
+}

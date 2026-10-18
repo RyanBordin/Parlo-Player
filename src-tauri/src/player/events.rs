@@ -1,0 +1,172 @@
+//! Player event types and pure helpers (no mpv needed, so they are unit tested).
+
+use std::time::{Duration, Instant};
+
+use serde::Serialize;
+
+/// Song being played, with what the UI shows.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Track {
+    pub id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    /// Seconds, from the library cache (mpv reports the exact value later).
+    pub duration: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackStatus {
+    Idle,
+    Loading,
+    Playing,
+    Paused,
+}
+
+/// Payload of `player-state`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerState {
+    pub status: PlaybackStatus,
+    pub track: Option<Track>,
+    /// 0–100.
+    pub volume: f64,
+}
+
+/// Payload of `player-position`. Seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Position {
+    pub position: f64,
+    pub duration: Option<f64>,
+}
+
+/// Payload of `player-ended`: the song played to its end.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ended {
+    pub song_id: String,
+}
+
+/// Payload of `player-error`. `detail` comes from mpv's error code and never
+/// contains the stream URL.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackError {
+    pub song_id: Option<String>,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlayerEvent {
+    State(PlayerState),
+    Position(Position),
+    Ended(Ended),
+    Error(PlaybackError),
+}
+
+impl PlayerEvent {
+    /// Tauri event name.
+    pub fn name(&self) -> &'static str {
+        match self {
+            PlayerEvent::State(_) => "player-state",
+            PlayerEvent::Position(_) => "player-position",
+            PlayerEvent::Ended(_) => "player-ended",
+            PlayerEvent::Error(_) => "player-error",
+        }
+    }
+}
+
+/// Limits `player-position` events: mpv reports the position many times per
+/// second, the UI only needs a few.
+#[derive(Debug)]
+pub(super) struct PositionThrottle {
+    interval: Duration,
+    last: Option<Instant>,
+}
+
+impl PositionThrottle {
+    pub(super) fn new(interval: Duration) -> Self {
+        Self { interval, last: None }
+    }
+
+    pub(super) fn should_emit(&mut self, now: Instant) -> bool {
+        let due = self.last.is_none_or(|last| now.duration_since(last) >= self.interval);
+        if due {
+            self.last = Some(now);
+        }
+        due
+    }
+
+    /// Lets the next position through right away (new song, after a seek).
+    pub(super) fn reset(&mut self) {
+        self.last = None;
+    }
+}
+
+/// Volume accepted by the player: 0–100.
+pub(super) fn clamp_volume(volume: f64) -> f64 {
+    if volume.is_nan() { 100.0 } else { volume.clamp(0.0, 100.0) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn throttle_lets_through_a_few_positions_per_second() {
+        let start = Instant::now();
+        let mut throttle = PositionThrottle::new(Duration::from_millis(250));
+        assert!(throttle.should_emit(start));
+        assert!(!throttle.should_emit(start + Duration::from_millis(100)));
+        assert!(throttle.should_emit(start + Duration::from_millis(260)));
+    }
+
+    #[test]
+    fn throttle_reset_lets_the_next_position_through() {
+        let start = Instant::now();
+        let mut throttle = PositionThrottle::new(Duration::from_millis(250));
+        assert!(throttle.should_emit(start));
+        throttle.reset();
+        assert!(throttle.should_emit(start + Duration::from_millis(10)));
+    }
+
+    #[test]
+    fn volume_is_clamped() {
+        assert_eq!(clamp_volume(150.0), 100.0);
+        assert_eq!(clamp_volume(-5.0), 0.0);
+        assert_eq!(clamp_volume(42.5), 42.5);
+        assert_eq!(clamp_volume(f64::NAN), 100.0);
+    }
+
+    #[test]
+    fn events_serialize_for_the_ui() {
+        let state = PlayerState {
+            status: PlaybackStatus::Playing,
+            track: Some(Track {
+                id: "s1".into(),
+                title: "Song".into(),
+                artist: Some("Artist".into()),
+                album: None,
+                duration: Some(215.0),
+            }),
+            volume: 80.0,
+        };
+        assert_eq!(
+            serde_json::to_value(&state).unwrap(),
+            json!({
+                "status": "playing",
+                "track": { "id": "s1", "title": "Song", "artist": "Artist", "album": null, "duration": 215.0 },
+                "volume": 80.0
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Ended { song_id: "s1".into() }).unwrap(),
+            json!({ "songId": "s1" })
+        );
+        assert_eq!(PlayerEvent::Position(Position { position: 1.0, duration: None }).name(), "player-position");
+    }
+}

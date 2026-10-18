@@ -7,6 +7,10 @@ pub enum SubsonicError {
     #[error("connection error: {0}")]
     Http(#[from] reqwest::Error),
 
+    /// The server URL cannot be turned into a request URL.
+    #[error("invalid URL: {0}")]
+    InvalidUrl(String),
+
     /// The server answered, but not with a valid `subsonic-response`
     /// (e.g. the URL points to some other website).
     #[error("invalid server response: {0}")]

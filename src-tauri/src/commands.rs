@@ -1,16 +1,27 @@
 //! Tauri commands exposed to the UI.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::db::library::{self, LibraryStats, SongSummary};
+use crate::db::{self, DbError};
+use crate::player::{Player, PlayerError, PlayerEvent, PlayerState, Track};
 use crate::session::{self, SavedSession, SessionError};
+use crate::state::{ActiveLibrary, AppState, PlayerSlot};
 use crate::subsonic::{ServerInfo, SubsonicClient, SubsonicError};
+use crate::sync::{self, SyncError, SyncProgress};
+
+/// Event with a `SyncProgress` payload, sent while a sync runs.
+const SYNC_PROGRESS_EVENT: &str = "sync-progress";
+/// Event with a `SyncFinished` payload, sent once when a sync ends.
+const SYNC_FINISHED_EVENT: &str = "sync-finished";
 
 /// Error sent to the UI. The UI picks the translated message from `kind`,
 /// e.g. `{ "kind": "api", "code": 40, "message": "Wrong username or password" }`.
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CommandError {
     InvalidUrl,
@@ -20,6 +31,16 @@ pub enum CommandError {
     InvalidResponse,
     Api { code: i32, message: String },
     Storage { detail: String },
+    NotLoggedIn,
+    EmptyLibrary { reported: i64 },
+    SongNotFound,
+    Playback { detail: String },
+}
+
+impl From<PlayerError> for CommandError {
+    fn from(error: PlayerError) -> Self {
+        Self::Playback { detail: error.to_string() }
+    }
 }
 
 impl From<SubsonicError> for CommandError {
@@ -32,6 +53,7 @@ impl From<SubsonicError> for CommandError {
                 None => Self::Network { detail: e.to_string() },
             },
             SubsonicError::Http(e) => Self::Network { detail: e.to_string() },
+            SubsonicError::InvalidUrl(_) => Self::InvalidUrl,
             SubsonicError::InvalidResponse(_) => Self::InvalidResponse,
             SubsonicError::Api { code, message } => Self::Api { code, message },
         }
@@ -42,6 +64,40 @@ impl From<SessionError> for CommandError {
     fn from(error: SessionError) -> Self {
         Self::Storage { detail: error.to_string() }
     }
+}
+
+impl From<DbError> for CommandError {
+    fn from(error: DbError) -> Self {
+        Self::Storage { detail: error.to_string() }
+    }
+}
+
+impl From<SyncError> for CommandError {
+    fn from(error: SyncError) -> Self {
+        match error {
+            SyncError::Server(e) => e.into(),
+            SyncError::Db(e) => e.into(),
+            SyncError::EmptyLibrary(reported) => Self::EmptyLibrary { reported },
+            SyncError::PagingNotSupported => Self::InvalidResponse,
+            SyncError::Task(detail) => Self::Storage { detail },
+        }
+    }
+}
+
+/// Library counts plus whether a sync is running right now.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryStatus {
+    #[serde(flatten)]
+    pub stats: LibraryStats,
+    pub syncing: bool,
+}
+
+/// Payload of the `sync-finished` event. `error` is absent on success.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncFinished {
+    error: Option<CommandError>,
 }
 
 /// Pings the server with the given credentials. Nothing is stored.
@@ -55,17 +111,33 @@ pub async fn test_connection(
     Ok(client.ping().await?)
 }
 
-/// Returns the saved login, if any. The password never leaves the backend.
+/// Returns the saved login, if any, and makes its library active.
+/// The password never leaves the backend.
 #[tauri::command]
-pub async fn get_session(app: AppHandle) -> Result<Option<SavedSession>, CommandError> {
+pub async fn get_session(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Option<SavedSession>, CommandError> {
     let dir = config_dir(&app)?;
-    run_blocking(move || session::load(&dir)).await
+    let Some(stored) = run_blocking(move || session::load(&dir)).await? else {
+        state.set_active(None);
+        return Ok(None);
+    };
+
+    let client = SubsonicClient::new(
+        stored.session.server_url.clone(),
+        stored.session.username.clone(),
+        stored.password,
+    )?;
+    state.set_active(Some(active_library(&app, client, &stored.session)?));
+    Ok(Some(stored.session))
 }
 
-/// Checks the credentials again, then saves them.
+/// Checks the credentials again, saves them and makes the library active.
 #[tauri::command]
 pub async fn login(
     app: AppHandle,
+    state: State<'_, Arc<AppState>>,
     url: String,
     user: String,
     password: String,
@@ -80,14 +152,154 @@ pub async fn login(
     let dir = config_dir(&app)?;
     let to_save = saved.clone();
     run_blocking(move || session::save(&dir, &to_save, &password)).await?;
+
+    state.set_active(Some(active_library(&app, client, &saved)?));
     Ok(saved)
 }
 
-/// Deletes the saved password and config file.
+/// Deletes the saved password and config file. The library database is kept,
+/// so the play history is not lost (spec 12.4).
 #[tauri::command]
-pub async fn logout(app: AppHandle) -> Result<(), CommandError> {
+pub async fn logout(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    player: State<'_, PlayerSlot>,
+) -> Result<(), CommandError> {
     let dir = config_dir(&app)?;
-    run_blocking(move || session::clear(&dir)).await
+    run_blocking(move || session::clear(&dir)).await?;
+    state.set_active(None);
+    // The music would keep streaming with the signed-out credentials.
+    if let Ok(player) = &player.0 {
+        player.stop()?;
+    }
+    Ok(())
+}
+
+/// Counts and sync dates of the active library.
+#[tauri::command]
+pub async fn get_library_status(
+    state: State<'_, Arc<AppState>>,
+) -> Result<LibraryStatus, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let stats = run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        library::stats(&conn)
+    })
+    .await?;
+    Ok(LibraryStatus { stats, syncing: state.is_syncing() })
+}
+
+/// Starts a sync in the background and returns right away: `false` if one is
+/// already running. With `force_full`, the full sync runs regardless of the
+/// rules ("Sync now"). Progress comes as `sync-progress` events, the end as
+/// one `sync-finished` event.
+#[tauri::command]
+pub fn sync_library(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    force_full: bool,
+) -> Result<bool, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let Some(guard) = state.try_start_sync() else {
+        return Ok(false);
+    };
+
+    tauri::async_runtime::spawn(async move {
+        let emit_progress = |progress: SyncProgress| {
+            let _ = app.emit(SYNC_PROGRESS_EVENT, progress);
+        };
+        let result = sync::run(&active.client, active.db_path, force_full, &emit_progress).await;
+
+        // Clear the flag first, so the UI sees `syncing: false` when it reacts.
+        drop(guard);
+        let error = result.err().map(CommandError::from);
+        let _ = app.emit(SYNC_FINISHED_EVENT, SyncFinished { error });
+    });
+    Ok(true)
+}
+
+/// Songs from the local cache, most recently added first (temporary list).
+#[tauri::command]
+pub async fn list_songs(
+    state: State<'_, Arc<AppState>>,
+    limit: u32,
+) -> Result<Vec<SongSummary>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        library::recent_songs(&conn, limit)
+    })
+    .await
+}
+
+/// Streams a song from the server, replacing whatever is playing.
+#[tauri::command]
+pub async fn play_song(
+    state: State<'_, Arc<AppState>>,
+    player: State<'_, PlayerSlot>,
+    id: String,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let player = player_of(&player)?;
+
+    let db_path = active.db_path.clone();
+    let song = run_blocking(move || {
+        let conn = db::open(&db_path)?;
+        library::song_summary(&conn, &id)
+    })
+    .await?
+    .ok_or(CommandError::SongNotFound)?;
+
+    let url = active.client.stream_url(&song.id)?;
+    player.play(track_of(song), &url)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn toggle_pause(player: State<'_, PlayerSlot>) -> Result<(), CommandError> {
+    Ok(player_of(&player)?.toggle_pause()?)
+}
+
+#[tauri::command]
+pub fn seek(player: State<'_, PlayerSlot>, seconds: f64) -> Result<(), CommandError> {
+    Ok(player_of(&player)?.seek(seconds)?)
+}
+
+/// Sets the volume (0–100) and returns the value applied.
+#[tauri::command]
+pub fn set_volume(player: State<'_, PlayerSlot>, volume: f64) -> Result<f64, CommandError> {
+    Ok(player_of(&player)?.set_volume(volume)?)
+}
+
+/// Current state, for a screen that opens while something is playing.
+#[tauri::command]
+pub fn get_player_state(player: State<'_, PlayerSlot>) -> Result<PlayerState, CommandError> {
+    Ok(player_of(&player)?.state())
+}
+
+/// Sends a player event to the UI under its own Tauri event name.
+pub fn emit_player_event(app: &AppHandle, event: PlayerEvent) {
+    let name = event.name();
+    let _ = match event {
+        PlayerEvent::State(payload) => app.emit(name, payload),
+        PlayerEvent::Position(payload) => app.emit(name, payload),
+        PlayerEvent::Ended(payload) => app.emit(name, payload),
+        PlayerEvent::Error(payload) => app.emit(name, payload),
+    };
+}
+
+fn player_of<'a>(slot: &'a State<'_, PlayerSlot>) -> Result<&'a Player, CommandError> {
+    slot.0.as_ref().map_err(|detail| CommandError::Playback { detail: detail.clone() })
+}
+
+fn track_of(song: SongSummary) -> Track {
+    Track {
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        duration: song.duration.map(|d| d as f64),
+    }
 }
 
 fn config_dir(app: &AppHandle) -> Result<PathBuf, CommandError> {
@@ -96,16 +308,35 @@ fn config_dir(app: &AppHandle) -> Result<PathBuf, CommandError> {
     })
 }
 
-// Credential store calls block the thread, so they run outside the async runtime.
-async fn run_blocking<T, F>(task: F) -> Result<T, CommandError>
+/// `{local data dir}/libraries/{user@server-hash}.db`. Local (not roaming) on
+/// Windows, since the cache can get large.
+fn active_library(
+    app: &AppHandle,
+    client: SubsonicClient,
+    session: &SavedSession,
+) -> Result<ActiveLibrary, CommandError> {
+    let dir = app.path().app_local_data_dir().map_err(|e| CommandError::Storage {
+        detail: e.to_string(),
+    })?;
+    let file = db::library_file_name(&session.server_url, &session.username);
+    Ok(ActiveLibrary {
+        client: Arc::new(client),
+        db_path: dir.join("libraries").join(file),
+    })
+}
+
+// Credential store and database calls block the thread, so they run outside
+// the async runtime.
+async fn run_blocking<T, E, F>(task: F) -> Result<T, CommandError>
 where
-    F: FnOnce() -> Result<T, SessionError> + Send + 'static,
+    F: FnOnce() -> Result<T, E> + Send + 'static,
     T: Send + 'static,
+    E: Into<CommandError> + Send + 'static,
 {
     tauri::async_runtime::spawn_blocking(task)
         .await
         .map_err(|e| CommandError::Storage { detail: e.to_string() })?
-        .map_err(CommandError::from)
+        .map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -142,5 +373,14 @@ mod tests {
     fn invalid_response_maps_to_its_own_kind() {
         let error = CommandError::from(SubsonicError::InvalidResponse("html".into()));
         assert_eq!(error, CommandError::InvalidResponse);
+    }
+
+    #[test]
+    fn empty_library_error_reaches_the_ui() {
+        let error = CommandError::from(SyncError::EmptyLibrary(5120));
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            json!({ "kind": "emptyLibrary", "reported": 5120 })
+        );
     }
 }

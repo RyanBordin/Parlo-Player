@@ -23,7 +23,37 @@ export type CommandError =
   | { kind: "network"; detail: string }
   | { kind: "invalidResponse" }
   | { kind: "api"; code: number; message: string }
-  | { kind: "storage"; detail: string };
+  | { kind: "storage"; detail: string }
+  | { kind: "notLoggedIn" }
+  | { kind: "emptyLibrary"; reported: number }
+  | { kind: "songNotFound" }
+  | { kind: "playback"; detail: string };
+
+/** Mirrors `LibraryStatus` in src-tauri/src/commands.rs. Dates are Unix seconds. */
+export type LibraryStatus = {
+  artists: number;
+  albums: number;
+  songs: number;
+  lastFullSyncAt: number | null;
+  lastLightSyncAt: number | null;
+  syncing: boolean;
+};
+
+/** Mirrors `SyncProgress` in src-tauri/src/sync/mod.rs (`sync-progress` event). */
+export type SyncProgress = {
+  phase: "artists" | "albums" | "songs" | "saving" | "starred" | "playlists";
+  done: number;
+  total: number | null;
+  full: boolean;
+};
+
+/** Payload of the `sync-finished` event. */
+export type SyncFinished = {
+  error: CommandError | null;
+};
+
+export const SYNC_PROGRESS_EVENT = "sync-progress";
+export const SYNC_FINISHED_EVENT = "sync-finished";
 
 export type Credentials = {
   url: string;
@@ -45,4 +75,77 @@ export function login(credentials: Credentials): Promise<SavedSession> {
 
 export function logout(): Promise<void> {
   return invoke("logout");
+}
+
+export function getLibraryStatus(): Promise<LibraryStatus> {
+  return invoke("get_library_status");
+}
+
+/**
+ * Starts a sync in the background. Resolves to `false` if one is already
+ * running. `forceFull` skips the rules and always runs a full sync.
+ */
+export function syncLibrary(forceFull: boolean): Promise<boolean> {
+  return invoke("sync_library", { forceFull });
+}
+
+/** Mirrors `SongSummary` in src-tauri/src/db/library.rs. Duration in seconds. */
+export type SongSummary = {
+  id: string;
+  title: string;
+  artist: string | null;
+  album: string | null;
+  duration: number | null;
+};
+
+/** Mirrors `Track` in src-tauri/src/player/events.rs. */
+export type Track = SongSummary;
+
+/** Payload of `player-state`. Volume 0–100. */
+export type PlayerState = {
+  status: "idle" | "loading" | "playing" | "paused";
+  track: Track | null;
+  volume: number;
+};
+
+/** Payload of `player-position`. Seconds. */
+export type PlayerPosition = {
+  position: number;
+  duration: number | null;
+};
+
+/** Payload of `player-ended`. */
+export type PlayerEnded = { songId: string };
+
+/** Payload of `player-error`. */
+export type PlayerError = { songId: string | null; detail: string };
+
+export const PLAYER_STATE_EVENT = "player-state";
+export const PLAYER_POSITION_EVENT = "player-position";
+export const PLAYER_ENDED_EVENT = "player-ended";
+export const PLAYER_ERROR_EVENT = "player-error";
+
+export function listSongs(limit: number): Promise<SongSummary[]> {
+  return invoke("list_songs", { limit });
+}
+
+export function playSong(id: string): Promise<void> {
+  return invoke("play_song", { id });
+}
+
+export function togglePause(): Promise<void> {
+  return invoke("toggle_pause");
+}
+
+export function seek(seconds: number): Promise<void> {
+  return invoke("seek", { seconds });
+}
+
+/** Resolves to the volume actually applied (0–100). */
+export function setVolume(volume: number): Promise<number> {
+  return invoke("set_volume", { volume });
+}
+
+export function getPlayerState(): Promise<PlayerState> {
+  return invoke("get_player_state");
 }

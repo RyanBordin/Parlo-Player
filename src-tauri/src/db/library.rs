@@ -10,7 +10,7 @@
 //! If the sync fails before step 3, the staging tables are dropped (TEMP tables
 //! also vanish when the connection closes) and the previous cache is intact.
 
-use rusqlite::{Connection, Statement, params};
+use rusqlite::{Connection, OptionalExtension, Statement, params};
 use serde::Serialize;
 
 use super::DbResult;
@@ -207,6 +207,45 @@ fn clear_unstarred<'a>(
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
+
+/// Song fields shown in lists and by the player.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongSummary {
+    pub id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    /// Seconds.
+    pub duration: Option<i64>,
+}
+
+const SONG_SUMMARY_COLUMNS: &str = "id, title, artist, album, duration";
+
+fn song_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SongSummary> {
+    Ok(SongSummary {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        artist: row.get(2)?,
+        album: row.get(3)?,
+        duration: row.get(4)?,
+    })
+}
+
+/// Most recently added songs first (default order of the Songs screen, spec 6.3).
+pub fn recent_songs(conn: &Connection, limit: u32) -> DbResult<Vec<SongSummary>> {
+    let sql = format!(
+        "SELECT {SONG_SUMMARY_COLUMNS} FROM songs ORDER BY created DESC, title LIMIT ?1"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let songs = stmt.query_map([limit], song_summary_from_row)?.collect::<Result<_, _>>()?;
+    Ok(songs)
+}
+
+pub fn song_summary(conn: &Connection, id: &str) -> DbResult<Option<SongSummary>> {
+    let sql = format!("SELECT {SONG_SUMMARY_COLUMNS} FROM songs WHERE id = ?1");
+    Ok(conn.query_row(&sql, [id], song_summary_from_row).optional()?)
+}
 
 pub fn stats(conn: &Connection) -> DbResult<LibraryStats> {
     let count = |table: &str| -> DbResult<i64> {
@@ -563,6 +602,39 @@ mod tests {
             .unwrap();
         assert_eq!(playlists, ["p2"]);
         assert_eq!(stats(&conn).unwrap().last_light_sync_at, Some(1600));
+    }
+
+    #[test]
+    fn recent_songs_come_newest_first_and_respect_the_limit() {
+        let mut conn = open_in_memory().unwrap();
+        let dated = |id: &str, created: &str| {
+            let mut s = song(id, "al1");
+            s.created = Some(created.into());
+            s.duration = Some(200);
+            s
+        };
+        full_sync(
+            &mut conn,
+            &[library(vec![
+                dated("old", "2024-01-01T00:00:00Z"),
+                dated("new", "2026-01-01T00:00:00Z"),
+                dated("mid", "2025-01-01T00:00:00Z"),
+            ])],
+            1000,
+        );
+
+        let ids: Vec<String> = recent_songs(&conn, 2).unwrap().into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, ["new", "mid"]);
+    }
+
+    #[test]
+    fn song_summary_finds_one_song() {
+        let mut conn = open_in_memory().unwrap();
+        full_sync(&mut conn, &[library(vec![song("s1", "al1")])], 1000);
+
+        let found = song_summary(&conn, "s1").unwrap().expect("song exists");
+        assert_eq!(found.title, "Song s1");
+        assert_eq!(song_summary(&conn, "missing").unwrap(), None);
     }
 
     #[test]

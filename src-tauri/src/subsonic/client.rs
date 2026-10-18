@@ -6,6 +6,7 @@ use serde::Serialize;
 use super::auth::{generate_salt, make_token};
 use super::error::SubsonicError;
 use super::response::{ResponseBody, parse_response};
+use super::secret_url::SecretUrl;
 use super::types::{
     LibraryItems, Playlist, RawLibraryItems, RawPlaylists, ScanStatus, with_raw_json,
 };
@@ -122,6 +123,17 @@ impl SubsonicClient {
         body.take::<RawLibraryItems>("starred2")?.try_into()
     }
 
+    /// URL of `GET /rest/stream` for a song, with a fresh salt. The server
+    /// sends the original file (no transcoding). Contains credentials.
+    pub fn stream_url(&self, song_id: &str) -> Result<SecretUrl, SubsonicError> {
+        let mut url = reqwest::Url::parse(&format!("{}/rest/stream", self.base_url))
+            .map_err(|e| SubsonicError::InvalidUrl(e.to_string()))?;
+        url.query_pairs_mut()
+            .append_pair("id", song_id)
+            .extend_pairs(self.auth_params(&generate_salt()));
+        Ok(SecretUrl::new(url))
+    }
+
     /// `GET /rest/getPlaylists` — all playlists visible to the user.
     pub async fn get_playlists(&self) -> Result<Vec<Playlist>, SubsonicError> {
         let mut body = self.get("getPlaylists", &[], LIBRARY_TIMEOUT).await?;
@@ -207,6 +219,29 @@ mod tests {
         assert_eq!(get("c"), Some("ParloPlayer"));
         assert_eq!(get("f"), Some("json"));
         assert_eq!(get("p"), None, "plain password must never be sent");
+    }
+
+    #[test]
+    fn stream_url_has_song_and_token_but_no_password() {
+        let url = client().stream_url("song-42").unwrap();
+        let full = reqwest::Url::parse(url.expose()).unwrap();
+        let pairs: Vec<(String, String)> = full.query_pairs().into_owned().collect();
+        let get = |key: &str| pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+
+        assert_eq!(full.path(), "/rest/stream");
+        assert_eq!(get("id"), Some("song-42"));
+        assert_eq!(get("u"), Some("alice"));
+        assert!(get("t").is_some() && get("s").is_some());
+        assert_eq!(get("p"), None, "plain password must never be sent");
+        assert!(!url.expose().contains("sesame"));
+        assert!(!url.to_string().contains(get("t").unwrap()), "Display must hide the token");
+    }
+
+    #[test]
+    fn each_stream_url_uses_a_new_salt() {
+        let a = client().stream_url("s1").unwrap();
+        let b = client().stream_url("s1").unwrap();
+        assert_ne!(a.expose(), b.expose());
     }
 
     #[test]
