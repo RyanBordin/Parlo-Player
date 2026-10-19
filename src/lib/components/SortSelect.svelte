@@ -1,16 +1,20 @@
 <script lang="ts" generics="T extends string">
-  // "Sort by" of the Albums and Songs pages (spec 6.4, 6.3), with the
-  // "Draw again" button while the order is random.
+  // "Sort by" of the Albums, Songs and Artists pages (spec 6.4, 6.3, 6.6),
+  // with the "Draw again" button while the order is random. Also the
+  // Artists type filter, with its own label.
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { m } from "#lib/paraglide/messages.js";
 
   let {
+    label = m.albums_sort_label(),
     value,
     options,
     onchange,
     otherLabel,
     onredraw,
   }: {
+    /** Text before the menu; "Sort by" by default. */
+    label?: string;
     /** The option chosen; `null` when the order comes from elsewhere. */
     value: T | null;
     options: { value: T; label: string }[];
@@ -23,7 +27,7 @@
 </script>
 
 <label class="sort">
-  <span>{m.albums_sort_label()}</span>
+  <span>{label}</span>
   <select value={value ?? ""} onchange={(e) => onchange(e.currentTarget.value as T)}>
     {#if value === null}
       <option value="" disabled>{otherLabel}</option>

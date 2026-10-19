@@ -271,5 +271,82 @@
   "songs_sort_title": "Title A–Z",
   "songs_sort_most_played": "Most played",
   "songs_sort_recently_played": "Recently played",
-  "songs_sort_by_column": "By column"
+  "songs_sort_by_column": "By column",
+  "card_type_artist": "Artist",
+  "favorites_recent": "Recent",
+  "favorites_see_all": "See all",
+  "favorites_empty": "No favorites yet. Tap the heart on the player bar, in song lists or on album pages to add one.",
+  "favorites_album_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} album",
+        "countPlural=other": "{countText} albums"
+      }
+    }
+  ],
+  "favorites_song_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} track",
+        "countPlural=other": "{countText} tracks"
+      }
+    }
+  ],
+  "favorites_artist_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} artist",
+        "countPlural=other": "{countText} artists"
+      }
+    }
+  ],
+  "artists_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} artist",
+        "countPlural=other": "{countText} artists"
+      }
+    }
+  ],
+  "artists_count_zero": "No artists",
+  "artists_filtered": "{shown} of {total} artists",
+  "artists_search": "Search artists",
+  "artists_sort_album_count": "Number of albums",
+  "artists_type_label": "Show",
+  "artists_type_album_artists": "Album artists",
+  "artists_type_all": "All artists",
+  "artists_empty": "No artists in the library yet.",
+  "artists_no_results": "No artists match “{query}”."
 }

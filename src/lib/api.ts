@@ -90,6 +90,11 @@ export function syncLibrary(forceFull: boolean): Promise<boolean> {
   return invoke("sync_library", { forceFull });
 }
 
+/** Starts only the light sync (starred items, playlists). `false` if a sync is running. */
+export function syncLight(): Promise<boolean> {
+  return invoke("sync_light");
+}
+
 /** Mirrors `SongSummary` in src-tauri/src/db/library.rs. Duration in seconds. */
 export type SongSummary = {
   id: string;
@@ -173,6 +178,21 @@ export type TrackListSong = {
   playCount: number | null;
 };
 
+/** A card of the Favorites "Recent" row. Mirrors `FavoriteItem` in src-tauri/src/db/favorites.rs. */
+export type FavoriteItem =
+  | ({ kind: "album" } & AlbumCard)
+  | ({ kind: "artist" } & ArtistCard)
+  | ({ kind: "song" } & TrackListSong);
+
+/** The Favorites page (spec 6.2): every list is last starred first. */
+export type Favorites = {
+  /** The last 20 items starred, of any kind. */
+  recent: FavoriteItem[];
+  albums: AlbumCard[];
+  artists: ArtistCard[];
+  songs: TrackListSong[];
+};
+
 /** Columns the Songs page sorts by. Mirrors `SongSortKey` in src-tauri/src/db/songs.rs. */
 export type SongSortKey =
   | "added"
@@ -241,6 +261,19 @@ export type AlbumListItem = AlbumCard & {
   playCount: number | null;
   /** Last play (ISO 8601). */
   played: string | null;
+};
+
+/** An artist of the Artists page. Mirrors `ArtistListItem` in src-tauri/src/db/artists.rs. */
+export type ArtistListItem = ArtistCard & {
+  sortName: string | null;
+  starred: boolean;
+  albumCount: number;
+  /** Plays of the artist's songs. */
+  playCount: number;
+  /** When the artist's latest song was added (ISO 8601). */
+  added: string | null;
+  /** Album artist (the default filter); otherwise only featured on songs. */
+  albumArtist: boolean;
 };
 
 /** The buttons of the Albums page (spec 6.4). */
@@ -340,6 +373,11 @@ export function getHomeSection(section: HomeSection): Promise<SectionItems> {
   return invoke("get_home_section", { section });
 }
 
+/** Everything starred, from the local cache. */
+export function getFavorites(): Promise<Favorites> {
+  return invoke("get_favorites");
+}
+
 /** An album and its songs from the local cache; `null` if not in the library. */
 export function getAlbumPage(albumId: string): Promise<AlbumPage | null> {
   return invoke("get_album_page", { albumId });
@@ -388,6 +426,16 @@ export function listAlbums(): Promise<AlbumListItem[]> {
 /** Plays the albums shown: in order, in a random album order, or as a mix. */
 export function playAlbums(albumIds: string[], mode: AlbumsPlayMode, contextLabel: string): Promise<void> {
   return invoke("play_albums", { albumIds, mode, contextLabel });
+}
+
+/** Album artists and featured artists, by name. */
+export function listArtists(): Promise<ArtistListItem[]> {
+  return invoke("list_artists");
+}
+
+/** At most 100 songs of these artists, in a random order (spec 6.6). */
+export function playArtistsMix(artistIds: string[], contextLabel: string): Promise<void> {
+  return invoke("play_artists_mix", { artistIds, contextLabel });
 }
 
 /** Plays a whole album in disc and track order. */

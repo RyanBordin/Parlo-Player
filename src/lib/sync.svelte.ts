@@ -4,6 +4,7 @@ import {
   SYNC_FINISHED_EVENT,
   SYNC_PROGRESS_EVENT,
   syncLibrary,
+  syncLight,
   type CommandError,
   type SyncFinished,
   type SyncProgress,
@@ -47,6 +48,22 @@ export async function startSync(forceFull: boolean): Promise<void> {
   syncState.error = null;
   try {
     if (await syncLibrary(forceFull)) {
+      syncState.running = true;
+    }
+  } catch (error) {
+    syncState.error = error as CommandError;
+  }
+}
+
+/**
+ * Starts only the light sync (starred items and playlists), e.g. on opening
+ * Favorites. Nothing happens if a sync is running: it brings them too.
+ */
+export async function startLightSync(): Promise<void> {
+  await listenToSyncEvents();
+  try {
+    if (await syncLight()) {
+      syncState.error = null;
       syncState.running = true;
     }
   } catch (error) {

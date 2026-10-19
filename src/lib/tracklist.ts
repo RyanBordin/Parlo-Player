@@ -3,7 +3,7 @@
 import type { TrackListSong } from "#lib/api.ts";
 import { getLocale } from "#lib/paraglide/runtime.js";
 
-export type SortKey = "title" | "album" | "duration";
+export type SortKey = "title" | "artist" | "album" | "duration";
 export type SortDirection = "asc" | "desc";
 /** `null`: the page's own order (track number, or the playlist's order). */
 export type Sort = { key: SortKey; direction: SortDirection } | null;
@@ -56,8 +56,7 @@ export function sortEntries(entries: Entry[], sort: Sort): Entry[] {
   if (!sort) return entries;
   const collator = new Intl.Collator(getLocale(), { sensitivity: "base", numeric: true });
   const sign = sort.direction === "asc" ? 1 : -1;
-  const value = (song: TrackListSong) =>
-    sort.key === "duration" ? (song.duration ?? 0) : ((sort.key === "title" ? song.title : song.album) ?? "");
+  const value = (song: TrackListSong) => (sort.key === "duration" ? (song.duration ?? 0) : (song[sort.key] ?? ""));
   return [...entries].sort((a, b) => {
     const x = value(a.song);
     const y = value(b.song);

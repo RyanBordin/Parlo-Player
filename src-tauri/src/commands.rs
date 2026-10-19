@@ -6,6 +6,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::db::favorites::{self, Favorites};
 use crate::db::library::{self, LibraryStats, PlaylistSummary, SongSummary};
 use crate::db::related::SongContext;
 use crate::db::tracks::{self, AlbumPage, PlaylistHeader, PlaylistPage, TrackListSong};
@@ -13,6 +14,7 @@ use crate::db::{self, DbError};
 use crate::home::{self, HomeActivity, HomeLibrary, HomeSection, ROW_SIZE, SectionItems};
 use crate::now_playing::{self, Lyrics, Related};
 use crate::db::albums::{self, AlbumListItem};
+use crate::db::artists::{self, ArtistListItem};
 use crate::db::songs::{self, SongSort};
 use crate::playback::{AlbumsPlayMode, Playback, PlaybackError, QueueState};
 use crate::player::queue::RepeatMode;
@@ -233,6 +235,24 @@ pub fn sync_library(
     state: State<'_, Arc<AppState>>,
     force_full: bool,
 ) -> Result<bool, CommandError> {
+    start_sync(app, &state, SyncKind::Rules { force_full })
+}
+
+/// Starts only the light sync (starred items and playlists), like
+/// `sync_library`: `false` if a sync is already running (it brings them too).
+#[tauri::command]
+pub fn sync_light(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<bool, CommandError> {
+    start_sync(app, &state, SyncKind::Light)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SyncKind {
+    /// Full sync if due (or forced), then the light one.
+    Rules { force_full: bool },
+    Light,
+}
+
+fn start_sync(app: AppHandle, state: &Arc<AppState>, kind: SyncKind) -> Result<bool, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     // The test library has no server to sync with.
     if test_library::ENABLED {
@@ -246,7 +266,10 @@ pub fn sync_library(
         let emit_progress = |progress: SyncProgress| {
             let _ = app.emit(SYNC_PROGRESS_EVENT, progress);
         };
-        let result = sync::run(&active.client, active.db_path, force_full, &emit_progress).await;
+        let result = match kind {
+            SyncKind::Rules { force_full } => sync::run(&active.client, active.db_path, force_full, &emit_progress).await,
+            SyncKind::Light => sync::run_light(&active.client, active.db_path, &emit_progress).await,
+        };
 
         // Clear the flag first, so the UI sees `syncing: false` when it reacts.
         drop(guard);
@@ -284,6 +307,13 @@ pub async fn get_home_activity(state: State<'_, Arc<AppState>>) -> Result<HomeAc
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     let frequent = active.client.get_album_list2(AlbumListType::Frequent, ROW_SIZE as u32, 0).await.ok();
     run_blocking(move || home::activity(&db::open(&active.db_path)?, frequent)).await
+}
+
+/// Everything starred, from the local cache, for the Favorites page (spec 6.2).
+#[tauri::command]
+pub async fn get_favorites(state: State<'_, Arc<AppState>>) -> Result<Favorites, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || favorites::favorites(&db::open(&active.db_path)?)).await
 }
 
 /// Every item of a Home section, for its "See more" grid (spec 6.1).
@@ -535,6 +565,27 @@ pub async fn play_albums(
 ) -> Result<(), CommandError> {
     let playback = playback_of(&playback)?;
     tauri::async_runtime::spawn_blocking(move || playback.play_albums(&album_ids, mode, context_label))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
+/// Album artists and featured artists for the Artists page, by name (spec 6.6).
+#[tauri::command]
+pub async fn list_artists(state: State<'_, Arc<AppState>>) -> Result<Vec<ArtistListItem>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || artists::artist_list(&db::open(&active.db_path)?)).await
+}
+
+/// "Random mix" of the Artists page: at most 100 songs of the artists shown (spec 6.6).
+#[tauri::command]
+pub async fn play_artists_mix(
+    playback: State<'_, PlaybackSlot>,
+    artist_ids: Vec<String>,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let playback = playback_of(&playback)?;
+    tauri::async_runtime::spawn_blocking(move || playback.play_artists_mix(&artist_ids, context_label))
         .await
         .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
     Ok(())

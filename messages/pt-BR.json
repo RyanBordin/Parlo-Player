@@ -271,5 +271,82 @@
   "songs_sort_title": "Título A–Z",
   "songs_sort_most_played": "Mais tocadas",
   "songs_sort_recently_played": "Tocadas recentemente",
-  "songs_sort_by_column": "Pela coluna"
+  "songs_sort_by_column": "Pela coluna",
+  "card_type_artist": "Artista",
+  "favorites_recent": "Recentes",
+  "favorites_see_all": "Ver tudo",
+  "favorites_empty": "Você ainda não tem favoritos. Toque no coração na barra de reprodução, nas listas de músicas ou nas páginas de álbum para favoritar.",
+  "favorites_album_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} álbum",
+        "countPlural=other": "{countText} álbuns"
+      }
+    }
+  ],
+  "favorites_song_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} faixa",
+        "countPlural=other": "{countText} faixas"
+      }
+    }
+  ],
+  "favorites_artist_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} artista",
+        "countPlural=other": "{countText} artistas"
+      }
+    }
+  ],
+  "artists_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} artista",
+        "countPlural=other": "{countText} artistas"
+      }
+    }
+  ],
+  "artists_count_zero": "Nenhum artista",
+  "artists_filtered": "{shown} de {total} artistas",
+  "artists_search": "Buscar artistas",
+  "artists_sort_album_count": "Nº de álbuns",
+  "artists_type_label": "Mostrar",
+  "artists_type_album_artists": "Artistas de álbum",
+  "artists_type_all": "Todos os artistas",
+  "artists_empty": "Ainda não há artistas na biblioteca.",
+  "artists_no_results": "Nenhum artista encontrado para “{query}”."
 }

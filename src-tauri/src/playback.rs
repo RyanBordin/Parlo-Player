@@ -225,6 +225,14 @@ impl Playback {
         self.play_list(ids, 0, label, ShuffleMode::Off)
     }
 
+    /// "Random mix" of the Artists page (spec 6.6): at most `MIX_SIZE` songs
+    /// where the artists shown appear.
+    pub fn play_artists_mix(&self, artist_ids: &[String], label: String) -> Result<(), PlaybackError> {
+        let library = self.library()?;
+        let songs = read_db(&library.db_path, |conn| db::artists::songs_of_artists(conn, artist_ids))?;
+        self.play_mix(songs, label)
+    }
+
     /// The buttons of the Albums page (spec 6.4), on the albums shown, in the
     /// order shown. Shuffle turns off: the order built is the point.
     pub fn play_albums(&self, album_ids: &[String], mode: AlbumsPlayMode, label: String) -> Result<(), PlaybackError> {

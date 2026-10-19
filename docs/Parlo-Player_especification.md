@@ -328,6 +328,15 @@ Referência: página Favorites do Swing Music.
   4. **Artistas:** carrossel.
 * Clicar numa faixa toca o contexto "Favoritos" a partir dela.
 * Dados: `getStarred2`, ordenados pela data em que foram favoritados.
+* **Detalhes:**
+  * **Cabeçalho:** além do contador, botões **Tocar tudo** (todas as músicas favoritas, das mais recentes para as mais antigas) e **Aleatório** (mix de até 100 favoritas, Seção 9).
+  * **Recentes:** os 20 últimos itens favoritados. Clicar num álbum ou artista abre a página dele; numa faixa, toca o contexto "Favoritos" a partir dela.
+  * **Álbuns** e **Artistas:** carrosséis com todos os favoritos, do mais recente para o mais antigo, e botão **Ver mais** que abre a grade completa (mesmo padrão da Home).
+  * **Músicas:** a tabela mostra as **10** mais recentes; **Ver tudo** abre a lista completa com a tracklist virtualizada e as Ferramentas de lista.
+  * **Contexto da fila:** sempre a lista **completa** de músicas favoritas, não só as visíveis ("Tocando de: Favoritos").
+  * **Desfavoritar nesta página:** o item continua visível, com o coração vazio, até o usuário sair da página. Isso evita que a lista "pule" e permite desfazer com um clique.
+  * **Atualização:** ao abrir a página, o app roda a sincronização leve de favoritos (`getStarred2`), para mostrar o que foi favoritado em outros apps.
+  * **Vazio:** sem favoritos, uma mensagem curta explicando como favoritar (coração na Player Bar, nas listas e nas páginas).
 
 ### 6.3. Músicas
 
@@ -379,6 +388,12 @@ Referência: página Favorites do Swing Music.
 * **Grade de cards quadrados** (foto e nome). Sem foto no servidor, o card usa a capa do álbum mais recente do artista, nunca um ícone genérico.
 * **Cabeçalho:** título, contador e **Mix aleatório** (até 100 faixas dos artistas visíveis, salvável como playlist).
 * **Barra de ferramentas:** busca rápida, filtros (gênero, favorito, baixado), "Ordenar por" (nome A–Z padrão, mais tocados, adicionados recentemente, nº de álbuns) e filtro de tipo: **artistas de álbum** (padrão) ou **todos os artistas**.
+* **Detalhes:**
+  * **Escopo:** na v0.1, busca rápida, "Ordenar por", filtro de tipo e selo de favorito. Os filtros por gênero, favorito e baixado entram na v0.2 (mesmo padrão de Álbuns).
+  * **Todos os artistas** inclui quem só aparece em faixas (participações, "feat."), usando a lista de artistas de cada faixa (campo `artists` do OpenSubsonic) guardada no banco local.
+  * **Foto do artista:** a do servidor quando existir (`coverArt` do artista); senão, a capa do álbum mais recente.
+  * Grade virtualizada; volta da página do artista na mesma posição; busca, ordenação e tipo salvos entre sessões.
+  * Contexto do Mix aleatório na fila: "Artistas".
 
 ### 6.7. Página do Artista
 
@@ -393,6 +408,14 @@ Referência: página de artista do YouTube Music.
   3. **Aparece em:** álbuns de outros artistas em que ele participa.
   4. **Artistas parecidos:** carrossel, quando o servidor fornecer.
 * **Tocar** começa pelas Top músicas e segue com o restante das faixas.
+* **Detalhes:**
+  * **Lista de músicas do artista:** todas as faixas em que ele aparece, ordenadas por nº de reproduções (maior primeiro) e, no desempate, por álbum e nº da faixa. **Tocar** toca essa lista desde o início; Top músicas mostra as **5 primeiras**, com **Ver todas** abrindo a lista completa (tracklist com Ferramentas de lista). Clicar numa faixa toca essa lista a partir dela ("Tocando de: [Artista]"). Sem nenhuma reprodução, a ordem segue `getTopSongs` quando o servidor fornecer.
+  * **Banner sem foto:** capa do álbum mais recente, ampliada e desfocada (mesmo estilo do cabeçalho de álbum).
+  * **Biografia:** vem com HTML e links (ex.: Last.fm); é exibida como **texto limpo**, sem executar nem renderizar HTML, cortada em 3 linhas com **Mais** para expandir. Sem biografia, a linha não aparece.
+  * **Álbuns:** se o servidor informar o tipo de lançamento (`releaseTypes` do OpenSubsonic), divide em **Álbuns** e **Singles e EPs**; senão, uma seção só.
+  * **Aparece em:** álbuns de outros artistas que têm faixas dele (a partir do banco local).
+  * **Artistas parecidos:** só os que existem na biblioteca; clicar abre a página deles.
+  * **Dados:** faixas e álbuns vêm do banco local; `getArtistInfo2` é pedido ao abrir e guardado no banco por 7 dias. Seções sem conteúdo não aparecem.
 
 ### 6.8. Baixados `[v0.2]`
 
@@ -660,7 +683,5 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Página de álbum/playlist: separador de discos, artista da faixa em coletâneas, colunas por tipo, pílula de gênero sem ação na v0.1, tracklist virtualizada reutilizável. |
 | 18/10/2026 | Página Álbuns: v0.1 com busca, ordenação e selo de favorito; filtros na v0.2; ordem aleatória estável até nova escolha. |
 | 18/10/2026 | Tocando Agora detalhado (referência YouTube Music): fila completa virtualizada, salvar fila com nome sugerido, letra clicável para pular, Relacionados em 4 seções. |
-| 18/10/2026 | A Seguir: reordenar sem shuffle muda a ordem original, com shuffle só a embaralhada; remover a faixa atual passa para a seguinte (fim da fila: 1ª, pausada); clicar na faixa atual pausa/retoma. Qualquer navegação fecha o Tocando Agora; a Topbar fica visível. |
-| 18/10/2026 | Letra: offset positivo adianta os versos (OpenSubsonic); rolagem manual pausa a automática por 4 s. Relacionados sem "Tocar tudo"; listas de faixas com 1 a 3 colunas conforme a largura. |
-| 18/10/2026 | Página Músicas: busca e ordenação no SQLite (colunas normalizadas, sem acento); a interface recebe só os IDs na ordem e carrega as linhas em blocos de 100. Coluna "#" = adicionadas recentemente (2º clique inverte). "Ordenar por" com as mesmas opções da página Álbuns (ordem aleatória estável até novo sorteio); ordenar por coluna fora dessas opções mostra "Pela coluna". Botão "Aleatório" = mix de até 100 faixas. Troca de faixa envia só a posição da fila (`queue-position`), não a fila inteira. |
-| 18/10/2026 | Modo de teste de desempenho só em desenvolvimento (`npm run tauri:perf`): banco separado com 50 mil faixas falsas em `perf/`, servidor inexistente (`perf.invalid`), sem tocar no cofre, na sessão nem na sincronização. |
+| 19/10/2026 | Favoritos: Tocar tudo e Aleatório no cabeçalho, 10 músicas na tabela com Ver tudo, Ver mais em álbuns/artistas, item desfavoritado permanece até sair da página, sincronização leve ao abrir. |
+| 19/10/2026 | Artistas e página do artista: filtros avançados na v0.2; lista única do artista ordenada por reproduções (Tocar, Top 5 e Ver todas); biografia como texto limpo; Álbuns × Singles e EPs; info do artista em cache por 7 dias. |

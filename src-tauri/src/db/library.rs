@@ -141,6 +141,8 @@ pub fn finish_full_sync(conn: &mut Connection, server_scan: Option<&str>, now: i
             [],
         )?;
     }
+    // Who appears on each song, from the songs just saved.
+    super::artists::fill_song_artists(&tx)?;
     tx.execute(
         "UPDATE sync_state SET last_full_sync_at = ?1, last_server_scan = ?2 WHERE id = 1",
         params![now, server_scan],
@@ -559,6 +561,23 @@ mod tests {
         assert_eq!(genres, r#"["Rock"]"#);
         assert_eq!(roles, r#"["albumartist"]"#);
         assert_eq!(sync_state(&conn).unwrap().last_server_scan.as_deref(), Some("scan-1"));
+    }
+
+    #[test]
+    fn full_sync_links_songs_to_their_artists() {
+        let mut conn = open_in_memory().unwrap();
+        let mut featuring = song("s1", "al1");
+        featuring.raw_json = r#"{"id":"s1","artists":[{"id":"ar1"},{"id":"guest"}]}"#.into();
+        full_sync(&mut conn, &[library(vec![featuring])], 1000);
+
+        let artists: Vec<String> = conn
+            .prepare("SELECT artist_id FROM song_artists WHERE song_id = 's1' AND role = 'artist' ORDER BY 1")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(artists, ["ar1", "guest"]);
     }
 
     #[test]

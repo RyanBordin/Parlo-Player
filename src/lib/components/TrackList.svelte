@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Tracklist of album and playlist pages (spec 6.5): the page has all its
-  // songs, so the quick search and the column sorting (spec 7) run here, in
-  // memory. A click plays the list as shown (spec 5.1).
+  // Tracklist of album and playlist pages (spec 6.5) and of the favorite
+  // songs (spec 6.2): the page has all its songs, so the quick search and the
+  // column sorting (spec 7) run here, in memory. A click plays the list as
+  // shown (spec 5.1).
   import { playContext, type TrackListSong } from "#lib/api.ts";
   import ListSearch from "#lib/components/ListSearch.svelte";
   import TrackTable from "#lib/components/TrackTable.svelte";
@@ -18,8 +19,8 @@
     onerror,
   }: {
     songs: TrackListSong[];
-    /** Album: #, title, duration, heart. Playlist: also cover and album. */
-    kind: "album" | "playlist";
+    /** Album: #, title, duration, heart. Playlist: also cover and album. Favorites: also artist. */
+    kind: "album" | "playlist" | "favorites";
     /** "Playing from" when a song is clicked. */
     contextLabel: string;
     /** Album pages: a song by someone else (compilations) shows its artist. */
@@ -29,11 +30,15 @@
     onerror?: (error: unknown) => void;
   } = $props();
 
-  const ALBUM_COLUMNS: ColumnId[] = ["number", "title", "duration", "favorite"];
-  const PLAYLIST_COLUMNS: ColumnId[] = ["number", "title", "album", "duration", "favorite"];
+  const COLUMNS: Record<typeof kind, ColumnId[]> = {
+    album: ["number", "title", "duration", "favorite"],
+    playlist: ["number", "title", "album", "duration", "favorite"],
+    favorites: ["number", "title", "artist", "album", "duration", "favorite"],
+  };
   const SORT_KEYS: Partial<Record<ColumnId, SortKey | null>> = {
     number: null,
     title: "title",
+    artist: "artist",
     album: "album",
     duration: "duration",
   };
@@ -71,8 +76,15 @@
 
   function subtitleOf(song: TrackListSong) {
     if (kind === "playlist") return song.artist;
+    if (kind === "favorites") return null; // the artist has its own column
     return song.artist && song.artist !== albumArtist ? song.artist : null;
   }
+
+  const EMPTY: Record<typeof kind, () => string> = {
+    album: m.tracklist_empty_album,
+    playlist: m.tracklist_empty_playlist,
+    favorites: m.home_starred_songs_empty,
+  };
 
   function onsort(key: string | null) {
     sort = key ? nextSort(sort, key as SortKey) : null;
@@ -96,20 +108,20 @@
   </div>
 
   {#if songs.length === 0}
-    <p class="empty">{kind === "album" ? m.tracklist_empty_album() : m.tracklist_empty_playlist()}</p>
+    <p class="empty">{EMPTY[kind]()}</p>
   {:else if shown.length === 0}
     <p class="empty">{m.tracklist_no_results({ query })}</p>
   {:else}
     <TrackTable
       {rows}
       songAt={(index) => shown[index]?.song}
-      columns={kind === "album" ? ALBUM_COLUMNS : PLAYLIST_COLUMNS}
+      columns={COLUMNS[kind]}
       sortKeys={SORT_KEYS}
       {sort}
       {onsort}
       numberTitle={m.tracklist_default_order()}
       {numberOf}
-      showCover={kind === "playlist"}
+      showCover={kind !== "album"}
       {subtitleOf}
       selectKey={(index) => shown[index].position}
       {onplay}

@@ -41,10 +41,12 @@ pub(super) fn album_card_from_row(row: &rusqlite::Row) -> rusqlite::Result<Album
     })
 }
 
-/// Starred songs, last starred first.
+/// Starred songs, last starred first. `julianday` compares the dates whatever
+/// their format (fractions of a second, time zone offset).
 pub fn starred_songs(conn: &Connection) -> DbResult<Vec<SongSummary>> {
     songs(conn, &format!(
-        "SELECT {SONG_SUMMARY_COLUMNS} FROM songs WHERE starred IS NOT NULL ORDER BY starred DESC, title"
+        "SELECT {SONG_SUMMARY_COLUMNS} FROM songs WHERE starred IS NOT NULL
+         ORDER BY julianday(starred) DESC, title"
     ))
 }
 
@@ -61,7 +63,7 @@ pub fn forgotten_starred_songs(conn: &Connection) -> DbResult<Vec<SongSummary>> 
 pub fn starred_albums(conn: &Connection, limit: Option<u32>) -> DbResult<Vec<AlbumCard>> {
     let sql = format!(
         "SELECT {ALBUM_CARD_COLUMNS} FROM albums WHERE starred IS NOT NULL
-         ORDER BY starred DESC, name LIMIT ?1"
+         ORDER BY julianday(starred) DESC, name LIMIT ?1"
     );
     let mut stmt = conn.prepare(&sql)?;
     let albums = stmt.query_map([sql_limit(limit)], album_card_from_row)?.collect::<Result<_, _>>()?;
@@ -77,7 +79,7 @@ pub fn starred_artists(conn: &Connection, limit: Option<u32>) -> DbResult<Vec<Ar
                  WHERE al.artist_id = ar.id AND al.cover_art IS NOT NULL
                  ORDER BY al.year DESC NULLS LAST, al.created DESC LIMIT 1)
          FROM artists ar WHERE ar.starred IS NOT NULL
-         ORDER BY ar.starred DESC, ar.name LIMIT ?1",
+         ORDER BY julianday(ar.starred) DESC, ar.name LIMIT ?1",
     )?;
     let artists = stmt
         .query_map([sql_limit(limit)], |row| {

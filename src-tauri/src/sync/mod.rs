@@ -83,6 +83,17 @@ pub async fn run(
     light::run(client, &db, &db_path, full, progress).await
 }
 
+/// Only the light sync, without the full sync rules: the Favorites page runs
+/// it on open to show what was starred in other apps (spec 6.2).
+pub async fn run_light(
+    client: &SubsonicClient,
+    db_path: PathBuf,
+    progress: &(dyn Fn(SyncProgress) + Send + Sync),
+) -> Result<(), SyncError> {
+    let db = SyncDb::open(db_path.clone()).await?;
+    light::run(client, &db, &db_path, false, progress).await
+}
+
 /// Whether a full sync is due (spec 12.4).
 fn needs_full_sync(state: &SyncState, server_last_scan: Option<&str>, now: i64) -> bool {
     let Some(last_full) = state.last_full_sync_at else {

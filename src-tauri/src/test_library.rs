@@ -283,6 +283,10 @@ mod tests {
         let start = Instant::now();
         let rows = song_rows(&conn, &ids[20_000..20_100]).unwrap();
         println!("100 lines: {} in {:?}", rows.len(), start.elapsed());
+
+        let start = Instant::now();
+        let artists = crate::db::artists::artist_list(&conn).unwrap();
+        println!("artists page: {} artists in {:?}", artists.len(), start.elapsed());
     }
 
     #[test]

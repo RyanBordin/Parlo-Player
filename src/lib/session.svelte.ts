@@ -2,6 +2,8 @@
 import { goto } from "$app/navigation";
 import { getLibraryStatus, getSession, logout, type SavedSession } from "#lib/api.ts";
 import { clearAlbums } from "#lib/albums.svelte.ts";
+import { clearArtists } from "#lib/artists.svelte.ts";
+import { clearFavorites } from "#lib/favorites.svelte.ts";
 import { clearHome } from "#lib/home.svelte.ts";
 import { clearPages } from "#lib/page-cache.svelte.ts";
 import { clearSongCache } from "#lib/song-cache.svelte.ts";
@@ -49,8 +51,10 @@ export function finishFirstSync(): void {
 export async function signOut(): Promise<void> {
   await logout();
   clearHome();
+  clearFavorites();
   clearPages();
   clearAlbums();
+  clearArtists();
   clearSongCache();
   clearSongs();
   app.view = { name: "login" };
