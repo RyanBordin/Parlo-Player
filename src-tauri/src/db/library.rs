@@ -208,6 +208,12 @@ fn clear_unstarred<'a>(
     Ok(())
 }
 
+/// A playlist just created in the app, so the sidebar shows it before the
+/// next light sync.
+pub fn save_playlist(conn: &Connection, playlist: &Playlist) -> DbResult<()> {
+    write_rows(conn, PLAYLISTS.name, std::slice::from_ref(playlist), true)
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
@@ -705,6 +711,23 @@ mod tests {
         assert_eq!(starred, None);
         assert!(!raw.contains("starred"));
         assert!(!song_summaries(&conn, &["s1".into()]).unwrap()["s1"].starred);
+    }
+
+    #[test]
+    fn a_created_playlist_shows_at_once() {
+        let conn = open_in_memory().unwrap();
+        let playlist = Playlist {
+            id: "p9".into(),
+            name: "Albums, 10/18/2026".into(),
+            owner: Some("ryan".into()),
+            song_count: Some(12),
+            raw_json: "{}".into(),
+            ..Default::default()
+        };
+        save_playlist(&conn, &playlist).unwrap();
+        let listed = playlists(&conn).unwrap();
+        assert_eq!(listed[0].name, "Albums, 10/18/2026");
+        assert_eq!(listed[0].song_count, Some(12));
     }
 
     #[test]

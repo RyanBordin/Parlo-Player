@@ -37,7 +37,7 @@ pub struct SongRow {
 }
 
 impl SongRow {
-    fn new(all: Vec<SongSummary>, shown: usize) -> Self {
+    pub(crate) fn new(all: Vec<SongSummary>, shown: usize) -> Self {
         let all_ids = all.iter().map(|s| s.id.clone()).collect();
         Self { songs: all.into_iter().take(shown).collect(), all_ids }
     }

@@ -51,6 +51,22 @@ impl RepeatMode {
     }
 }
 
+/// What removing a song did to the queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Removed {
+    /// No song at that position.
+    Nothing,
+    /// Another song than the current one: the current one goes on.
+    Other,
+    /// The current song: the one that took its place is current now.
+    Current,
+    /// The current song, and it was the last: the first one is current now
+    /// and must wait paused (end of queue, spec 5.1.1).
+    CurrentAtEnd,
+    /// The last song left: the queue is empty.
+    Emptied,
+}
+
 /// What the player must do after a queue action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -282,6 +298,63 @@ impl Queue {
             let current_song = self.order[self.current];
             self.order = (0..self.songs.len()).collect();
             self.current = current_song;
+        }
+    }
+
+    /// Moves the song at `from` to `to` (positions of the playback order),
+    /// e.g. dragged in Up Next. Without shuffle, the original order changes
+    /// too; with shuffle, only the shuffled one (turning shuffle off restores
+    /// the original order, spec 5.4). Returns false if nothing moved.
+    pub fn move_song(&mut self, from: usize, to: usize) -> bool {
+        let len = self.order.len();
+        if from >= len || to >= len || from == to {
+            return false;
+        }
+        let song = self.order.remove(from);
+        self.order.insert(to, song);
+        self.current = if self.current == from {
+            to
+        } else if from < self.current && to >= self.current {
+            self.current - 1
+        } else if from > self.current && to <= self.current {
+            self.current + 1
+        } else {
+            self.current
+        };
+        if !self.shuffle {
+            self.songs = self.order.iter().map(|&i| self.songs[i].clone()).collect();
+            self.order = (0..len).collect();
+        }
+        true
+    }
+
+    /// Removes the song at `position` of the playback order (Up Next).
+    pub fn remove_song(&mut self, position: usize) -> Removed {
+        if position >= self.order.len() {
+            return Removed::Nothing;
+        }
+        let song = self.order.remove(position);
+        self.songs.remove(song);
+        for index in &mut self.order {
+            if *index > song {
+                *index -= 1;
+            }
+        }
+        if self.order.is_empty() {
+            self.current = 0;
+            return Removed::Emptied;
+        }
+        match position.cmp(&self.current) {
+            std::cmp::Ordering::Less => {
+                self.current -= 1;
+                Removed::Other
+            }
+            std::cmp::Ordering::Greater => Removed::Other,
+            std::cmp::Ordering::Equal if position < self.order.len() => Removed::Current,
+            std::cmp::Ordering::Equal => {
+                self.current = 0;
+                Removed::CurrentAtEnd
+            }
         }
     }
 
@@ -520,6 +593,83 @@ mod tests {
             assert_eq!(RepeatMode::from_name(mode.as_str()), mode);
         }
         assert_eq!(RepeatMode::from_name("bogus"), RepeatMode::Off);
+    }
+
+    #[test]
+    fn moving_without_shuffle_changes_the_original_order() {
+        let mut queue = queue(5, 2); // current s3
+        assert!(queue.move_song(4, 0));
+        assert_eq!(queue.ids_in_order(), ["s5", "s1", "s2", "s3", "s4"]);
+        assert_eq!(queue.current_id(), Some("s3"), "the current song follows");
+        assert_eq!(queue.current_position(), Some(3));
+
+        // Shuffle on and off again keeps the moved order.
+        queue.set_shuffle(true, &mut rng());
+        queue.set_shuffle(false, &mut rng());
+        assert_eq!(queue.ids_in_order(), ["s5", "s1", "s2", "s3", "s4"]);
+    }
+
+    #[test]
+    fn moving_the_current_song_keeps_it_current() {
+        let mut queue = queue(5, 1);
+        assert!(queue.move_song(1, 3));
+        assert_eq!(queue.ids_in_order(), ["s1", "s3", "s4", "s2", "s5"]);
+        assert_eq!(queue.current_position(), Some(3));
+        assert_eq!(queue.current_id(), Some("s2"));
+
+        assert!(queue.move_song(0, 4), "a song from before the current one");
+        assert_eq!(queue.current_id(), Some("s2"));
+        assert_eq!(queue.current_position(), Some(2));
+        assert!(!queue.move_song(2, 2) && !queue.move_song(9, 0), "nothing to move");
+    }
+
+    #[test]
+    fn moving_with_shuffle_only_changes_the_shuffled_order() {
+        let mut queue = queue(5, 0);
+        queue.set_shuffle(true, &mut rng());
+        let before = queue.ids_in_order().into_iter().map(String::from).collect::<Vec<_>>();
+        assert!(queue.move_song(4, 1));
+        let after = queue.ids_in_order();
+        assert_eq!(after[1], before[4]);
+
+        queue.set_shuffle(false, &mut rng());
+        assert_eq!(queue.ids_in_order(), ["s1", "s2", "s3", "s4", "s5"], "original order restored");
+    }
+
+    #[test]
+    fn removing_songs_around_the_current_one() {
+        let mut queue = queue(5, 2); // current s3
+        assert_eq!(queue.remove_song(0), Removed::Other);
+        assert_eq!(queue.current_id(), Some("s3"));
+        assert_eq!(queue.current_position(), Some(1));
+        assert_eq!(queue.remove_song(3), Removed::Other);
+        assert_eq!(queue.ids_in_order(), ["s2", "s3", "s4"]);
+        assert_eq!(queue.remove_song(7), Removed::Nothing);
+    }
+
+    #[test]
+    fn removing_the_current_song_moves_on() {
+        let mut queue = queue(3, 1);
+        assert_eq!(queue.remove_song(1), Removed::Current);
+        assert_eq!(queue.current_id(), Some("s3"), "the next one took its place");
+
+        assert_eq!(queue.remove_song(1), Removed::CurrentAtEnd);
+        assert_eq!(queue.current_id(), Some("s1"), "it was the last: back to the first");
+
+        assert_eq!(queue.remove_song(0), Removed::Emptied);
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn removing_with_shuffle_keeps_both_orders_in_step() {
+        let mut queue = queue(6, 0);
+        queue.set_shuffle(true, &mut rng());
+        let removed = queue.ids_in_order()[3].to_string();
+        queue.remove_song(3);
+        assert!(!queue.ids_in_order().contains(&removed.as_str()));
+        queue.set_shuffle(false, &mut rng());
+        let expected: Vec<String> = ids(6).into_iter().filter(|id| *id != removed).collect();
+        assert_eq!(queue.ids_in_order(), expected.iter().map(String::as_str).collect::<Vec<_>>());
     }
 
     #[test]

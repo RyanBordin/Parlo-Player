@@ -4,7 +4,10 @@
   import { tick, type Snippet } from "svelte";
   import { afterNavigate, beforeNavigate } from "$app/navigation";
   import { restoreQueue, type SavedSession } from "#lib/api.ts";
+  import NowPlaying from "#lib/components/now-playing/NowPlaying.svelte";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
+  import Toasts from "#lib/components/Toasts.svelte";
+  import { closeNowPlaying, nowPlaying } from "#lib/now-playing.svelte.ts";
   import { listenToPlayer } from "#lib/player.svelte.ts";
   import { handleShortcut } from "#lib/shortcuts.ts";
   import { navHistory, trackNavigation } from "#lib/shell/history.svelte.ts";
@@ -25,6 +28,8 @@
 
   beforeNavigate(() => {
     if (content) scrollPositions[navHistory.index] = content.scrollTop;
+    // Spec 4.4: going to another page closes Now Playing.
+    closeNowPlaying();
   });
 
   afterNavigate(async (navigation) => {
@@ -40,6 +45,15 @@
     }
   });
 
+  function onKeydown(event: KeyboardEvent) {
+    // Esc closes Now Playing (spec 4.4); an open dialog takes it first.
+    if (event.key === "Escape" && nowPlaying.open && !event.defaultPrevented && !document.querySelector("dialog[open]")) {
+      closeNowPlaying();
+      return;
+    }
+    handleShortcut(event);
+  }
+
   // Listen first, so the resumed queue (spec 5.6) reaches the player bar.
   $effect(() => {
     listenToPlayer()
@@ -51,20 +65,28 @@
 </script>
 
 <!-- Spec 12.2: playback shortcuts on every page. -->
-<svelte:window onkeydown={handleShortcut} />
+<svelte:window onkeydown={onKeydown} />
 
 <div class="shell">
   <Sidebar />
   <div class="main">
     <Topbar {session} />
-    <main class="content" bind:this={content}>
-      {@render children()}
-    </main>
+    <!-- Now Playing rises over the main viewport; the Topbar stays (spec 4, 4.4). -->
+    <div class="viewport">
+      <main class="content" bind:this={content}>
+        {@render children()}
+      </main>
+      {#if nowPlaying.open}
+        <NowPlaying />
+      {/if}
+    </div>
   </div>
   <div class="player">
     <PlayerBar />
   </div>
 </div>
+
+<Toasts />
 
 <style>
   .shell {
@@ -80,6 +102,15 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+  }
+
+  .viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .content {

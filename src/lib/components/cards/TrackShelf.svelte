@@ -6,27 +6,35 @@
   import PlayAllButton from "#lib/components/cards/PlayAllButton.svelte";
   import TrackRow from "#lib/components/TrackRow.svelte";
 
-  /** Songs per page: 3 columns × 4 lines. */
-  const PAGE_SIZE = 12;
+  /** Lines per page (spec 6.1, 4.4). */
+  const LINES = 4;
 
   let {
     title,
     row,
     loaded,
     empty,
+    columns = 3,
+    playAll = true,
     onerror,
   }: {
     title: string;
     row: SongRow | null;
     loaded: boolean;
     empty: string;
+    /** Columns per page: 3 on the Home, fewer in a narrow column. */
+    columns?: number;
+    /** The "Play all" button (Home sections). */
+    playAll?: boolean;
     onerror?: (error: unknown) => void;
   } = $props();
 
+  let pageSize = $derived(columns * LINES);
+
   let songs = $derived(row?.songs ?? []);
   let pages = $derived(
-    Array.from({ length: Math.ceil(songs.length / PAGE_SIZE) }, (_, i) =>
-      songs.slice(i * PAGE_SIZE, (i + 1) * PAGE_SIZE).map((song, j) => ({ song, index: i * PAGE_SIZE + j })),
+    Array.from({ length: Math.ceil(songs.length / pageSize) }, (_, i) =>
+      songs.slice(i * pageSize, (i + 1) * pageSize).map((song, j) => ({ song, index: i * pageSize + j })),
     ),
   );
 
@@ -38,11 +46,11 @@
 
 <Carousel {title} count={songs.length} {loaded} {empty} paged>
   {#snippet actions()}
-    <PlayAllButton onplay={() => play(0)} />
+    {#if playAll}<PlayAllButton onplay={() => play(0)} />{/if}
   {/snippet}
 
   {#each pages as page, p (p)}
-    <ul class="page">
+    <ul class="page" style:--columns={columns}>
       {#each page as { song, index } (song.id)}
         <li><TrackRow {song} onplay={() => play(index)} /></li>
       {/each}
@@ -54,7 +62,7 @@
   /* Filled column by column, like YouTube Music's song shelves. */
   .page {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
     grid-template-rows: repeat(4, auto);
     grid-auto-flow: column;
     align-content: start;

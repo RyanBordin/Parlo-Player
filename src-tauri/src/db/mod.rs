@@ -5,6 +5,7 @@ pub mod albums;
 pub mod history;
 pub mod home;
 pub mod library;
+pub mod related;
 mod migrations;
 pub mod saved_queue;
 pub mod tracks;

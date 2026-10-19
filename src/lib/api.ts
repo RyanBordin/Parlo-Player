@@ -225,6 +225,27 @@ export type AlbumListItem = AlbumCard & {
 /** The buttons of the Albums page (spec 6.4). */
 export type AlbumsPlayMode = "inOrder" | "shuffledAlbums" | "mix";
 
+/** Lyrics of a song (Now Playing). Mirrors `Lyrics` in src-tauri/src/now_playing.rs. */
+export type Lyrics =
+  | {
+      kind: "synced";
+      lines: { startMs: number; text: string }[];
+      /** Milliseconds; positive means the lines show sooner. */
+      offsetMs: number;
+    }
+  | { kind: "plain"; text: string }
+  | { kind: "none" };
+
+/** The Related tab's sections, in order. */
+export type Related = {
+  similar: SongRow;
+  artist: string | null;
+  artistSongs: SongRow;
+  artistAlbums: AlbumCard[];
+  genre: string | null;
+  genreAlbums: AlbumCard[];
+};
+
 /** Mirrors `PlaylistSummary` in src-tauri/src/db/library.rs. */
 export type PlaylistSummary = {
   id: string;
@@ -354,6 +375,34 @@ export function next(): Promise<void> {
 
 export function previous(): Promise<void> {
   return invoke("previous");
+}
+
+/** Lyrics of a song: synced, plain or none. */
+export function getLyrics(songId: string): Promise<Lyrics> {
+  return invoke("get_lyrics", { songId });
+}
+
+/** The Related tab around a song; `null` if it is not in the library. */
+export function getRelated(songId: string): Promise<Related | null> {
+  return invoke("get_related", { songId });
+}
+
+/** Up Next: drags a song to another position of the queue. */
+export function moveInQueue(from: number, to: number): Promise<void> {
+  return invoke("move_in_queue", { from, to });
+}
+
+/** Up Next: removes a song from the queue. */
+export function removeFromQueue(position: number): Promise<void> {
+  return invoke("remove_from_queue", { position });
+}
+
+/**
+ * Saves songs as a new playlist on the server. Resolves to `false` when the
+ * server did not send it back: it shows in the sidebar after a sync.
+ */
+export function createPlaylist(name: string, songIds: string[]): Promise<boolean> {
+  return invoke("create_playlist", { name, songIds });
 }
 
 /** Click on a song of the queue list: only jumps to it. */

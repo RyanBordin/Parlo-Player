@@ -660,3 +660,5 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Página de álbum/playlist: separador de discos, artista da faixa em coletâneas, colunas por tipo, pílula de gênero sem ação na v0.1, tracklist virtualizada reutilizável. |
 | 18/10/2026 | Página Álbuns: v0.1 com busca, ordenação e selo de favorito; filtros na v0.2; ordem aleatória estável até nova escolha. |
 | 18/10/2026 | Tocando Agora detalhado (referência YouTube Music): fila completa virtualizada, salvar fila com nome sugerido, letra clicável para pular, Relacionados em 4 seções. |
+| 18/10/2026 | A Seguir: reordenar sem shuffle muda a ordem original, com shuffle só a embaralhada; remover a faixa atual passa para a seguinte (fim da fila: 1ª, pausada); clicar na faixa atual pausa/retoma. Qualquer navegação fecha o Tocando Agora; a Topbar fica visível. |
+| 18/10/2026 | Letra: offset positivo adianta os versos (OpenSubsonic); rolagem manual pausa a automática por 4 s. Relacionados sem "Tocar tudo"; listas de faixas com 1 a 3 colunas conforme a largura. |

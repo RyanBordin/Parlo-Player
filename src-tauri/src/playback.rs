@@ -26,7 +26,7 @@ use thiserror::Error;
 use crate::db::library::SongSummary;
 use crate::db::{self, DbError, DbResult, history, library, saved_queue};
 use crate::player::listen::ListenTracker;
-use crate::player::queue::{Queue, RepeatMode, Step};
+use crate::player::queue::{Queue, Removed, RepeatMode, Step};
 use crate::player::resume::{self, SavedQueue, ServerQueue, Source};
 use crate::player::{PlaybackStatus, Player, PlayerError, PlayerEvent, Track};
 use crate::state::{ActiveLibrary, AppState};
@@ -269,6 +269,39 @@ impl Playback {
     /// Click on a song of the queue list: only jumps to it (spec 5.1).
     pub fn jump_to(&self, index: usize) -> Result<(), PlaybackError> {
         self.step(move |queue| queue.jump_to(index))
+    }
+
+    /// Up Next: drags a song from `from` to `to` (positions shown).
+    pub fn move_in_queue(&self, from: usize, to: usize) -> Result<(), PlaybackError> {
+        let library = self.library()?;
+        let mut inner = self.lock();
+        if !inner.queue.move_song(from, to) {
+            return Ok(());
+        }
+        // The song after the current one may be another now.
+        let result = self.preload_next(&inner, &library);
+        self.changed(&mut inner, &library);
+        result
+    }
+
+    /// Up Next: removes the song at `position`. Removing the current song
+    /// goes on with the one that takes its place, playing or paused as before.
+    pub fn remove_from_queue(&self, position: usize) -> Result<(), PlaybackError> {
+        let library = self.library()?;
+        let mut inner = self.lock();
+        let paused = self.player.state().status == PlaybackStatus::Paused;
+        let result = match inner.queue.remove_song(position) {
+            Removed::Nothing => return Ok(()),
+            Removed::Other => self.preload_next(&inner, &library),
+            Removed::Current => self.play_current(&mut inner, &library, 0.0, paused),
+            Removed::CurrentAtEnd => self.play_current(&mut inner, &library, 0.0, true),
+            Removed::Emptied => {
+                inner.counting = None;
+                self.player.stop().map_err(PlaybackError::from)
+            }
+        };
+        self.changed(&mut inner, &library);
+        result
     }
 
     pub fn set_shuffle(&self, enabled: bool) -> Result<(), PlaybackError> {

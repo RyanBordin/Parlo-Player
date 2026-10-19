@@ -197,6 +197,48 @@ impl TryFrom<RawLibraryItems> for LibraryItems {
     }
 }
 
+/// `getLyricsBySongId` returns `{ "lyricsList": { "structuredLyrics": [...] } }`.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsList {
+    #[serde(default)]
+    pub structured_lyrics: Vec<StructuredLyrics>,
+}
+
+/// Lyrics of a song in one language.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredLyrics {
+    #[serde(default)]
+    pub synced: bool,
+    /// Milliseconds; positive means the lines show sooner.
+    #[serde(default)]
+    pub offset: i64,
+    #[serde(default)]
+    pub line: Vec<LyricsLine>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct LyricsLine {
+    /// Milliseconds from the start of the song (synced lyrics only).
+    pub start: Option<i64>,
+    #[serde(default)]
+    pub value: String,
+}
+
+/// `getLyrics` returns `{ "lyrics": { "artist", "title", "value" } }`.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct PlainLyrics {
+    pub value: Option<String>,
+}
+
+/// `getSimilarSongs2` returns `{ "similarSongs2": { "song": [...] } }`.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct RawSongList {
+    #[serde(default)]
+    pub song: Vec<Value>,
+}
+
 /// `getAlbumList2` returns `{ "albumList2": { "album": [...] } }`.
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct RawAlbumList {

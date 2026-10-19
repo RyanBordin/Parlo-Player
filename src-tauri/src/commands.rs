@@ -7,9 +7,11 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::library::{self, LibraryStats, PlaylistSummary, SongSummary};
+use crate::db::related::SongContext;
 use crate::db::tracks::{self, AlbumPage, PlaylistHeader, PlaylistPage, TrackListSong};
 use crate::db::{self, DbError};
 use crate::home::{self, HomeActivity, HomeLibrary, HomeSection, ROW_SIZE, SectionItems};
+use crate::now_playing::{self, Lyrics, Related};
 use crate::db::albums::{self, AlbumListItem};
 use crate::playback::{AlbumsPlayMode, Playback, PlaybackError, QueueState};
 use crate::player::queue::RepeatMode;
@@ -472,6 +474,81 @@ pub async fn play_albums(
         .await
         .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
     Ok(())
+}
+
+/// Lyrics of a song (Now Playing, spec 4.4): synced ones from the
+/// `songLyrics` extension, else plain ones (`getLyrics`), else none.
+#[tauri::command]
+pub async fn get_lyrics(state: State<'_, Arc<AppState>>, song_id: String) -> Result<Lyrics, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let structured = active.client.get_lyrics_by_song_id(&song_id).await?;
+    if let Some(lyrics) = now_playing::from_structured(structured) {
+        return Ok(lyrics);
+    }
+    let db_path = active.db_path.clone();
+    let context = run_blocking(move || db::related::song_context(&db::open(&db_path)?, &song_id)).await?;
+    let Some(SongContext { title, artist: Some(artist), .. }) = context else {
+        return Ok(Lyrics::None);
+    };
+    Ok(now_playing::from_plain(active.client.get_lyrics(&artist, &title).await?))
+}
+
+/// The Related tab (spec 4.4): similar songs from the server, the rest from
+/// the local cache. `None` if the song is not in the library.
+#[tauri::command]
+pub async fn get_related(state: State<'_, Arc<AppState>>, song_id: String) -> Result<Option<Related>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let (db_path, id) = (active.db_path.clone(), song_id.clone());
+    let context = run_blocking(move || db::related::song_context(&db::open(&db_path)?, &id)).await?;
+    let Some(context) = context else { return Ok(None) };
+
+    // Only "You might also like" needs the server; without it, it is empty.
+    let similar = match context.artist_id.as_deref() {
+        Some(artist_id) => active
+            .client
+            .get_similar_songs2(artist_id, now_playing::SIMILAR_COUNT)
+            .await
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    run_blocking(move || {
+        now_playing::related(&db::open(&active.db_path)?, &song_id, &context, similar).map(Some)
+    })
+    .await
+}
+
+/// Up Next: drags a song to another position of the queue.
+#[tauri::command]
+pub fn move_in_queue(playback: State<'_, PlaybackSlot>, from: usize, to: usize) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.move_in_queue(from, to)?)
+}
+
+/// Up Next: removes a song from the queue.
+#[tauri::command]
+pub fn remove_from_queue(playback: State<'_, PlaybackSlot>, position: usize) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.remove_from_queue(position)?)
+}
+
+/// "Save" of Up Next (spec 4.4, 9): a new playlist on the server with these
+/// songs, also kept locally so the sidebar shows it at once. Returns `false`
+/// when the server did not send it back (a light sync will bring it).
+#[tauri::command]
+pub async fn create_playlist(
+    state: State<'_, Arc<AppState>>,
+    name: String,
+    song_ids: Vec<String>,
+) -> Result<bool, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let Some(playlist) = active.client.create_playlist(&name, &song_ids).await? else {
+        return Ok(false);
+    };
+    run_blocking(move || {
+        let mut conn = db::open(&active.db_path)?;
+        library::save_playlist(&conn, &playlist)?;
+        tracks::save_playlist_songs(&mut conn, &playlist.id, &song_ids)
+    })
+    .await?;
+    Ok(true)
 }
 
 /// "Shuffle" button of a list: shuffle on, from a random song.

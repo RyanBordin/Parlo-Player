@@ -4,6 +4,7 @@ import { getLibraryStatus, getSession, logout, type SavedSession } from "#lib/ap
 import { clearAlbums } from "#lib/albums.svelte.ts";
 import { clearHome } from "#lib/home.svelte.ts";
 import { clearPages } from "#lib/page-cache.svelte.ts";
+import { clearSongCache } from "#lib/song-cache.svelte.ts";
 import { startSync } from "#lib/sync.svelte.ts";
 
 export type AppView =
@@ -49,6 +50,7 @@ export async function signOut(): Promise<void> {
   clearHome();
   clearPages();
   clearAlbums();
+  clearSongCache();
   app.view = { name: "login" };
   await goto("/", { replaceState: true });
 }

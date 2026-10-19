@@ -1,5 +1,6 @@
 <script lang="ts">
   // Player Bar (spec 4.3): track | transport and progress | song actions | audio and queue.
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
@@ -27,6 +28,7 @@
   } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import { coverMode, setCoverExpanded } from "#lib/cover-mode.svelte.ts";
+  import { nowPlaying, toggleNowPlaying } from "#lib/now-playing.svelte.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
@@ -81,6 +83,14 @@
     run(() => setVolume(volume));
   }
 
+  let canOpenNowPlaying = $derived(track !== null || hasQueue);
+
+  // Spec 4.3: a click on an empty part of the bar opens / closes Now Playing.
+  function onBarClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (canOpenNowPlaying && !target.closest("button, a, input, label")) toggleNowPlaying();
+  }
+
   // The heart changes at once and goes back if the server refuses.
   async function toggleStar() {
     const current = player.track;
@@ -100,7 +110,9 @@
   }
 </script>
 
-<footer class="bar">
+<!-- The click on empty parts is a mouse shortcut; the arrow button does the same. -->
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+<footer class="bar" onclick={onBarClick}>
   <!-- Zone 1: the song -->
   <div class="zone track">
     {#if track && !coverMode.expanded}
@@ -268,9 +280,16 @@
       >
         <Shuffle />
       </button>
-      <!-- The Now Playing screen comes in step 8. -->
-      <button class="icon" type="button" disabled={!track} aria-label={m.player_now_playing()} title={m.player_now_playing()}>
-        <ChevronUp />
+      <button
+        class="icon"
+        type="button"
+        onclick={toggleNowPlaying}
+        disabled={!canOpenNowPlaying}
+        aria-expanded={nowPlaying.open}
+        aria-label={nowPlaying.open ? m.now_playing_close() : m.player_now_playing()}
+        title={nowPlaying.open ? m.now_playing_close() : m.player_now_playing()}
+      >
+        {#if nowPlaying.open}<ChevronDown />{:else}<ChevronUp />{/if}
       </button>
     </div>
   </div>

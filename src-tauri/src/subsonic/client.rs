@@ -10,8 +10,8 @@ use super::error::SubsonicError;
 use super::response::{ResponseBody, parse_response};
 use super::secret_url::SecretUrl;
 use super::types::{
-    Album, Extension, LibraryItems, PlayQueue, Playlist, RawAlbumList, RawLibraryItems, RawPlaylists,
-    ScanStatus, Song, with_raw_json,
+    Album, Extension, LibraryItems, LyricsList, PlainLyrics, PlayQueue, Playlist, RawAlbumList,
+    RawLibraryItems, RawPlaylists, RawSongList, ScanStatus, Song, StructuredLyrics, with_raw_json,
 };
 
 const API_VERSION: &str = "1.16.1";
@@ -23,6 +23,8 @@ const LIBRARY_TIMEOUT: Duration = Duration::from_secs(60);
 const ALBUM_LIST_PAGE: u32 = 500;
 /// OpenSubsonic extension: every endpoint accepts its parameters as a POST form.
 const FORM_POST: &str = "formPost";
+/// OpenSubsonic extension: `getLyricsBySongId`, lyrics with timings.
+const SONG_LYRICS: &str = "songLyrics";
 
 /// One page of `search3`. A count of 0 skips that item type on Navidrome.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -97,8 +99,9 @@ pub struct SubsonicClient {
     username: String,
     password: String,
     http: reqwest::Client,
-    /// Whether the server announces `formPost`, asked once per client.
-    form_post: OnceLock<bool>,
+    /// Names of the OpenSubsonic extensions the server announces, asked
+    /// once per client.
+    extensions: OnceLock<Vec<String>>,
 }
 
 /// How a request sends its parameters.
@@ -126,7 +129,7 @@ impl SubsonicClient {
             username: username.into(),
             password: password.into(),
             http,
-            form_post: OnceLock::new(),
+            extensions: OnceLock::new(),
         })
     }
 
@@ -244,6 +247,22 @@ impl SubsonicClient {
         Ok(())
     }
 
+    /// `createPlaylist` — a new playlist with these songs, in this order (e.g.
+    /// the queue, spec 9). Sent by POST when the server allows it: the list
+    /// can be long. Returns the playlist the server made, if it says.
+    pub async fn create_playlist(&self, name: &str, song_ids: &[String]) -> Result<Option<Playlist>, SubsonicError> {
+        let params = create_playlist_params(name, song_ids);
+        let mut body = self.request_large("createPlaylist", &params, LIBRARY_TIMEOUT).await?;
+        let mut playlist: Value = body.take("playlist")?;
+        if playlist.is_null() {
+            return Ok(None);
+        }
+        if let Some(fields) = playlist.as_object_mut() {
+            fields.remove("entry");
+        }
+        Ok(with_raw_json::<Playlist>(vec![playlist])?.pop())
+    }
+
     /// `GET /rest/getPlaylist` — a playlist and its songs in the saved order.
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<(Playlist, Vec<Song>), SubsonicError> {
         let mut body = self.get("getPlaylist", &[("id", playlist_id.to_string())], LIBRARY_TIMEOUT).await?;
@@ -292,19 +311,50 @@ impl SubsonicClient {
         body.take("openSubsonicExtensions")
     }
 
-    /// Whether the server takes POST forms (`formPost`). A server that does
-    /// not know the endpoint simply has no extensions. A network failure is
+    /// Whether the server announces an OpenSubsonic extension. A server
+    /// that does not know the endpoint simply has none. A network failure is
     /// not remembered, so the next call asks again.
-    pub async fn supports_form_post(&self) -> bool {
-        if let Some(&supported) = self.form_post.get() {
-            return supported;
+    async fn supports_extension(&self, name: &str) -> bool {
+        if let Some(names) = self.extensions.get() {
+            return names.iter().any(|n| n == name);
         }
-        let supported = match self.get_open_subsonic_extensions().await {
-            Ok(extensions) => extensions.iter().any(|e| e.name == FORM_POST),
+        let names = match self.get_open_subsonic_extensions().await {
+            Ok(extensions) => extensions.into_iter().map(|e| e.name).collect(),
             Err(SubsonicError::Http(e)) if !e.is_status() => return false,
-            Err(_) => false,
+            Err(_) => Vec::new(),
         };
-        *self.form_post.get_or_init(|| supported)
+        self.extensions.get_or_init(|| names).iter().any(|n| n == name)
+    }
+
+    /// Whether the server takes POST forms (`formPost`).
+    pub async fn supports_form_post(&self) -> bool {
+        self.supports_extension(FORM_POST).await
+    }
+
+    /// `getLyricsBySongId` (OpenSubsonic `songLyrics`): the song's lyrics,
+    /// with timings when synced. Empty when the server has none, or does not
+    /// have the extension.
+    pub async fn get_lyrics_by_song_id(&self, song_id: &str) -> Result<Vec<StructuredLyrics>, SubsonicError> {
+        if !self.supports_extension(SONG_LYRICS).await {
+            return Ok(Vec::new());
+        }
+        let mut body = self.get("getLyricsBySongId", &[("id", song_id.to_string())], REQUEST_TIMEOUT).await?;
+        Ok(body.take::<LyricsList>("lyricsList")?.structured_lyrics)
+    }
+
+    /// `getLyrics` — plain lyrics found by artist and title, if any.
+    pub async fn get_lyrics(&self, artist: &str, title: &str) -> Result<Option<String>, SubsonicError> {
+        let params = [("artist", artist.to_string()), ("title", title.to_string())];
+        let mut body = self.get("getLyrics", &params, REQUEST_TIMEOUT).await?;
+        let lyrics: PlainLyrics = body.take("lyrics")?;
+        Ok(lyrics.value.filter(|text| !text.trim().is_empty()))
+    }
+
+    /// `getSimilarSongs2` — songs like this artist's (Last.fm on Navidrome).
+    pub async fn get_similar_songs2(&self, artist_id: &str, count: u32) -> Result<Vec<Song>, SubsonicError> {
+        let params = [("id", artist_id.to_string()), ("count", count.to_string())];
+        let mut body = self.get("getSimilarSongs2", &params, LIBRARY_TIMEOUT).await?;
+        with_raw_json(body.take::<RawSongList>("similarSongs2")?.song)
     }
 
     /// `getPlayQueue` — the queue saved on the server, `None` if there is none.
@@ -324,10 +374,21 @@ impl SubsonicClient {
         position_ms: i64,
         timeout: Duration,
     ) -> Result<(), SubsonicError> {
-        let method = if self.supports_form_post().await { Method::Post } else { Method::Get };
         let params = save_play_queue_params(song_ids, current, position_ms);
-        self.request(method, "savePlayQueue", &params, timeout).await?;
+        self.request_large("savePlayQueue", &params, timeout).await?;
         Ok(())
+    }
+
+    /// A request whose parameters can be too many for a URL: POST when the
+    /// server announces `formPost`, GET otherwise.
+    async fn request_large(
+        &self,
+        endpoint: &str,
+        params: &[(&str, String)],
+        timeout: Duration,
+    ) -> Result<ResponseBody, SubsonicError> {
+        let method = if self.supports_form_post().await { Method::Post } else { Method::Get };
+        self.request(method, endpoint, params, timeout).await
     }
 
     async fn get(
@@ -398,6 +459,13 @@ fn scrobble_params(plays: &[(String, i64)], submission: bool) -> Vec<(&'static s
 /// The item's parameter repeats once per ID.
 fn star_params(item: StarItem, ids: &[String]) -> Vec<(&'static str, String)> {
     ids.iter().map(|id| (item.param(), id.clone())).collect()
+}
+
+/// `songId` repeats once per song, in order.
+fn create_playlist_params(name: &str, song_ids: &[String]) -> Vec<(&'static str, String)> {
+    let mut params = vec![("name", name.to_string())];
+    params.extend(song_ids.iter().map(|id| ("songId", id.clone())));
+    params
 }
 
 /// `id` repeats once per song, in playback order.
@@ -489,6 +557,20 @@ mod tests {
         assert_eq!(star_params(StarItem::Song, &ids), [("id", "s1".to_string()), ("id", "s2".to_string())]);
         assert_eq!(star_params(StarItem::Album, &ids[..1]), [("albumId", "s1".to_string())]);
         assert_eq!(star_params(StarItem::Artist, &ids[..1]), [("artistId", "s1".to_string())]);
+    }
+
+    #[test]
+    fn create_playlist_params_keep_the_songs_in_order() {
+        let ids = ["s2".to_string(), "s1".to_string(), "s2".to_string()];
+        assert_eq!(
+            create_playlist_params("Albums, 10/18/2026", &ids),
+            [
+                ("name", "Albums, 10/18/2026".to_string()),
+                ("songId", "s2".to_string()),
+                ("songId", "s1".to_string()),
+                ("songId", "s2".to_string()),
+            ]
+        );
     }
 
     #[test]

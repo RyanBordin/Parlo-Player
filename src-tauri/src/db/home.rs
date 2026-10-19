@@ -29,9 +29,9 @@ pub struct ArtistCard {
     pub fallback_cover_art: Option<String>,
 }
 
-const ALBUM_CARD_COLUMNS: &str = "id, name, artist, artist_id, cover_art";
+pub(super) const ALBUM_CARD_COLUMNS: &str = "id, name, artist, artist_id, cover_art";
 
-fn album_card_from_row(row: &rusqlite::Row) -> rusqlite::Result<AlbumCard> {
+pub(super) fn album_card_from_row(row: &rusqlite::Row) -> rusqlite::Result<AlbumCard> {
     Ok(AlbumCard {
         id: row.get(0)?,
         name: row.get(1)?,

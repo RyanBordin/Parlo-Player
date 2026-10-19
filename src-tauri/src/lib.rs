@@ -11,6 +11,7 @@ mod covers;
 mod db;
 mod home;
 mod locale;
+mod now_playing;
 mod playback;
 mod player;
 mod session;
@@ -62,6 +63,11 @@ pub fn run() {
             commands::play_shuffled,
             commands::list_albums,
             commands::play_albums,
+            commands::move_in_queue,
+            commands::remove_from_queue,
+            commands::create_playlist,
+            commands::get_lyrics,
+            commands::get_related,
             commands::toggle_pause,
             commands::seek,
             commands::seek_by,

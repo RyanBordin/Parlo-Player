@@ -163,6 +163,41 @@ mod tests {
     }
 
     #[test]
+    fn takes_structured_lyrics() {
+        use crate::subsonic::types::LyricsList;
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "lyricsList":{"structuredLyrics":[{"lang":"eng","synced":true,"offset":-100,
+            "line":[{"start":0,"value":"One"},{"start":2000,"value":"Two"}]}]}}}"#;
+        let list: LyricsList = parse_response(json).unwrap().take("lyricsList").unwrap();
+        let lyrics = &list.structured_lyrics[0];
+        assert!(lyrics.synced);
+        assert_eq!(lyrics.offset, -100);
+        assert_eq!(lyrics.line[1].start, Some(2000));
+        assert_eq!(lyrics.line[1].value, "Two");
+    }
+
+    #[test]
+    fn takes_plain_lyrics_and_similar_songs() {
+        use crate::subsonic::types::{PlainLyrics, RawSongList};
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "lyrics":{"artist":"A","title":"T","value":"Line one\nLine two"}}}"#;
+        let lyrics: PlainLyrics = parse_response(json).unwrap().take("lyrics").unwrap();
+        assert_eq!(lyrics.value.as_deref(), Some("Line one\nLine two"));
+
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "similarSongs2":{"song":[{"id":"s1","title":"One"}]}}}"#;
+        let similar: RawSongList = parse_response(json).unwrap().take("similarSongs2").unwrap();
+        assert_eq!(similar.song.len(), 1);
+
+        // Navidrome without Last.fm answers an empty object.
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1","similarSongs2":{}}}"#;
+        let similar: RawSongList = parse_response(json).unwrap().take("similarSongs2").unwrap();
+        assert!(similar.song.is_empty());
+    }
+
+    #[test]
     fn takes_play_queue() {
         use crate::subsonic::types::PlayQueue;
 
