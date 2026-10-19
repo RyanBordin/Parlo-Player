@@ -215,6 +215,28 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
      * **Nível 1 (servidor):** `getSimilarSongs2` e `getTopSongs` (no Navidrome, exigem integração com Last.fm).
      * **Nível 2 (fallback local):** "Mais de [Artista]" (`getArtist` / faixas do mesmo artista) e "Mesmo Gênero ([Gênero])" (`getSongsByGenre` ou `getAlbumList2?type=byGenre`).
 
+#### Detalhes da tela Tocando Agora
+
+Referência visual: tela "Tocando agora" do YouTube Music.
+
+* **Abrir e fechar:** seta ▲/▼ da Player Bar, clique numa área vazia da Player Bar, ou **Esc** para fechar. Navegar pela barra lateral também fecha. A barra lateral e a Player Bar continuam visíveis. A aba escolhida é lembrada.
+* **Capa:** acompanha a faixa atual, em alta resolução.
+* **A SEGUIR:**
+  * A lista mostra a fila inteira (inclusive as faixas já tocadas, acima da atual) e rola automaticamente até a faixa atual ao abrir. Lista virtualizada, porque a fila pode ter milhares de faixas.
+  * Cada linha: capa pequena, título, artista e duração. A faixa atual fica destacada, com ícone de play/pause sobre a capa.
+  * Reordenar arrastando; remover pela linha (botão no hover).
+  * **Salvar:** abre uma janela com o nome sugerido "[contexto], [data]" (ex.: "Álbuns, 18/10/2026"), editável. Cria a playlist no servidor com todas as faixas da fila (`createPlaylist`, por POST), atualiza a barra lateral e mostra uma confirmação discreta.
+* **LETRA:**
+  * Letra sincronizada: o verso atual fica em destaque, a letra rola sozinha acompanhando a música e **clicar num verso pula para aquele trecho**. Respeita o ajuste de tempo (`offset`) que vier com a letra.
+  * Se o usuário rolar a letra manualmente, a rolagem automática pausa por alguns segundos.
+  * Sem letra disponível: mensagem curta.
+* **RELACIONADOS**, nesta ordem (seções vazias não aparecem):
+  1. **Talvez você também goste** (`getSimilarSongs2`, nível 1): lista de faixas em 4 linhas, rolando para o lado.
+  2. **Mais de [Artista]:** faixas do artista ordenadas pelo nº de reproduções, sem a faixa atual, no mesmo formato de lista.
+  3. **Álbuns de [Artista]:** carrossel de cards de álbum.
+  4. **Mesmo gênero ([Gênero]):** carrossel de cards de álbum do gênero.
+  * Clicar numa faixa toca a lista daquela seção a partir dela (Seção 5.1); clicar num álbum abre a página dele.
+
 ---
 
 ## 5. Regras de Reprodução e Fila
@@ -273,28 +295,26 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 ### 6.1. Início (Dashboard)
 
 * **Filosofia:** para quem não gosta de microgerenciar playlists e prefere ouvir com base no histórico, nos favoritos e na redescoberta da própria biblioteca.
-* **6 carrosséis horizontais** (setas `<` `>` no canto superior direito de cada seção), nesta ordem:
+* **6 seções**, nesta ordem (referência visual: YouTube Music):
 
-| Ordem | Seção | Estilo dos Cards | Fonte de Dados |
+| Ordem | Seção | Formato | Fonte de Dados |
 | ----- | ----- | ----- | ----- |
-| **1** | **Ouvir de novo** | **Cards grandes**, Play centralizado no hover. Últimas músicas e álbuns ouvidos. | Álbuns recentes (`getAlbumList2?type=recent`) + faixas recentes do **histórico local** (a API não tem histórico por faixa). |
-| **2** | **Álbuns mais escutados** | Cards padrão (capa, título, artista). | `getAlbumList2?type=frequent`. |
-| **3** | **Músicas favoritas** | Cards padrão ou compactos. | `getStarred2` → `song[]`. |
-| **4** | **Álbuns favoritos** | Cards padrão. | `getStarred2` → `album[]`. |
-| **5** | **Favoritos esquecidos** | Cards padrão. | `getStarred2` ordenado client-side por menor `playCount` e, no desempate, `played` mais antigo (ou ausente). |
-| **6** | **Artistas favoritos** | Cards de artista (quadrados). | `getStarred2` → `artist[]`. |
+| **1** | **Ouvir de novo** | **Cards grandes de faixas** (capa, título, artista), Play no hover. **Só faixas.** | Faixas tocadas nos **últimos 30 dias** (campo `played`, que inclui outros apps), ordenadas pelo **total de reproduções** (`playCount`). Se houver menos de 20, completa com as mais tocadas de todos os tempos. |
+| **2** | **Músicas favoritas** | Lista de faixas 3 × 4. | `getStarred2` → `song[]`, das favoritadas mais recentemente. |
+| **3** | **Álbuns mais escutados** | Carrossel de cards de álbum. | `getAlbumList2?type=frequent`. |
+| **4** | **Álbuns favoritos** | Carrossel de cards de álbum. | `getStarred2` → `album[]`. |
+| **5** | **Favoritos esquecidos** | Lista de faixas 3 × 4. | Faixas favoritas ordenadas por menor `playCount` e, no desempate, `played` mais antigo (ou ausente). |
+| **6** | **Artistas favoritos** | Carrossel de cards de artista (quadrados). | `getStarred2` → `artist[]`. |
 
+* **Lista de faixas 3 × 4** (referência: "Escolha a dedo" do YouTube Music): 12 faixas por página, cada linha com capa pequena, título e "artista • álbum". As setas < > passam para as próximas 12, até 4 páginas.
+* **Carrosséis de cards:** até 20 itens, com setas < >.
+* **Botão no canto superior direito de cada seção, ao lado das setas:**
+  * Seções de faixas (Ouvir de novo, Músicas favoritas, Favoritos esquecidos): **Tocar tudo**, que toca a lista completa da seção na ordem.
+  * Seções de álbuns e artistas: **Ver mais**, que abre uma página com o título da seção e **todos os itens em grade**, com rolagem contínua.
 * Seções vazias mostram uma mensagem curta explicando como preenchê-las.
-* **Dois formatos de seção** (referência: YouTube Music, "Escolha a dedo" e página "Ouvir novamente"):
-  * **Seções de faixas** (Músicas favoritas, Favoritos esquecidos): **lista em 3 colunas × 4 linhas** (12 faixas por página), cada linha com capa pequena, título e "artista • álbum". As setas < > passam para as próximas 12. No canto superior direito, botão **Tocar tudo**, que toca a lista completa da seção na ordem.
-  * **Seções de álbuns e artistas** (Ouvir de novo, Álbuns mais escutados, Álbuns favoritos, Artistas favoritos): carrossel de cards (até 20) e, no canto superior direito, botão **Ver mais**, que abre uma página com o título da seção e **todos os itens em grade**, com rolagem contínua.
-* **Regras detalhadas:**
-  * Seções de faixas mostram até 4 páginas (48 faixas) no carrossel; "Tocar tudo" sempre toca a lista inteira.
-  * **Ouvir de novo:** álbuns e faixas misturados, do mais recente para o mais antigo. Uma faixa não aparece se o álbum dela já estiver na fileira. Os álbuns vêm do servidor (vale para reproduções em outros apps); as faixas, do histórico local.
-  * **Favoritos esquecidos:** só faixas.
-  * **Clique em faixa:** toca a lista completa que o carrossel representa, na mesma ordem, a partir dela (ex.: todas as músicas favoritas, "Tocando de: Músicas favoritas"; em Ouvir de novo, as faixas da fileira).
-  * **Dados:** "Ouvir de novo" e "Álbuns mais escutados" são pedidos ao servidor ao abrir a página, com o banco local como reserva sem conexão; favoritos vêm do banco local (sincronização leve).
-  * A página se atualiza ao voltar para ela e ao fim de cada sincronização.
+* **Clique em faixa:** toca a lista completa da seção, na mesma ordem, a partir dela ("Tocando de: [nome da seção]").
+* **Dados:** "Álbuns mais escutados" é pedido ao servidor ao abrir a página, com o banco local como reserva sem conexão; o resto vem do banco local.
+* A página se atualiza ao voltar para ela e ao fim de cada sincronização.
 
 ### 6.2. Favoritos
 
@@ -331,6 +351,9 @@ Referência: página Favorites do Swing Music.
 * **Grade:** cards quadrados (capa, título, artista em tom secundário), selos discretos de favorito e baixado, rolagem contínua, colunas ajustadas à largura da janela.
 * Clique no card abre o álbum; Play no hover toca; clique direito ou `...` abre o menu de álbum.
 * Ordenação e filtros ficam salvos entre sessões.
+* **Escopo:** na v0.1, busca rápida, "Ordenar por" e selo de favorito. Os filtros por metadado e o selo de baixado entram na v0.2.
+* **Ordenação "Aleatório":** a ordem é sorteada ao escolher a opção e se mantém até o usuário escolher de novo ou fechar o app.
+* **Contexto na fila:** "Tocando de: Álbuns". Os três botões do cabeçalho geram filas que podem ser salvas como playlist (Seção 9).
 
 ### 6.5. Página de Álbum e Playlist
 
@@ -342,6 +365,14 @@ Referência: página Favorites do Swing Music.
 * **Tracklist:** tabela com as Ferramentas de lista (Seção 7) e indicador da faixa atual.
   * Ordem padrão: **álbum** = nº da faixa; **playlist** = ordem salva.
   * Nº da faixa só existe como critério em álbuns.
+* **Detalhes:**
+  * **Álbuns com vários discos:** na ordem padrão, as faixas são agrupadas com um separador "Disco 1", "Disco 2" etc. O separador some quando o usuário ordena por outra coluna.
+  * **Coletâneas:** quando o artista da faixa é diferente do artista do álbum (ex.: "Various Artists"), a linha mostra o artista da faixa abaixo do título.
+  * **Colunas:** no álbum, `#`, título, duração e coração; na playlist, também capa pequena e álbum.
+  * **Pílula de gênero:** sem ação na v0.1 (não há página de gênero); a pílula de artista abre a página do artista.
+  * **Favoritar** na barra de ações favorita o álbum (`star` com `albumId`); o coração de cada linha favorita a faixa.
+  * **Dados:** o álbum vem do banco local; a playlist é pedida ao servidor ao abrir (`getPlaylist`), com o banco local como reserva.
+  * A tracklist é um componente único, virtualizado (desenha só as linhas visíveis), reaproveitado na página Músicas e nos "Ver tudo".
 
 ### 6.6. Artistas
 
@@ -625,3 +656,7 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Baixados oculto na sidebar até a v0.2; capas servidas pelo backend via protocolo próprio com cache; fonte empacotada. |
 | 18/10/2026 | Regras detalhadas da Home: 20 itens por carrossel, mistura de Ouvir de novo, contexto ao clicar em faixa, origem dos dados. Home construída antes das demais telas. |
 | 18/10/2026 | Home: seções de faixas em lista 3×4 com "Tocar tudo"; seções de álbuns/artistas com "Ver mais" abrindo grade completa (referência YouTube Music). |
+| 18/10/2026 | Home revisada: Ouvir de novo só com faixas (mais tocadas nos últimos 30 dias), com Tocar tudo; Músicas favoritas em 2º. Visual atual dos carrosséis mantido. |
+| 18/10/2026 | Página de álbum/playlist: separador de discos, artista da faixa em coletâneas, colunas por tipo, pílula de gênero sem ação na v0.1, tracklist virtualizada reutilizável. |
+| 18/10/2026 | Página Álbuns: v0.1 com busca, ordenação e selo de favorito; filtros na v0.2; ordem aleatória estável até nova escolha. |
+| 18/10/2026 | Tocando Agora detalhado (referência YouTube Music): fila completa virtualizada, salvar fila com nome sugerido, letra clicável para pular, Relacionados em 4 seções. |

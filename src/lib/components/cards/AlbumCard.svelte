@@ -1,5 +1,6 @@
 <script lang="ts">
   // Album card (spec 5.2): click opens the album, Play on the cover plays it.
+  import Heart from "@lucide/svelte/icons/heart";
   import { playAlbum, type AlbumCard } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import PlayButton from "#lib/components/cards/PlayButton.svelte";
@@ -10,27 +11,36 @@
     size = 160,
     large = false,
     label,
+    fluid = false,
     onerror,
   }: {
-    album: AlbumCard;
+    /** `starred` shows the favorite badge (Albums grid). */
+    album: AlbumCard & { starred?: boolean };
     /** Cover width in CSS pixels. */
     size?: number;
     /** "Listen again" style: Play in the middle. */
     large?: boolean;
     /** Small type label above the title (rows that mix kinds). */
     label?: string;
+    /** Fills its grid column instead of `size` pixels. */
+    fluid?: boolean;
     onerror?: (error: unknown) => void;
   } = $props();
 
   let href = $derived(`/albums/${encodeURIComponent(album.id)}`);
 </script>
 
-<article class="card" style:width={`${size}px`}>
+<article class="card" style:width={fluid ? "100%" : `${size}px`}>
   <div class="cover">
     <!-- The title link is the one announced; this one is only for the mouse. -->
     <a {href} tabindex="-1" aria-hidden="true">
       <Cover id={album.coverArt} {size} />
     </a>
+    {#if album.starred}
+      <span class="badge" role="img" aria-label={m.card_starred()} title={m.card_starred()}>
+        <Heart size={12} fill="currentColor" />
+      </span>
+    {/if}
     <PlayButton
       label={m.card_play({ name: album.name })}
       centered={large}
@@ -62,6 +72,21 @@
 
   .cover a {
     display: block;
+  }
+
+  /* Discreet favorite badge (spec 6.4). */
+  .badge {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-pill);
+    background: rgb(0 0 0 / 60%);
+    color: var(--color-text);
+    pointer-events: none;
   }
 
   .label {

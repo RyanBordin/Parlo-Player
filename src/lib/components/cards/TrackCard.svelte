@@ -12,6 +12,7 @@
     size = 160,
     large = false,
     label,
+    fluid = false,
     onplay,
   }: {
     song: SongSummary;
@@ -20,6 +21,8 @@
     /** "Listen again" style: bigger Play icon. */
     large?: boolean;
     label?: string;
+    /** Fills its grid column instead of `size` pixels. */
+    fluid?: boolean;
     onplay: () => void;
   } = $props();
 
@@ -30,7 +33,7 @@
   class="card"
   class:current
   type="button"
-  style:width={`${size}px`}
+  style:width={fluid ? "100%" : `${size}px`}
   onclick={onplay}
   aria-label={m.card_play({ name: song.title })}
 >

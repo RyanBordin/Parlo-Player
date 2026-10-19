@@ -135,5 +135,84 @@
   "card_type_song": "Song",
   "card_play": "Play {name}",
   "carousel_back": "Scroll back",
-  "carousel_forward": "Scroll forward"
+  "carousel_forward": "Scroll forward",
+  "home_play_all": "Play all",
+  "home_see_more": "See more",
+  "album_kind": "Album",
+  "playlist_kind": "Playlist",
+  "collection_by": "by",
+  "collection_owner": "by {owner}",
+  "collection_song_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} song",
+        "countPlural=other": "{countText} songs"
+      }
+    }
+  ],
+  "collection_song_count_zero": "No songs",
+  "duration_minutes": "{minutes} min",
+  "duration_hours_minutes": "{hours} hr {minutes} min",
+  "album_added": "Added {date}",
+  "collection_play": "Play",
+  "collection_shuffle": "Shuffle",
+  "album_not_found": "This album is not in the library. Try syncing.",
+  "playlist_not_found": "This playlist no longer exists.",
+  "playlist_offline": "Can't reach the server: showing the last copy saved on this computer.",
+  "tracklist_search": "Search this list",
+  "tracklist_clear": "Clear search",
+  "tracklist_count": "{shown} of {total}",
+  "tracklist_no_results": "No songs match “{query}”.",
+  "tracklist_empty_album": "None of this album's songs are in the library.",
+  "tracklist_empty_playlist": "This playlist is empty.",
+  "tracklist_disc": "Disc {number}",
+  "tracklist_title": "Title",
+  "tracklist_album": "Album",
+  "tracklist_duration": "Duration",
+  "tracklist_sort_by": "Sort by {column}",
+  "tracklist_default_order": "Original order",
+  "tracklist_playing": "Playing",
+  "tracklist_paused": "Paused",
+  "albums_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} album",
+        "countPlural=other": "{countText} albums"
+      }
+    }
+  ],
+  "albums_count_zero": "No albums",
+  "albums_filtered": "{shown} of {total} albums",
+  "albums_play_all": "Play all",
+  "albums_shuffled_albums": "Albums in random order",
+  "albums_mix": "Random mix",
+  "albums_search": "Search albums",
+  "albums_sort_label": "Sort by",
+  "albums_sort_name": "Name A–Z",
+  "albums_sort_artist": "Artist",
+  "albums_sort_year": "Year",
+  "albums_sort_added": "Recently added",
+  "albums_sort_mostPlayed": "Most played",
+  "albums_sort_recentlyPlayed": "Recently played",
+  "albums_sort_random": "Random",
+  "albums_redraw": "Shuffle again",
+  "albums_empty": "No albums in the library yet.",
+  "albums_no_results": "No albums match “{query}”.",
+  "card_starred": "Favorite"
 }

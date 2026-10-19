@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde::Serialize;
+use serde_json::Value;
 
 use super::auth::{generate_salt, make_token};
 use super::error::SubsonicError;
@@ -10,7 +11,7 @@ use super::response::{ResponseBody, parse_response};
 use super::secret_url::SecretUrl;
 use super::types::{
     Album, Extension, LibraryItems, PlayQueue, Playlist, RawAlbumList, RawLibraryItems, RawPlaylists,
-    ScanStatus, with_raw_json,
+    ScanStatus, Song, with_raw_json,
 };
 
 const API_VERSION: &str = "1.16.1";
@@ -18,6 +19,8 @@ const CLIENT_NAME: &str = "ParloPlayer";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Library pages (e.g. 500 songs) are much larger than a ping.
 const LIBRARY_TIMEOUT: Duration = Duration::from_secs(60);
+/// Largest page of `getAlbumList2` (the API maximum).
+const ALBUM_LIST_PAGE: u32 = 500;
 /// OpenSubsonic extension: every endpoint accepts its parameters as a POST form.
 const FORM_POST: &str = "formPost";
 
@@ -46,11 +49,27 @@ impl SearchPage {
     }
 }
 
+/// What a `star` / `unstar` call is about: each kind has its own parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StarItem {
+    Song,
+    Album,
+    Artist,
+}
+
+impl StarItem {
+    fn param(self) -> &'static str {
+        match self {
+            StarItem::Song => "id",
+            StarItem::Album => "albumId",
+            StarItem::Artist => "artistId",
+        }
+    }
+}
+
 /// Orders of `getAlbumList2` used by the app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlbumListType {
-    /// Recently played, newest first (also by other apps).
-    Recent,
     /// Most played.
     Frequent,
 }
@@ -58,7 +77,6 @@ pub enum AlbumListType {
 impl AlbumListType {
     fn as_str(self) -> &'static str {
         match self {
-            AlbumListType::Recent => "recent",
             AlbumListType::Frequent => "frequent",
         }
     }
@@ -151,11 +169,34 @@ impl SubsonicClient {
         body.take::<RawLibraryItems>("searchResult3")?.try_into()
     }
 
-    /// `GET /rest/getAlbumList2` — the first `size` albums in that order.
-    pub async fn get_album_list2(&self, kind: AlbumListType, size: u32) -> Result<Vec<Album>, SubsonicError> {
-        let params = [("type", kind.as_str().to_string()), ("size", size.to_string())];
+    /// `GET /rest/getAlbumList2` — `size` albums in that order, after the
+    /// first `offset` ones. Servers send at most 500 per request.
+    pub async fn get_album_list2(
+        &self,
+        kind: AlbumListType,
+        size: u32,
+        offset: u32,
+    ) -> Result<Vec<Album>, SubsonicError> {
+        let params = [
+            ("type", kind.as_str().to_string()),
+            ("size", size.to_string()),
+            ("offset", offset.to_string()),
+        ];
         let mut body = self.get("getAlbumList2", &params, REQUEST_TIMEOUT).await?;
         with_raw_json(body.take::<RawAlbumList>("albumList2")?.album)
+    }
+
+    /// Every album of a `getAlbumList2` order, page by page.
+    pub async fn get_all_album_list2(&self, kind: AlbumListType) -> Result<Vec<Album>, SubsonicError> {
+        let mut albums = Vec::new();
+        loop {
+            let page = self.get_album_list2(kind, ALBUM_LIST_PAGE, albums.len() as u32).await?;
+            let last = page.len() < ALBUM_LIST_PAGE as usize;
+            albums.extend(page);
+            if last {
+                return Ok(albums);
+            }
+        }
     }
 
     /// `GET /rest/getStarred2` — starred artists, albums and songs.
@@ -192,14 +233,29 @@ impl SubsonicClient {
         with_raw_json(body.take::<RawPlaylists>("playlists")?.playlist)
     }
 
-    /// `star` / `unstar` songs (spec 2: favorites live on the server).
-    pub async fn set_songs_starred(&self, song_ids: &[String], starred: bool) -> Result<(), SubsonicError> {
-        if song_ids.is_empty() {
+    /// `star` / `unstar` songs, albums or artists (spec 2: favorites live on
+    /// the server).
+    pub async fn set_starred(&self, item: StarItem, ids: &[String], starred: bool) -> Result<(), SubsonicError> {
+        if ids.is_empty() {
             return Ok(());
         }
         let endpoint = if starred { "star" } else { "unstar" };
-        self.get(endpoint, &id_params(song_ids), REQUEST_TIMEOUT).await?;
+        self.get(endpoint, &star_params(item, ids), REQUEST_TIMEOUT).await?;
         Ok(())
+    }
+
+    /// `GET /rest/getPlaylist` — a playlist and its songs in the saved order.
+    pub async fn get_playlist(&self, playlist_id: &str) -> Result<(Playlist, Vec<Song>), SubsonicError> {
+        let mut body = self.get("getPlaylist", &[("id", playlist_id.to_string())], LIBRARY_TIMEOUT).await?;
+        let mut playlist: Value = body.take("playlist")?;
+        let entries = match playlist.as_object_mut().and_then(|p| p.remove("entry")) {
+            Some(Value::Array(entries)) => entries,
+            _ => Vec::new(),
+        };
+        let playlist = with_raw_json::<Playlist>(vec![playlist])?
+            .pop()
+            .ok_or_else(|| SubsonicError::InvalidResponse("getPlaylist: no playlist".into()))?;
+        Ok((playlist, with_raw_json(entries)?))
     }
 
     /// `GET /rest/getCoverArt` — the image bytes, resized by the server to
@@ -339,9 +395,9 @@ fn scrobble_params(plays: &[(String, i64)], submission: bool) -> Vec<(&'static s
     params
 }
 
-/// `id` repeats once per item.
-fn id_params(ids: &[String]) -> Vec<(&'static str, String)> {
-    ids.iter().map(|id| ("id", id.clone())).collect()
+/// The item's parameter repeats once per ID.
+fn star_params(item: StarItem, ids: &[String]) -> Vec<(&'static str, String)> {
+    ids.iter().map(|id| (item.param(), id.clone())).collect()
 }
 
 /// `id` repeats once per song, in playback order.
@@ -428,9 +484,11 @@ mod tests {
     }
 
     #[test]
-    fn star_params_repeat_the_id() {
+    fn star_params_repeat_the_id_of_each_kind() {
         let ids = ["s1".to_string(), "s2".to_string()];
-        assert_eq!(id_params(&ids), [("id", "s1".to_string()), ("id", "s2".to_string())]);
+        assert_eq!(star_params(StarItem::Song, &ids), [("id", "s1".to_string()), ("id", "s2".to_string())]);
+        assert_eq!(star_params(StarItem::Album, &ids[..1]), [("albumId", "s1".to_string())]);
+        assert_eq!(star_params(StarItem::Artist, &ids[..1]), [("artistId", "s1".to_string())]);
     }
 
     #[test]

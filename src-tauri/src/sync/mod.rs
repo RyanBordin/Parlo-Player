@@ -93,7 +93,7 @@ fn needs_full_sync(state: &SyncState, server_last_scan: Option<&str>, now: i64) 
     scan_changed || now - last_full >= FULL_SYNC_MAX_AGE_SECS
 }
 
-fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64)

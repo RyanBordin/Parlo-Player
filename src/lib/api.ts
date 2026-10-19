@@ -120,13 +120,14 @@ export type ArtistCard = {
   fallbackCoverArt: string | null;
 };
 
-/** A "Listen again" card: an album or a song. */
-export type ListenAgainItem = ({ kind: "album" } & AlbumCard) | ({ kind: "song" } & SongSummary);
+/** A card of a "See more" grid: album or artist. */
+export type HomeItem = ({ kind: "album" } & AlbumCard) | ({ kind: "artist" } & ArtistCard);
 
 /** The cards of a song row and every song of the list it stands for. */
 export type SongRow = { songs: SongSummary[]; allIds: string[] };
 
 export type HomeLibrary = {
+  listenAgain: SongRow;
   starredSongs: SongRow;
   starredAlbums: AlbumCard[];
   forgottenStarred: SongRow;
@@ -134,11 +135,95 @@ export type HomeLibrary = {
 };
 
 export type HomeActivity = {
-  listenAgain: ListenAgainItem[];
   mostPlayedAlbums: AlbumCard[];
-  /** False when the local cache stood in for the server. */
-  fromServer: boolean;
+  /** The local cache stood in for the server. */
+  offline: boolean;
 };
+
+/** Home rows with a "See more" grid. Mirrors `HomeSection` (Rust). */
+export type HomeSection = "most-played-albums" | "favorite-albums" | "favorite-artists";
+
+/** Every item of a section, for its grid. */
+export type SectionItems = { items: HomeItem[]; offline: boolean };
+
+/** A tracklist line (album / playlist page). Mirrors `TrackListSong` in src-tauri/src/db/tracks.rs. */
+export type TrackListSong = {
+  id: string;
+  title: string;
+  artist: string | null;
+  artistId: string | null;
+  album: string | null;
+  albumId: string | null;
+  albumArtist: string | null;
+  composer: string | null;
+  coverArt: string | null;
+  track: number | null;
+  discNumber: number | null;
+  year: number | null;
+  genre: string | null;
+  genres: string[];
+  /** Seconds. */
+  duration: number | null;
+  suffix: string | null;
+  /** kbps. */
+  bitRate: number | null;
+  path: string | null;
+  starred: boolean;
+};
+
+export type AlbumHeader = {
+  id: string;
+  name: string;
+  artist: string | null;
+  artistId: string | null;
+  coverArt: string | null;
+  songCount: number | null;
+  /** Seconds. */
+  duration: number | null;
+  year: number | null;
+  genre: string | null;
+  genres: string[];
+  /** Date added to the server (ISO 8601). */
+  created: string | null;
+  starred: boolean;
+};
+
+export type AlbumPage = { album: AlbumHeader; songs: TrackListSong[] };
+
+export type PlaylistHeader = {
+  id: string;
+  name: string;
+  owner: string | null;
+  coverArt: string | null;
+  songCount: number | null;
+  /** Seconds. */
+  duration: number | null;
+};
+
+export type PlaylistPage = {
+  playlist: PlaylistHeader;
+  /** Saved order; a song can appear more than once. */
+  songs: TrackListSong[];
+  /** Read from the local cache: the server could not be reached. */
+  offline: boolean;
+};
+
+/** An album of the Albums page. Mirrors `AlbumListItem` in src-tauri/src/db/albums.rs. */
+export type AlbumListItem = AlbumCard & {
+  sortName: string | null;
+  year: number | null;
+  genre: string | null;
+  genres: string[];
+  /** Date added to the server (ISO 8601). */
+  created: string | null;
+  starred: boolean;
+  playCount: number | null;
+  /** Last play (ISO 8601). */
+  played: string | null;
+};
+
+/** The buttons of the Albums page (spec 6.4). */
+export type AlbumsPlayMode = "inOrder" | "shuffledAlbums" | "mix";
 
 /** Mirrors `PlaylistSummary` in src-tauri/src/db/library.rs. */
 export type PlaylistSummary = {
@@ -192,14 +277,49 @@ export function listSongs(limit: number): Promise<SongSummary[]> {
   return invoke("list_songs", { limit });
 }
 
-/** Home rows from the local cache (favorites). */
+/** Home sections from the local cache ("Listen again", favorites). */
 export function getHomeLibrary(): Promise<HomeLibrary> {
   return invoke("get_home_library");
 }
 
-/** Home rows from the server, or the local cache without connection. */
+/** "Most played albums" from the server, or the local cache without connection. */
 export function getHomeActivity(): Promise<HomeActivity> {
   return invoke("get_home_activity");
+}
+
+/** Every item of a Home section (no 20-card limit). */
+export function getHomeSection(section: HomeSection): Promise<SectionItems> {
+  return invoke("get_home_section", { section });
+}
+
+/** An album and its songs from the local cache; `null` if not in the library. */
+export function getAlbumPage(albumId: string): Promise<AlbumPage | null> {
+  return invoke("get_album_page", { albumId });
+}
+
+/** A playlist from the server, or the local cache offline; `null` if it was deleted. */
+export function getPlaylistPage(playlistId: string): Promise<PlaylistPage | null> {
+  return invoke("get_playlist_page", { playlistId });
+}
+
+/** Star / unstar an album on the server and in the local cache. */
+export function setAlbumStarred(albumId: string, starred: boolean): Promise<void> {
+  return invoke("set_album_starred", { albumId, starred });
+}
+
+/** "Shuffle" of a list: shuffle on, starting at a random song. */
+export function playShuffled(songIds: string[], contextLabel: string): Promise<void> {
+  return invoke("play_shuffled", { songIds, contextLabel });
+}
+
+/** Every album of the library, last added first. */
+export function listAlbums(): Promise<AlbumListItem[]> {
+  return invoke("list_albums");
+}
+
+/** Plays the albums shown: in order, in a random album order, or as a mix. */
+export function playAlbums(albumIds: string[], mode: AlbumsPlayMode, contextLabel: string): Promise<void> {
+  return invoke("play_albums", { albumIds, mode, contextLabel });
 }
 
 /** Plays a whole album in disc and track order. */

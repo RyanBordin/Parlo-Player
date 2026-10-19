@@ -4,10 +4,19 @@
   import type { ArtistCard } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
 
-  let { artist, size = 160 }: { artist: ArtistCard; size?: number } = $props();
+  let {
+    artist,
+    size = 160,
+    fluid = false,
+  }: {
+    artist: ArtistCard;
+    size?: number;
+    /** Fills its grid column instead of `size` pixels. */
+    fluid?: boolean;
+  } = $props();
 </script>
 
-<a class="card" href={`/artists/${encodeURIComponent(artist.id)}`} style:width={`${size}px`} title={artist.name}>
+<a class="card" href={`/artists/${encodeURIComponent(artist.id)}`} style:width={fluid ? "100%" : `${size}px`} title={artist.name}>
   <span class="cover">
     <Cover id={artist.coverArt} fallback={artist.fallbackCoverArt} {size} />
   </span>

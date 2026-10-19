@@ -1,6 +1,9 @@
 // Which part of the app is shown: sign in, first sync or the app shell.
 import { goto } from "$app/navigation";
 import { getLibraryStatus, getSession, logout, type SavedSession } from "#lib/api.ts";
+import { clearAlbums } from "#lib/albums.svelte.ts";
+import { clearHome } from "#lib/home.svelte.ts";
+import { clearPages } from "#lib/page-cache.svelte.ts";
 import { startSync } from "#lib/sync.svelte.ts";
 
 export type AppView =
@@ -43,6 +46,9 @@ export function finishFirstSync(): void {
 /** Deletes the saved login. The next sign in starts at Home. */
 export async function signOut(): Promise<void> {
   await logout();
+  clearHome();
+  clearPages();
+  clearAlbums();
   app.view = { name: "login" };
   await goto("/", { replaceState: true });
 }

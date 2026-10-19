@@ -7,14 +7,16 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::library::{self, LibraryStats, PlaylistSummary, SongSummary};
+use crate::db::tracks::{self, AlbumPage, PlaylistHeader, PlaylistPage, TrackListSong};
 use crate::db::{self, DbError};
-use crate::home::{self, HomeActivity, HomeLibrary, ROW_SIZE};
-use crate::playback::{Playback, PlaybackError, QueueState};
+use crate::home::{self, HomeActivity, HomeLibrary, HomeSection, ROW_SIZE, SectionItems};
+use crate::db::albums::{self, AlbumListItem};
+use crate::playback::{AlbumsPlayMode, Playback, PlaybackError, QueueState};
 use crate::player::queue::RepeatMode;
 use crate::player::{PlayerError, PlayerState};
 use crate::session::{self, SavedSession, SessionError};
 use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
-use crate::subsonic::{AlbumListType, ServerInfo, SubsonicClient, SubsonicError};
+use crate::subsonic::{AlbumListType, ServerInfo, StarItem, SubsonicClient, SubsonicError};
 use crate::sync::{self, SyncError, SyncProgress};
 
 /// Event with a `SyncProgress` payload, sent while a sync runs.
@@ -248,27 +250,34 @@ pub async fn list_songs(
     .await
 }
 
-/// Home rows from the local cache: favorites (spec 6.1).
+/// Home sections from the local cache: "Listen again" and favorites (spec 6.1).
 #[tauri::command]
 pub async fn get_home_library(state: State<'_, Arc<AppState>>) -> Result<HomeLibrary, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
-    run_blocking(move || home::library(&db::open(&active.db_path)?)).await
+    run_blocking(move || home::library(&db::open(&active.db_path)?, crate::sync::now())).await
 }
 
-/// Home rows asked from the server ("Listen again", "Most played albums"),
-/// with the local cache standing in when it cannot be reached (spec 6.1).
+/// "Most played albums", asked from the server, with the local cache
+/// standing in when it cannot be reached (spec 6.1).
 #[tauri::command]
 pub async fn get_home_activity(state: State<'_, Arc<AppState>>) -> Result<HomeActivity, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
-    let client = &active.client;
-    let recent = client.get_album_list2(AlbumListType::Recent, ROW_SIZE as u32).await;
-    // If the server did not answer, do not wait for it a second time.
-    let frequent = match &recent {
-        Err(SubsonicError::Http(_)) => None,
-        _ => client.get_album_list2(AlbumListType::Frequent, ROW_SIZE as u32).await.ok(),
+    let frequent = active.client.get_album_list2(AlbumListType::Frequent, ROW_SIZE as u32, 0).await.ok();
+    run_blocking(move || home::activity(&db::open(&active.db_path)?, frequent)).await
+}
+
+/// Every item of a Home section, for its "See more" grid (spec 6.1).
+#[tauri::command]
+pub async fn get_home_section(
+    state: State<'_, Arc<AppState>>,
+    section: HomeSection,
+) -> Result<SectionItems, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let server = match section.server_list() {
+        Some(kind) => active.client.get_all_album_list2(kind).await.ok(),
+        None => None,
     };
-    let recent = recent.ok();
-    run_blocking(move || home::activity(&db::open(&active.db_path)?, recent, frequent)).await
+    run_blocking(move || home::section(&db::open(&active.db_path)?, section, server)).await
 }
 
 /// Playlists from the local cache, by name (sidebar, spec 4.2).
@@ -360,7 +369,7 @@ pub async fn set_song_starred(
     starred: bool,
 ) -> Result<(), CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
-    active.client.set_songs_starred(std::slice::from_ref(&song_id), starred).await?;
+    active.client.set_starred(StarItem::Song, std::slice::from_ref(&song_id), starred).await?;
 
     // The server already has it: a local failure is fixed by the next sync.
     let (db_path, id) = (active.db_path.clone(), song_id.clone());
@@ -375,6 +384,107 @@ pub async fn set_song_starred(
     if let Ok(playback) = &playback.0 {
         playback.song_starred(&song_id, starred);
     }
+    Ok(())
+}
+
+/// Stars or unstars an album (heart of the album page, spec 6.5).
+#[tauri::command]
+pub async fn set_album_starred(
+    state: State<'_, Arc<AppState>>,
+    album_id: String,
+    starred: bool,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    active.client.set_starred(StarItem::Album, std::slice::from_ref(&album_id), starred).await?;
+    let saved = run_blocking(move || tracks::set_album_starred(&db::open(&active.db_path)?, &album_id, starred)).await;
+    if let Err(error) = saved {
+        eprintln!("commands: album star saved on the server but not locally: {error:?}");
+    }
+    Ok(())
+}
+
+/// An album and its songs, from the local cache (spec 6.5). `None` if the
+/// album is not in the library.
+#[tauri::command]
+pub async fn get_album_page(
+    state: State<'_, Arc<AppState>>,
+    album_id: String,
+) -> Result<Option<AlbumPage>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || tracks::album_page(&db::open(&active.db_path)?, &album_id)).await
+}
+
+/// A playlist in its saved order, asked from the server (and kept for
+/// offline use), or from the local cache without connection (spec 6.5).
+#[tauri::command]
+pub async fn get_playlist_page(
+    state: State<'_, Arc<AppState>>,
+    playlist_id: String,
+) -> Result<Option<PlaylistPage>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    match active.client.get_playlist(&playlist_id).await {
+        Ok((playlist, songs)) => {
+            let page = PlaylistPage {
+                playlist: PlaylistHeader {
+                    id: playlist.id.clone(),
+                    name: playlist.name,
+                    owner: playlist.owner,
+                    cover_art: playlist.cover_art,
+                    song_count: playlist.song_count,
+                    duration: playlist.duration,
+                },
+                songs: songs.iter().map(TrackListSong::from).collect(),
+                offline: false,
+            };
+            let ids: Vec<String> = songs.into_iter().map(|s| s.id).collect();
+            let saved = run_blocking(move || {
+                tracks::save_playlist_songs(&mut db::open(&active.db_path)?, &playlist.id, &ids)
+            })
+            .await;
+            if let Err(error) = saved {
+                eprintln!("commands: could not keep the playlist for offline use: {error:?}");
+            }
+            Ok(Some(page))
+        }
+        // Not found on the server: it was deleted.
+        Err(SubsonicError::Api { code: 70, .. }) => Ok(None),
+        Err(_) => run_blocking(move || tracks::cached_playlist_page(&db::open(&active.db_path)?, &playlist_id)).await,
+    }
+}
+
+/// Every album for the Albums page, last added first (spec 6.4).
+#[tauri::command]
+pub async fn list_albums(state: State<'_, Arc<AppState>>) -> Result<Vec<AlbumListItem>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || albums::album_list(&db::open(&active.db_path)?)).await
+}
+
+/// The buttons of the Albums page, on the albums shown (spec 6.4).
+#[tauri::command]
+pub async fn play_albums(
+    playback: State<'_, PlaybackSlot>,
+    album_ids: Vec<String>,
+    mode: AlbumsPlayMode,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let playback = playback_of(&playback)?;
+    tauri::async_runtime::spawn_blocking(move || playback.play_albums(&album_ids, mode, context_label))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
+/// "Shuffle" button of a list: shuffle on, from a random song.
+#[tauri::command]
+pub async fn play_shuffled(
+    playback: State<'_, PlaybackSlot>,
+    song_ids: Vec<String>,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let playback = playback_of(&playback)?;
+    tauri::async_runtime::spawn_blocking(move || playback.play_shuffled(song_ids, context_label))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
     Ok(())
 }
 

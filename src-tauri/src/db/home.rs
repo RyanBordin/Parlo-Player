@@ -58,19 +58,19 @@ pub fn forgotten_starred_songs(conn: &Connection) -> DbResult<Vec<SongSummary>> 
 }
 
 /// Starred albums, last starred first.
-pub fn starred_albums(conn: &Connection, limit: u32) -> DbResult<Vec<AlbumCard>> {
+pub fn starred_albums(conn: &Connection, limit: Option<u32>) -> DbResult<Vec<AlbumCard>> {
     let sql = format!(
         "SELECT {ALBUM_CARD_COLUMNS} FROM albums WHERE starred IS NOT NULL
          ORDER BY starred DESC, name LIMIT ?1"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let albums = stmt.query_map([limit], album_card_from_row)?.collect::<Result<_, _>>()?;
+    let albums = stmt.query_map([sql_limit(limit)], album_card_from_row)?.collect::<Result<_, _>>()?;
     Ok(albums)
 }
 
 /// Starred artists, last starred first, each with its latest album's cover
 /// (highest year; on a tie, the last added) as the photo fallback.
-pub fn starred_artists(conn: &Connection, limit: u32) -> DbResult<Vec<ArtistCard>> {
+pub fn starred_artists(conn: &Connection, limit: Option<u32>) -> DbResult<Vec<ArtistCard>> {
     let mut stmt = conn.prepare(
         "SELECT ar.id, ar.name, ar.cover_art,
                 (SELECT al.cover_art FROM albums al
@@ -80,7 +80,7 @@ pub fn starred_artists(conn: &Connection, limit: u32) -> DbResult<Vec<ArtistCard
          ORDER BY ar.starred DESC, ar.name LIMIT ?1",
     )?;
     let artists = stmt
-        .query_map([limit], |row| {
+        .query_map([sql_limit(limit)], |row| {
             Ok(ArtistCard {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -92,44 +92,40 @@ pub fn starred_artists(conn: &Connection, limit: u32) -> DbResult<Vec<ArtistCard
     Ok(artists)
 }
 
-/// Songs of the local history, each once, by its last play (Unix seconds),
-/// newest first. Songs no longer in the library are left out.
-pub fn recently_played_songs(conn: &Connection, limit: u32) -> DbResult<Vec<(SongSummary, i64)>> {
+/// Songs last played in the 30 days before `now` (Unix seconds), most played
+/// first; on a tie, the most recently played. `played` comes from the server
+/// (plays in other apps too) and from the plays counted here. SQLite reads
+/// both date formats (with or without fractions of a second).
+pub fn recently_played_top_songs(conn: &Connection, now: i64) -> DbResult<Vec<SongSummary>> {
     let sql = format!(
-        "SELECT {SONG_SUMMARY_COLUMNS}, last_played FROM songs
-         JOIN (SELECT song_id, MAX(played_at) AS last_played FROM play_history GROUP BY song_id)
-           ON song_id = songs.id
-         ORDER BY last_played DESC LIMIT ?1"
+        "SELECT {SONG_SUMMARY_COLUMNS} FROM songs
+         WHERE julianday(played) >= julianday(?1, 'unixepoch', '-30 days')
+         ORDER BY COALESCE(play_count, 0) DESC, julianday(played) DESC, title"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let songs = stmt
-        .query_map([limit], |row| Ok((song_summary_from_row(row)?, row.get(9)?)))?
-        .collect::<Result<_, _>>()?;
+    let songs = stmt.query_map([now], song_summary_from_row)?.collect::<Result<_, _>>()?;
     Ok(songs)
 }
 
-/// Offline fallback of "Listen again": albums by last play (ISO date, as the
-/// server writes it), newest first.
-pub fn recently_played_albums(conn: &Connection, limit: u32) -> DbResult<Vec<(AlbumCard, String)>> {
+/// Most played songs of all time (at least one play), then the most recent.
+pub fn most_played_songs(conn: &Connection, limit: Option<u32>) -> DbResult<Vec<SongSummary>> {
     let sql = format!(
-        "SELECT {ALBUM_CARD_COLUMNS}, played FROM albums WHERE played IS NOT NULL
-         ORDER BY played DESC LIMIT ?1"
+        "SELECT {SONG_SUMMARY_COLUMNS} FROM songs WHERE COALESCE(play_count, 0) > 0
+         ORDER BY play_count DESC, julianday(played) DESC NULLS LAST, title LIMIT ?1"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let albums = stmt
-        .query_map([limit], |row| Ok((album_card_from_row(row)?, row.get(5)?)))?
-        .collect::<Result<_, _>>()?;
-    Ok(albums)
+    let songs = stmt.query_map([sql_limit(limit)], song_summary_from_row)?.collect::<Result<_, _>>()?;
+    Ok(songs)
 }
 
 /// Offline fallback of "Most played albums": play count, then last play.
-pub fn most_played_albums(conn: &Connection, limit: u32) -> DbResult<Vec<AlbumCard>> {
+pub fn most_played_albums(conn: &Connection, limit: Option<u32>) -> DbResult<Vec<AlbumCard>> {
     let sql = format!(
         "SELECT {ALBUM_CARD_COLUMNS} FROM albums WHERE COALESCE(play_count, 0) > 0
          ORDER BY play_count DESC, played DESC, name LIMIT ?1"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let albums = stmt.query_map([limit], album_card_from_row)?.collect::<Result<_, _>>()?;
+    let albums = stmt.query_map([sql_limit(limit)], album_card_from_row)?.collect::<Result<_, _>>()?;
     Ok(albums)
 }
 
@@ -144,6 +140,11 @@ pub fn album_songs(conn: &Connection, album_id: &str) -> DbResult<(Option<String
     )?;
     let ids = stmt.query_map(params![album_id], |row| row.get(0))?.collect::<Result<_, _>>()?;
     Ok((name, ids))
+}
+
+/// SQLite reads `LIMIT -1` as no limit.
+fn sql_limit(limit: Option<u32>) -> i64 {
+    limit.map_or(-1, i64::from)
 }
 
 fn songs(conn: &Connection, sql: &str) -> DbResult<Vec<SongSummary>> {
@@ -220,31 +221,46 @@ mod tests {
         album(&conn, "latest", "ar1", Some(2019), "2026-01-01T00:00:00Z");
         album(&conn, "undated", "ar1", None, "2026-09-01T00:00:00Z");
 
-        let artists = starred_artists(&conn, 20).unwrap();
+        let artists = starred_artists(&conn, Some(20)).unwrap();
         assert_eq!(artists.len(), 1, "only starred artists");
+        assert_eq!(starred_artists(&conn, None).unwrap(), artists, "no limit gives every row");
         assert_eq!(artists[0].cover_art.as_deref(), Some("ar-ar1"));
         assert_eq!(artists[0].fallback_cover_art.as_deref(), Some("al-latest"));
     }
 
-    #[test]
-    fn history_gives_each_song_once_by_its_last_play() {
-        let conn = open_in_memory().unwrap();
-        song(&conn, "s1", "al1", None, None, None);
-        song(&conn, "s2", "al1", None, None, None);
-        conn.execute(
-            "INSERT INTO play_history (song_id, played_at) VALUES
-             ('s1', 100), ('s2', 200), ('s1', 300), ('gone', 400)",
-            [],
-        )
-        .unwrap();
+    /// 2026-10-18T12:00:00Z.
+    const NOW: i64 = 1_792_324_800;
 
-        let played = recently_played_songs(&conn, 20).unwrap();
-        let summary: Vec<(&str, i64)> = played.iter().map(|(s, at)| (s.id.as_str(), *at)).collect();
-        assert_eq!(summary, [("s1", 300), ("s2", 200)], "songs not in the library are left out");
+    #[test]
+    fn listen_again_takes_the_last_30_days_by_play_count() {
+        let conn = open_in_memory().unwrap();
+        // Server dates carry nanoseconds; the app's own have whole seconds.
+        song(&conn, "yesterday", "al1", None, Some(3), Some("2026-10-17T08:00:00.123456789Z"));
+        song(&conn, "this-month", "al1", None, Some(10), Some("2026-10-01T00:00:00Z"));
+        song(&conn, "same-count", "al1", None, Some(3), Some("2026-10-02T00:00:00Z"));
+        song(&conn, "31-days-ago", "al1", None, Some(50), Some("2026-09-17T12:00:00Z"));
+        song(&conn, "never", "al1", None, None, None);
+
+        assert_eq!(
+            ids(&recently_played_top_songs(&conn, NOW).unwrap()),
+            ["this-month", "yesterday", "same-count"],
+            "most played first; on a tie, the most recent"
+        );
     }
 
     #[test]
-    fn local_fallbacks_order_albums_by_play() {
+    fn most_played_songs_skip_the_never_played() {
+        let conn = open_in_memory().unwrap();
+        song(&conn, "often", "al1", None, Some(50), Some("2026-01-01T00:00:00Z"));
+        song(&conn, "once", "al1", None, Some(1), Some("2026-10-01T00:00:00Z"));
+        song(&conn, "zero", "al1", None, Some(0), None);
+        song(&conn, "never", "al1", None, None, None);
+        assert_eq!(ids(&most_played_songs(&conn, None).unwrap()), ["often", "once"]);
+        assert_eq!(ids(&most_played_songs(&conn, Some(1)).unwrap()), ["often"]);
+    }
+
+    #[test]
+    fn local_fallback_orders_albums_by_play_count() {
         let conn = open_in_memory().unwrap();
         album(&conn, "a", "ar1", None, "2026-01-01T00:00:00Z");
         album(&conn, "b", "ar1", None, "2026-01-01T00:00:00Z");
@@ -255,9 +271,7 @@ mod tests {
         )
         .unwrap();
 
-        let recent: Vec<String> = recently_played_albums(&conn, 20).unwrap().into_iter().map(|(a, _)| a.id).collect();
-        assert_eq!(recent, ["a", "b"]);
-        let frequent: Vec<String> = most_played_albums(&conn, 20).unwrap().into_iter().map(|a| a.id).collect();
+        let frequent: Vec<String> = most_played_albums(&conn, Some(20)).unwrap().into_iter().map(|a| a.id).collect();
         assert_eq!(frequent, ["b", "a"], "never played albums are left out");
     }
 

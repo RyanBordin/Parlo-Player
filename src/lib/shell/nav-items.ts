@@ -27,7 +27,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/settings", label: m.nav_settings, icon: Settings },
 ];
 
-/** Home only matches itself; the others also match their sub-pages. */
+/** Home matches itself and its "See more" pages; the others, their sub-pages. */
 export function isActive(item: NavItem, pathname: string): boolean {
-  return item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`);
+  if (item.href === "/") return pathname === "/" || pathname.startsWith("/home/");
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }

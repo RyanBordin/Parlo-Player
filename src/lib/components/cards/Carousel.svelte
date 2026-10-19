@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Horizontal row of cards (spec 6.1): title on the left, < > on the right,
-  // smooth scrolling by one "page" of cards. Mouse wheel with Shift and
+  // Horizontal row (spec 6.1): title on the left; buttons ("Play all", "See
+  // more") and < > on the right. Smooth scrolling by a "page" of cards, or by
+  // exactly one page with `paged` (song lists). Mouse wheel with Shift and
   // touchpads also scroll it.
   import type { Snippet } from "svelte";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
@@ -12,15 +13,21 @@
     count,
     loaded = true,
     empty,
+    paged = false,
+    actions,
     children,
   }: {
     title: string;
-    /** Number of cards, to know when the row is empty. */
+    /** Number of items, to know when the row is empty. */
     count: number;
     /** False while loading: no "empty" message yet. */
     loaded?: boolean;
     /** Short text explaining how to fill the row (spec 6.1). */
     empty: string;
+    /** Each child is a full-width page; the arrows move one page. */
+    paged?: boolean;
+    /** Buttons next to the arrows. */
+    actions?: Snippet;
     children: Snippet;
   } = $props();
 
@@ -34,12 +41,14 @@
     atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
   }
 
-  function scrollPage(direction: 1 | -1) {
-    // A bit less than the visible width, so one card stays in view.
-    track?.scrollBy({ left: direction * track.clientWidth * 0.9, behavior: "smooth" });
+  function scroll(direction: 1 | -1) {
+    if (!track) return;
+    // Cards: a bit less than the visible width, so one card stays in view.
+    const step = paged ? track.clientWidth : track.clientWidth * 0.9;
+    track.scrollBy({ left: direction * step, behavior: "smooth" });
   }
 
-  // Again when the cards or the window size change.
+  // Again when the items or the window size change.
   $effect(() => {
     void count;
     if (!track) return;
@@ -54,11 +63,12 @@
   <header>
     <h2 class="section-title">{title}</h2>
     {#if count > 0}
-      <div class="arrows">
-        <button type="button" onclick={() => scrollPage(-1)} disabled={atStart} aria-label={m.carousel_back()} title={m.carousel_back()}>
+      <div class="tools">
+        {@render actions?.()}
+        <button type="button" class="arrow" onclick={() => scroll(-1)} disabled={atStart} aria-label={m.carousel_back()} title={m.carousel_back()}>
           <ChevronLeft />
         </button>
-        <button type="button" onclick={() => scrollPage(1)} disabled={atEnd} aria-label={m.carousel_forward()} title={m.carousel_forward()}>
+        <button type="button" class="arrow" onclick={() => scroll(1)} disabled={atEnd} aria-label={m.carousel_forward()} title={m.carousel_forward()}>
           <ChevronRight />
         </button>
       </div>
@@ -66,7 +76,7 @@
   </header>
 
   {#if count > 0}
-    <div class="track" bind:this={track} onscroll={update}>
+    <div class="track" class:paged bind:this={track} onscroll={update}>
       {@render children()}
     </div>
   {:else if loaded}
@@ -81,6 +91,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--space-4);
     margin-bottom: var(--space-3);
   }
 
@@ -88,12 +99,36 @@
     margin: 0;
   }
 
-  .arrows {
+  .tools {
     display: flex;
+    align-items: center;
     gap: var(--space-2);
   }
 
-  .arrows button {
+  /* "Play all" / "See more": small outlined pills (also used as links). */
+  .tools :global(.pill) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 32px;
+    margin-right: var(--space-2);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .tools :global(.pill:hover) {
+    background: var(--color-surface-hover);
+  }
+
+  .arrow {
     width: 32px;
     height: 32px;
     display: grid;
@@ -105,11 +140,11 @@
     cursor: pointer;
   }
 
-  .arrows button:not(:disabled):hover {
+  .arrow:not(:disabled):hover {
     background: var(--color-surface-hover);
   }
 
-  .arrows button:disabled {
+  .arrow:disabled {
     color: var(--color-text-muted);
     opacity: 0.4;
     cursor: default;
@@ -124,6 +159,16 @@
     scrollbar-width: none;
     /* Room for the Play button's shadow and the focus ring. */
     padding: var(--space-1) 0 var(--space-2);
+  }
+
+  /* Pages fill the row exactly, so one arrow click is one page. */
+  .track.paged {
+    gap: 0;
+    scroll-snap-type: x mandatory;
+  }
+
+  .track.paged > :global(*) {
+    flex: 0 0 100%;
   }
 
   .track::-webkit-scrollbar {

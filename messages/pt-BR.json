@@ -135,5 +135,84 @@
   "card_type_song": "Faixa",
   "card_play": "Tocar {name}",
   "carousel_back": "Rolar para trás",
-  "carousel_forward": "Rolar para a frente"
+  "carousel_forward": "Rolar para a frente",
+  "home_play_all": "Tocar tudo",
+  "home_see_more": "Ver mais",
+  "album_kind": "Álbum",
+  "playlist_kind": "Playlist",
+  "collection_by": "de",
+  "collection_owner": "de {owner}",
+  "collection_song_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} música",
+        "countPlural=other": "{countText} músicas"
+      }
+    }
+  ],
+  "collection_song_count_zero": "Nenhuma música",
+  "duration_minutes": "{minutes} min",
+  "duration_hours_minutes": "{hours} h {minutes} min",
+  "album_added": "Adicionado em {date}",
+  "collection_play": "Tocar",
+  "collection_shuffle": "Aleatório",
+  "album_not_found": "Este álbum não está na biblioteca. Tente sincronizar.",
+  "playlist_not_found": "Esta playlist não existe mais.",
+  "playlist_offline": "Sem conexão com o servidor: mostrando a última cópia salva neste computador.",
+  "tracklist_search": "Buscar nesta lista",
+  "tracklist_clear": "Limpar busca",
+  "tracklist_count": "{shown} de {total}",
+  "tracklist_no_results": "Nenhuma música encontrada para “{query}”.",
+  "tracklist_empty_album": "Nenhuma música deste álbum está na biblioteca.",
+  "tracklist_empty_playlist": "Esta playlist está vazia.",
+  "tracklist_disc": "Disco {number}",
+  "tracklist_title": "Título",
+  "tracklist_album": "Álbum",
+  "tracklist_duration": "Duração",
+  "tracklist_sort_by": "Ordenar por {column}",
+  "tracklist_default_order": "Ordem original",
+  "tracklist_playing": "Tocando",
+  "tracklist_paused": "Pausada",
+  "albums_count": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} álbum",
+        "countPlural=other": "{countText} álbuns"
+      }
+    }
+  ],
+  "albums_count_zero": "Nenhum álbum",
+  "albums_filtered": "{shown} de {total} álbuns",
+  "albums_play_all": "Tocar tudo",
+  "albums_shuffled_albums": "Álbuns em ordem aleatória",
+  "albums_mix": "Mix aleatório",
+  "albums_search": "Buscar álbuns",
+  "albums_sort_label": "Ordenar por",
+  "albums_sort_name": "Nome A–Z",
+  "albums_sort_artist": "Artista",
+  "albums_sort_year": "Ano",
+  "albums_sort_added": "Adicionados recentemente",
+  "albums_sort_mostPlayed": "Mais tocados",
+  "albums_sort_recentlyPlayed": "Tocados recentemente",
+  "albums_sort_random": "Aleatório",
+  "albums_redraw": "Sortear de novo",
+  "albums_empty": "Ainda não há álbuns na biblioteca.",
+  "albums_no_results": "Nenhum álbum encontrado para “{query}”.",
+  "card_starred": "Favorito"
 }

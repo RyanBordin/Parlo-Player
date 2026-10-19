@@ -1,8 +1,8 @@
 <script lang="ts">
   // App shell (spec 4): sidebar, Topbar over the scrolling content, and the
   // Player Bar, always visible on every page.
-  import type { Snippet } from "svelte";
-  import { afterNavigate } from "$app/navigation";
+  import { tick, type Snippet } from "svelte";
+  import { afterNavigate, beforeNavigate } from "$app/navigation";
   import { restoreQueue, type SavedSession } from "#lib/api.ts";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
   import { listenToPlayer } from "#lib/player.svelte.ts";
@@ -19,11 +19,25 @@
   navHistory.index = 0;
   navHistory.length = 1;
 
-  afterNavigate((navigation) => {
+  // The page scrolls inside the content area, not the window, so the
+  // browser does not remember where each page was: keep it per history entry.
+  const scrollPositions: number[] = [];
+
+  beforeNavigate(() => {
+    if (content) scrollPositions[navHistory.index] = content.scrollTop;
+  });
+
+  afterNavigate(async (navigation) => {
     trackNavigation(navigation);
-    // The page scrolls inside the content area, not the window: start a new
-    // page at the top (Back / Forward keep the browser's behavior).
-    if (navigation.type !== "popstate" && content) content.scrollTop = 0;
+    if (!content) return;
+    if (navigation.type === "popstate") {
+      // Back / Forward: where that page was. Pages with kept data (Home,
+      // "See more") are already drawn, so the position fits.
+      await tick();
+      content.scrollTop = scrollPositions[navHistory.index] ?? 0;
+    } else {
+      content.scrollTop = 0;
+    }
   });
 
   // Listen first, so the resumed queue (spec 5.6) reaches the player bar.

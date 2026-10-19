@@ -1,11 +1,13 @@
 //! Local SQLite database: library cache, play history, saved queue and sync state.
 //! One database file per server + user (spec 12.4).
 
+pub mod albums;
 pub mod history;
 pub mod home;
 pub mod library;
 mod migrations;
 pub mod saved_queue;
+pub mod tracks;
 
 use std::fs;
 use std::path::Path;

@@ -1,18 +1,15 @@
 <script lang="ts">
-  // Home (spec 6.1): six rows of cards, in this order.
-  import {
-    getHomeActivity,
-    getHomeLibrary,
-    playContext,
-    type HomeActivity,
-    type HomeLibrary,
-    type SongRow,
-  } from "#lib/api.ts";
+  // Home (spec 6.1): six sections, in this order. Song sections have "Play
+  // all"; album and artist rows have "See more".
+  import { playContext, type SongRow } from "#lib/api.ts";
   import AlbumCard from "#lib/components/cards/AlbumCard.svelte";
   import ArtistCard from "#lib/components/cards/ArtistCard.svelte";
   import Carousel from "#lib/components/cards/Carousel.svelte";
+  import PlayAllButton from "#lib/components/cards/PlayAllButton.svelte";
   import TrackCard from "#lib/components/cards/TrackCard.svelte";
-  import { describeError, type ErrorMessage } from "#lib/errors.ts";
+  import TrackShelf from "#lib/components/cards/TrackShelf.svelte";
+  import { describeError } from "#lib/errors.ts";
+  import { home, refreshHome } from "#lib/home.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { syncState } from "#lib/sync.svelte.ts";
 
@@ -20,125 +17,103 @@
   const CARD = 160;
   const LARGE_CARD = 200;
 
-  let library = $state<HomeLibrary | null>(null);
-  let activity = $state<HomeActivity | null>(null);
-  let error = $state<ErrorMessage | null>(null);
-
-  // The songs of "Listen again", in the row's order: a click plays them.
-  let listenAgainSongs = $derived(
-    (activity?.listenAgain ?? []).flatMap((item) => (item.kind === "song" ? [item.id] : [])),
-  );
-
-  // Each time the page opens and after every sync (spec 6.1). The local rows
-  // come at once; the server ones when it answers.
+  // The last data shows at once; then each opening and each sync refresh it.
   $effect(() => {
     void syncState.finishedCount;
-    error = null;
-    getHomeLibrary()
-      .then((rows) => (library = rows))
-      .catch((e) => (error = describeError(e)));
-    getHomeActivity()
-      .then((rows) => (activity = rows))
-      .catch((e) => (error = describeError(e)));
+    refreshHome();
   });
 
-  function play(ids: string[], index: number, label: string) {
-    error = null;
-    playContext(ids, index, label).catch((e) => (error = describeError(e)));
-  }
-
-  /** A click on a song of a row plays the whole list it stands for. */
-  function playRow(row: SongRow, index: number, label: string) {
-    play(row.allIds, index, label);
-  }
-
   function showError(e: unknown) {
-    error = describeError(e);
+    home.error = describeError(e);
+  }
+
+  /** A song section plays its whole list, from `index` ("Playing from" its title). */
+  function playRow(row: SongRow | undefined, index: number, label: string) {
+    if (row) playContext(row.allIds, index, label).catch(showError);
   }
 </script>
 
+{#snippet seeMore(href: string)}
+  <a class="pill" {href}>{m.home_see_more()}</a>
+{/snippet}
+
 <div class="page">
   <h1 class="page-title">{m.nav_home()}</h1>
-  {#if activity && !activity.fromServer}
+  {#if home.activity?.offline}
     <p class="page-subtitle">{m.home_offline()}</p>
   {/if}
-  {#if error}
-    <p class="error">{error.message}</p>
+  {#if home.error}
+    <p class="error">{home.error.message}</p>
   {/if}
 
   <div class="rows">
     <Carousel
       title={m.home_listen_again()}
-      count={activity?.listenAgain.length ?? 0}
-      loaded={activity !== null}
+      count={home.library?.listenAgain.songs.length ?? 0}
+      loaded={home.library !== null}
       empty={m.home_listen_again_empty()}
     >
-      {#each activity?.listenAgain ?? [] as item (`${item.kind}-${item.id}`)}
-        {#if item.kind === "album"}
-          <AlbumCard album={item} size={LARGE_CARD} large label={m.card_type_album()} onerror={showError} />
-        {:else}
-          <TrackCard
-            song={item}
-            size={LARGE_CARD}
-            large
-            label={m.card_type_song()}
-            onplay={() => play(listenAgainSongs, listenAgainSongs.indexOf(item.id), m.home_listen_again())}
-          />
-        {/if}
+      {#snippet actions()}
+        <PlayAllButton onplay={() => playRow(home.library?.listenAgain, 0, m.home_listen_again())} />
+      {/snippet}
+      {#each home.library?.listenAgain.songs ?? [] as song, index (song.id)}
+        <TrackCard
+          {song}
+          size={LARGE_CARD}
+          large
+          onplay={() => playRow(home.library?.listenAgain, index, m.home_listen_again())}
+        />
       {/each}
     </Carousel>
+
+    <TrackShelf
+      title={m.home_starred_songs()}
+      row={home.library?.starredSongs ?? null}
+      loaded={home.library !== null}
+      empty={m.home_starred_songs_empty()}
+      onerror={showError}
+    />
 
     <Carousel
       title={m.home_most_played_albums()}
-      count={activity?.mostPlayedAlbums.length ?? 0}
-      loaded={activity !== null}
+      count={home.activity?.mostPlayedAlbums.length ?? 0}
+      loaded={home.activity !== null}
       empty={m.home_most_played_albums_empty()}
     >
-      {#each activity?.mostPlayedAlbums ?? [] as album (album.id)}
+      {#snippet actions()}{@render seeMore("/home/most-played-albums")}{/snippet}
+      {#each home.activity?.mostPlayedAlbums ?? [] as album (album.id)}
         <AlbumCard {album} size={CARD} onerror={showError} />
-      {/each}
-    </Carousel>
-
-    <Carousel
-      title={m.home_starred_songs()}
-      count={library?.starredSongs.songs.length ?? 0}
-      loaded={library !== null}
-      empty={m.home_starred_songs_empty()}
-    >
-      {#each library?.starredSongs.songs ?? [] as song, index (song.id)}
-        <TrackCard {song} size={CARD} onplay={() => playRow(library!.starredSongs, index, m.home_starred_songs())} />
       {/each}
     </Carousel>
 
     <Carousel
       title={m.home_starred_albums()}
-      count={library?.starredAlbums.length ?? 0}
-      loaded={library !== null}
+      count={home.library?.starredAlbums.length ?? 0}
+      loaded={home.library !== null}
       empty={m.home_starred_albums_empty()}
     >
-      {#each library?.starredAlbums ?? [] as album (album.id)}
+      {#snippet actions()}{@render seeMore("/home/favorite-albums")}{/snippet}
+      {#each home.library?.starredAlbums ?? [] as album (album.id)}
         <AlbumCard {album} size={CARD} onerror={showError} />
       {/each}
     </Carousel>
 
-    <Carousel
+    <TrackShelf
       title={m.home_forgotten_starred()}
-      count={library?.forgottenStarred.songs.length ?? 0}
-      loaded={library !== null}
+      row={home.library?.forgottenStarred ?? null}
+      loaded={home.library !== null}
       empty={m.home_forgotten_starred_empty()}
-    >
-      {#each library?.forgottenStarred.songs ?? [] as song, index (song.id)}
-        <TrackCard {song} size={CARD} onplay={() => playRow(library!.forgottenStarred, index, m.home_forgotten_starred())} />
-      {/each}
-    </Carousel>
+      onerror={showError}
+    />
 
     <Carousel
       title={m.home_starred_artists()}
-      count={library?.starredArtists.length ?? 0}
-      loaded={library !== null}
+      count={home.library?.starredArtists.length ?? 0}
+      loaded={home.library !== null}
       empty={m.home_starred_artists_empty()}
     >
-      {#each library?.starredArtists ?? [] as artist (artist.id)}
+      {#snippet actions()}{@render seeMore("/home/favorite-artists")}{/snippet}
+      {#each home.library?.starredArtists ?? [] as artist (artist.id)}
         <ArtistCard {artist} size={CARD} />
       {/each}
     </Carousel>

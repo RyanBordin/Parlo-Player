@@ -17,7 +17,9 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak, mpsc};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use rand::seq::SliceRandom;
+use rand::{Rng, RngExt};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use thiserror::Error;
 
@@ -34,6 +36,32 @@ pub const QUEUE_CHANGED_EVENT: &str = "queue-changed";
 const PLAYER_STATE_EVENT: &str = "player-state";
 const PLAYER_POSITION_EVENT: &str = "player-position";
 const PLAYER_ERROR_EVENT: &str = "player-error";
+
+/// Songs of a random mix of a big set (spec 9).
+pub const MIX_SIZE: usize = 100;
+
+/// The three buttons of the Albums page (spec 6.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AlbumsPlayMode {
+    /// The albums in the order shown, one after the other.
+    InOrder,
+    /// The albums in a random order, each album's songs in order.
+    ShuffledAlbums,
+    /// The songs of all the albums mixed, at most `MIX_SIZE`.
+    Mix,
+}
+
+/// What a new queue does with the shuffle mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShuffleMode {
+    /// As the user left it, from the clicked song.
+    Keep,
+    /// On, from a random song ("Shuffle" buttons).
+    On,
+    /// Off: the order given is the point (Albums page buttons).
+    Off,
+}
 
 /// Pending scrobbles sent per request.
 const SCROBBLE_BATCH: u32 = 100;
@@ -162,19 +190,56 @@ impl Playback {
         start_index: usize,
         label: String,
     ) -> Result<(), PlaybackError> {
+        self.play_list(song_ids, start_index, label, ShuffleMode::Keep)
+    }
+
+    /// "Shuffle" button of a list (spec 6.5): turns shuffle on and starts
+    /// at a random song, with the rest shuffled after it.
+    pub fn play_shuffled(&self, song_ids: Vec<String>, label: String) -> Result<(), PlaybackError> {
+        self.play_list(song_ids, 0, label, ShuffleMode::On)
+    }
+
+    /// The buttons of the Albums page (spec 6.4), on the albums shown, in the
+    /// order shown. Shuffle turns off: the order built is the point.
+    pub fn play_albums(&self, album_ids: &[String], mode: AlbumsPlayMode, label: String) -> Result<(), PlaybackError> {
+        let library = self.library()?;
+        let albums = read_db(&library.db_path, |conn| db::albums::songs_of_albums(conn, album_ids))?;
+        let ids = arrange_albums(albums, mode, &mut rand::rng());
+        self.play_list(ids, 0, label, ShuffleMode::Off)
+    }
+
+    /// Replaces the queue with `song_ids` and plays from `start_index` (or a
+    /// random song, with shuffle `On`).
+    fn play_list(
+        &self,
+        song_ids: Vec<String>,
+        start_index: usize,
+        label: String,
+        shuffle: ShuffleMode,
+    ) -> Result<(), PlaybackError> {
         let library = self.library()?;
         let found = read_db(&library.db_path, |conn| library::song_summaries(conn, &song_ids))?;
 
-        let clicked = song_ids.get(start_index).cloned();
-        let ids: Vec<String> = song_ids.into_iter().filter(|id| found.contains_key(id)).collect();
+        let (ids, start) = kept_start(song_ids, start_index, |id| found.contains_key(id));
         if ids.is_empty() {
             return Err(PlaybackError::NoSongs);
         }
-        let start = clicked.and_then(|id| ids.iter().position(|x| *x == id)).unwrap_or(0);
 
+        let mut rng = rand::rng();
         let mut inner = self.lock();
         inner.tracks = found.into_iter().map(|(id, song)| (id, track_of(song))).collect();
-        inner.queue.replace(ids, start, label, &mut rand::rng());
+        let start = match shuffle {
+            ShuffleMode::Keep => start,
+            ShuffleMode::On => {
+                inner.queue.set_shuffle(true, &mut rng);
+                rng.random_range(0..ids.len())
+            }
+            ShuffleMode::Off => {
+                inner.queue.set_shuffle(false, &mut rng);
+                start
+            }
+        };
+        inner.queue.replace(ids, start, label, &mut rng);
         let result = self.play_current(&mut inner, &library, 0.0, false);
         self.changed(&mut inner, &library);
         result
@@ -615,6 +680,42 @@ fn queue_state(inner: &Inner) -> QueueState {
     }
 }
 
+/// One queue from the songs of several albums (each list in track order).
+fn arrange_albums(mut albums: Vec<Vec<String>>, mode: AlbumsPlayMode, rng: &mut impl Rng) -> Vec<String> {
+    match mode {
+        AlbumsPlayMode::InOrder => albums.concat(),
+        AlbumsPlayMode::ShuffledAlbums => {
+            albums.shuffle(rng);
+            albums.concat()
+        }
+        AlbumsPlayMode::Mix => {
+            let mut songs = albums.concat();
+            songs.shuffle(rng);
+            songs.truncate(MIX_SIZE);
+            songs
+        }
+    }
+}
+
+/// The songs kept (those in the library) and where the clicked one is among
+/// them. Counted by position, so a song repeated in a playlist starts at the
+/// copy that was clicked; a clicked song left out starts at the next one kept.
+fn kept_start(song_ids: Vec<String>, start_index: usize, keep: impl Fn(&str) -> bool) -> (Vec<String>, usize) {
+    let mut start = None;
+    let mut kept = Vec::with_capacity(song_ids.len());
+    for (index, id) in song_ids.into_iter().enumerate() {
+        if !keep(&id) {
+            continue;
+        }
+        if start.is_none() && index >= start_index {
+            start = Some(kept.len());
+        }
+        kept.push(id);
+    }
+    let start = start.unwrap_or(0);
+    (kept, start)
+}
+
 fn track_of(song: SongSummary) -> Track {
     Track {
         id: song.id,
@@ -650,4 +751,84 @@ fn now() -> i64 {
 
 fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    fn albums() -> Vec<Vec<String>> {
+        (0..30).map(|a| (0..10).map(|t| format!("a{a}-t{t}")).collect()).collect()
+    }
+
+    #[test]
+    fn play_all_follows_the_albums_shown_one_after_the_other() {
+        let songs = arrange_albums(albums(), AlbumsPlayMode::InOrder, &mut StdRng::seed_from_u64(1));
+        assert_eq!(songs.len(), 300);
+        assert_eq!(songs[..2], ["a0-t0", "a0-t1"]);
+        assert_eq!(songs[10], "a1-t0");
+    }
+
+    #[test]
+    fn shuffled_albums_keep_each_album_in_order() {
+        let songs = arrange_albums(albums(), AlbumsPlayMode::ShuffledAlbums, &mut StdRng::seed_from_u64(1));
+        assert_eq!(songs.len(), 300);
+        let order: Vec<&str> = songs.chunks(10).map(|album| album[0].split('-').next().unwrap()).collect();
+        assert_ne!(order[..5], ["a0", "a1", "a2", "a3", "a4"], "the albums are shuffled");
+        for album in songs.chunks(10) {
+            let prefix = album[0].split('-').next().unwrap();
+            let expected: Vec<String> = (0..10).map(|t| format!("{prefix}-t{t}")).collect();
+            assert_eq!(album, expected, "an album's songs stay together and in order");
+        }
+    }
+
+    #[test]
+    fn a_mix_has_at_most_100_different_songs() {
+        let songs = arrange_albums(albums(), AlbumsPlayMode::Mix, &mut StdRng::seed_from_u64(1));
+        assert_eq!(songs.len(), MIX_SIZE);
+        let unique: std::collections::HashSet<&String> = songs.iter().collect();
+        assert_eq!(unique.len(), MIX_SIZE);
+
+        let small = arrange_albums(vec![vec!["x".into(), "y".into()]], AlbumsPlayMode::Mix, &mut StdRng::seed_from_u64(1));
+        assert_eq!(small.len(), 2, "fewer songs than the limit: all of them");
+    }
+
+    #[test]
+    fn album_modes_come_from_the_ui() {
+        let parse = |name: &str| serde_json::from_value::<AlbumsPlayMode>(serde_json::json!(name)).ok();
+        assert_eq!(parse("inOrder"), Some(AlbumsPlayMode::InOrder));
+        assert_eq!(parse("shuffledAlbums"), Some(AlbumsPlayMode::ShuffledAlbums));
+        assert_eq!(parse("mix"), Some(AlbumsPlayMode::Mix));
+    }
+
+    #[test]
+    fn a_repeated_song_starts_at_the_copy_that_was_clicked() {
+        let (kept, start) = kept_start(ids(&["a", "b", "a", "c"]), 2, |_| true);
+        assert_eq!(kept, ids(&["a", "b", "a", "c"]));
+        assert_eq!(start, 2);
+    }
+
+    #[test]
+    fn songs_missing_from_the_library_are_left_out() {
+        let (kept, start) = kept_start(ids(&["a", "gone", "b", "c"]), 2, |id| id != "gone");
+        assert_eq!(kept, ids(&["a", "b", "c"]));
+        assert_eq!(start, 1, "b is the second song kept");
+    }
+
+    #[test]
+    fn a_clicked_song_left_out_starts_at_the_next_one() {
+        let (kept, start) = kept_start(ids(&["a", "gone", "b"]), 1, |id| id != "gone");
+        assert_eq!(kept, ids(&["a", "b"]));
+        assert_eq!(start, 1);
+
+        let (_, start) = kept_start(ids(&["a", "gone"]), 1, |id| id != "gone");
+        assert_eq!(start, 0, "nothing after it: the first song");
+    }
 }

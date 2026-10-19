@@ -12,6 +12,7 @@ use super::{DbError, DbResult};
 const MIGRATIONS: &[&str] = &[
     include_str!("migrations/001_initial.sql"),
     include_str!("migrations/002_saved_queue.sql"),
+    include_str!("migrations/003_playlist_songs.sql"),
 ];
 
 /// Applies every migration newer than the database, each in its own transaction.
@@ -52,7 +53,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        for table in ["albums", "artists", "play_history", "playlists", "saved_queue", "songs", "sync_state"] {
+        for table in ["albums", "artists", "play_history", "playlist_songs", "playlists", "saved_queue", "songs", "sync_state"] {
             assert!(tables.contains(&table.to_string()), "missing table {table}");
         }
     }

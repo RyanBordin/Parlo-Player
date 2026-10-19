@@ -183,6 +183,8 @@ pub fn apply_light_sync(
         "DELETE FROM playlists WHERE id NOT IN (SELECT value FROM json_each(?1))",
         [json_array(playlists.iter().map(|p| p.id.as_str()))],
     )?;
+    // Songs kept for playlists deleted on the server.
+    tx.execute("DELETE FROM playlist_songs WHERE playlist_id NOT IN (SELECT id FROM playlists)", [])?;
 
     tx.execute("UPDATE sync_state SET last_light_sync_at = ?1 WHERE id = 1", [now])?;
     tx.commit()?;
@@ -637,6 +639,8 @@ mod tests {
         };
         apply_light_sync(&mut conn, &LibraryItems::default(), &[playlist("p1"), playlist("p2")], 1500)
             .unwrap();
+        conn.execute("INSERT INTO playlist_songs (playlist_id, position, song_id) VALUES ('p1', 0, 's1')", [])
+            .unwrap();
 
         // s1 was unstarred on another app: column and raw JSON are cleared.
         let (starred, raw): (Option<String>, String) = conn
@@ -669,6 +673,10 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert_eq!(playlists, ["p2"]);
+        let kept: i64 = conn
+            .query_row("SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = 'p1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(kept, 0, "the deleted playlist's songs go too");
         assert_eq!(stats(&conn).unwrap().last_light_sync_at, Some(1600));
     }
 

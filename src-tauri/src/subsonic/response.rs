@@ -147,6 +147,22 @@ mod tests {
     }
 
     #[test]
+    fn takes_a_playlist_with_its_songs() {
+        let json = r#"{"subsonic-response":{"status":"ok","version":"1.16.1",
+            "playlist":{"id":"p1","name":"Mix","owner":"ryan","songCount":3,"duration":600,
+            "coverArt":"pl-p1","entry":[{"id":"s2","title":"Two"},{"id":"s1","title":"One"},
+            {"id":"s2","title":"Two"}]}}}"#;
+        let mut body = parse_response(json).unwrap();
+        let mut value: serde_json::Value = body.take("playlist").unwrap();
+        let entries = value.as_object_mut().unwrap().remove("entry").unwrap();
+        let playlist: crate::subsonic::Playlist = serde_json::from_value(value).unwrap();
+        let songs: Vec<crate::subsonic::Song> = serde_json::from_value(entries).unwrap();
+        assert_eq!(playlist.owner.as_deref(), Some("ryan"));
+        let ids: Vec<&str> = songs.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["s2", "s1", "s2"], "saved order, repeats kept");
+    }
+
+    #[test]
     fn takes_play_queue() {
         use crate::subsonic::types::PlayQueue;
 
