@@ -3,7 +3,6 @@
   // search, "Sort by" and three ways to play the albums shown.
   import Dices from "@lucide/svelte/icons/dices";
   import Play from "@lucide/svelte/icons/play";
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import { playAlbums, type AlbumsPlayMode } from "#lib/api.ts";
   import { ALBUM_SORTS, filterAlbums, sortAlbums, type AlbumSort } from "#lib/album-list.ts";
@@ -17,6 +16,7 @@
   } from "#lib/albums.svelte.ts";
   import AlbumGrid from "#lib/components/cards/AlbumGrid.svelte";
   import ListSearch from "#lib/components/ListSearch.svelte";
+  import SortSelect from "#lib/components/SortSelect.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatNumber } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
@@ -93,19 +93,12 @@
 
   <div class="tools">
     <ListSearch bind:value={query} placeholder={m.albums_search()} />
-    <label class="sort">
-      <span>{m.albums_sort_label()}</span>
-      <select value={albumsView.sort} onchange={(e) => setAlbumSort(e.currentTarget.value as AlbumSort)}>
-        {#each ALBUM_SORTS as sort (sort)}
-          <option value={sort}>{SORT_LABELS[sort]()}</option>
-        {/each}
-      </select>
-    </label>
-    {#if albumsView.sort === "random"}
-      <button type="button" class="redraw" onclick={drawRandomOrder} aria-label={m.albums_redraw()} title={m.albums_redraw()}>
-        <RefreshCw size={16} />
-      </button>
-    {/if}
+    <SortSelect
+      value={albumsView.sort}
+      options={ALBUM_SORTS.map((sort) => ({ value: sort, label: SORT_LABELS[sort]() }))}
+      onchange={setAlbumSort}
+      onredraw={albumsView.sort === "random" ? drawRandomOrder : undefined}
+    />
   </div>
 
   {#if error ?? albumsView.error}
@@ -150,40 +143,6 @@
     flex-wrap: wrap;
     gap: var(--space-3);
     margin: var(--space-5) 0;
-  }
-
-  .sort {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--color-text-muted);
-    font-size: 14px;
-  }
-
-  .sort select {
-    padding: var(--space-2) var(--space-4);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
-    background: var(--color-surface);
-    color: var(--color-text);
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .redraw {
-    width: 34px;
-    height: 34px;
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--color-text);
-    cursor: pointer;
-  }
-
-  .redraw:hover {
-    background: var(--color-surface-hover);
   }
 
   .empty {

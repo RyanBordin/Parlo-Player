@@ -11,6 +11,7 @@
 //! writes the latest one when several pile up.
 
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak, mpsc};
@@ -33,6 +34,10 @@ use crate::state::{ActiveLibrary, AppState};
 use crate::subsonic::{SecretUrl, SubsonicClient, SubsonicError};
 
 pub const QUEUE_CHANGED_EVENT: &str = "queue-changed";
+/// Sent instead of `queue-changed` when the songs are the same and only the
+/// current one or the modes changed: a queue of 50 000 songs is not sent
+/// again at every song (spec 12.3).
+const QUEUE_POSITION_EVENT: &str = "queue-position";
 const PLAYER_STATE_EVENT: &str = "player-state";
 const PLAYER_POSITION_EVENT: &str = "player-position";
 const PLAYER_ERROR_EVENT: &str = "player-error";
@@ -72,6 +77,17 @@ const SAVE_INTERVAL: Duration = Duration::from_secs(30);
 const SAVE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Server timeout for the last save, when the app closes.
 const EXIT_SAVE_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Payload of `queue-position`: `QueueState` without the songs.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QueuePosition {
+    label: String,
+    continuing_from: Option<String>,
+    current_index: Option<usize>,
+    shuffle: bool,
+    repeat: RepeatMode,
+}
 
 /// Payload of `queue-changed`.
 #[derive(Debug, Clone, Serialize)]
@@ -123,6 +139,8 @@ struct Inner {
     last_save: Option<Instant>,
     /// Library whose saved queue was already restored (or tried).
     restored: Option<PathBuf>,
+    /// Hash of the songs (in playback order) last sent with `queue-changed`.
+    sent_songs: Option<u64>,
 }
 
 /// A queue to save for a library.
@@ -197,6 +215,14 @@ impl Playback {
     /// at a random song, with the rest shuffled after it.
     pub fn play_shuffled(&self, song_ids: Vec<String>, label: String) -> Result<(), PlaybackError> {
         self.play_list(song_ids, 0, label, ShuffleMode::On)
+    }
+
+    /// "Shuffle" of the Songs page (spec 6.3, 9): at most `MIX_SIZE` songs
+    /// drawn from the list, in a random order. Shuffle turns off, as for the
+    /// other mixes.
+    pub fn play_mix(&self, song_ids: Vec<String>, label: String) -> Result<(), PlaybackError> {
+        let ids = mix(song_ids, &mut rand::rng());
+        self.play_list(ids, 0, label, ShuffleMode::Off)
     }
 
     /// The buttons of the Albums page (spec 6.4), on the albums shown, in the
@@ -337,7 +363,7 @@ impl Playback {
         let mut inner = self.lock();
         *inner = Inner::default();
         self.player.stop()?;
-        self.emit_queue(&inner);
+        self.emit_queue(&mut inner);
         Ok(())
     }
 
@@ -404,7 +430,7 @@ impl Playback {
         // Nothing changed yet: no need to save right after resuming.
         inner.last_save = Some(Instant::now());
         let result = self.play_current(&mut inner, library, restored.position, true);
-        self.emit_queue(&inner);
+        self.emit_queue(&mut inner);
         result
     }
 
@@ -433,7 +459,7 @@ impl Playback {
         let mut inner = self.lock();
         change(&mut inner.queue);
         let Ok(library) = self.library() else {
-            self.emit_queue(&inner);
+            self.emit_queue(&mut inner);
             return Ok(());
         };
         let result = if self.player.state().track.is_some() {
@@ -589,8 +615,16 @@ impl Playback {
         let _ = self.app.emit(PLAYER_ERROR_EVENT, payload);
     }
 
-    fn emit_queue(&self, inner: &Inner) {
-        let _ = self.app.emit(QUEUE_CHANGED_EVENT, queue_state(inner));
+    /// Sends the whole queue if its songs changed since the last time, else
+    /// only the current position and the modes.
+    fn emit_queue(&self, inner: &mut Inner) {
+        let songs = songs_hash(&inner.queue);
+        if inner.sent_songs == Some(songs) {
+            let _ = self.app.emit(QUEUE_POSITION_EVENT, queue_position(inner));
+        } else {
+            inner.sent_songs = Some(songs);
+            let _ = self.app.emit(QUEUE_CHANGED_EVENT, queue_state(inner));
+        }
     }
 
     /// The queue or the current song changed: tell the UI and save (spec 5.6).
@@ -697,6 +731,24 @@ fn write_save(job: &SaveJob, writing: &Mutex<()>, timeout: Duration) {
     }
 }
 
+fn songs_hash(queue: &Queue) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    for id in queue.ids_in_order() {
+        id.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn queue_position(inner: &Inner) -> QueuePosition {
+    QueuePosition {
+        label: inner.queue.label().to_string(),
+        continuing_from: inner.queue.continuing_from().map(str::to_string),
+        current_index: inner.queue.current_position(),
+        shuffle: inner.queue.shuffle(),
+        repeat: inner.queue.repeat(),
+    }
+}
+
 fn queue_state(inner: &Inner) -> QueueState {
     QueueState {
         label: inner.queue.label().to_string(),
@@ -721,13 +773,15 @@ fn arrange_albums(mut albums: Vec<Vec<String>>, mode: AlbumsPlayMode, rng: &mut 
             albums.shuffle(rng);
             albums.concat()
         }
-        AlbumsPlayMode::Mix => {
-            let mut songs = albums.concat();
-            songs.shuffle(rng);
-            songs.truncate(MIX_SIZE);
-            songs
-        }
+        AlbumsPlayMode::Mix => mix(albums.concat(), rng),
     }
+}
+
+/// At most `MIX_SIZE` of the songs, in a random order (spec 9).
+fn mix(mut songs: Vec<String>, rng: &mut impl Rng) -> Vec<String> {
+    songs.shuffle(rng);
+    songs.truncate(MIX_SIZE);
+    songs
 }
 
 /// The songs kept (those in the library) and where the clicked one is among

@@ -13,6 +13,7 @@ use crate::db::{self, DbError};
 use crate::home::{self, HomeActivity, HomeLibrary, HomeSection, ROW_SIZE, SectionItems};
 use crate::now_playing::{self, Lyrics, Related};
 use crate::db::albums::{self, AlbumListItem};
+use crate::db::songs::{self, SongSort};
 use crate::playback::{AlbumsPlayMode, Playback, PlaybackError, QueueState};
 use crate::player::queue::RepeatMode;
 use crate::player::{PlayerError, PlayerState};
@@ -20,6 +21,7 @@ use crate::session::{self, SavedSession, SessionError};
 use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
 use crate::subsonic::{AlbumListType, ServerInfo, StarItem, SubsonicClient, SubsonicError};
 use crate::sync::{self, SyncError, SyncProgress};
+use crate::test_library;
 
 /// Event with a `SyncProgress` payload, sent while a sync runs.
 const SYNC_PROGRESS_EVENT: &str = "sync-progress";
@@ -42,6 +44,8 @@ pub enum CommandError {
     EmptyLibrary { reported: i64 },
     SongNotFound,
     Playback { detail: String },
+    /// Signing in and out are off in the performance test mode.
+    TestLibrary,
 }
 
 impl From<PlayerError> for CommandError {
@@ -138,6 +142,9 @@ pub async fn get_session(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<Option<SavedSession>, CommandError> {
+    if test_library::ENABLED {
+        return open_test_library(&app, &state).await.map(Some);
+    }
     let dir = config_dir(&app)?;
     let Some(stored) = run_blocking(move || session::load(&dir)).await? else {
         state.set_active(None);
@@ -162,6 +169,9 @@ pub async fn login(
     user: String,
     password: String,
 ) -> Result<SavedSession, CommandError> {
+    if test_library::ENABLED {
+        return Err(CommandError::TestLibrary);
+    }
     let client = SubsonicClient::new(url, user.clone(), password.clone())?;
     client.ping().await?;
 
@@ -185,6 +195,10 @@ pub async fn logout(
     state: State<'_, Arc<AppState>>,
     playback: State<'_, PlaybackSlot>,
 ) -> Result<(), CommandError> {
+    // The real saved login must stay as it is.
+    if test_library::ENABLED {
+        return Err(CommandError::TestLibrary);
+    }
     let dir = config_dir(&app)?;
     run_blocking(move || session::clear(&dir)).await?;
     // The music would keep streaming with the signed-out credentials.
@@ -220,6 +234,10 @@ pub fn sync_library(
     force_full: bool,
 ) -> Result<bool, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    // The test library has no server to sync with.
+    if test_library::ENABLED {
+        return Ok(false);
+    }
     let Some(guard) = state.try_start_sync() else {
         return Ok(false);
     };
@@ -461,6 +479,52 @@ pub async fn list_albums(state: State<'_, Arc<AppState>>) -> Result<Vec<AlbumLis
     run_blocking(move || albums::album_list(&db::open(&active.db_path)?)).await
 }
 
+/// The Songs page (spec 6.3): the songs that match `query`, in `sort`
+/// order, and how many songs the library has.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongList {
+    pub ids: Vec<String>,
+    pub total: i64,
+}
+
+/// Quick search and sorting of the Songs page, run in SQLite (spec 7).
+#[tauri::command]
+pub async fn list_song_ids(
+    state: State<'_, Arc<AppState>>,
+    query: String,
+    sort: Option<SongSort>,
+) -> Result<SongList, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        let ids = songs::song_ids(&conn, &query, sort.unwrap_or(SongSort::DEFAULT))?;
+        Ok::<_, DbError>(SongList { ids, total: songs::song_count(&conn)? })
+    })
+    .await
+}
+
+/// The lines of the Songs table that are in view, in the order asked.
+#[tauri::command]
+pub async fn get_song_rows(state: State<'_, Arc<AppState>>, ids: Vec<String>) -> Result<Vec<TrackListSong>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || songs::song_rows(&db::open(&active.db_path)?, &ids)).await
+}
+
+/// "Shuffle" of the Songs page: at most 100 songs of the list (spec 9).
+#[tauri::command]
+pub async fn play_mix(
+    playback: State<'_, PlaybackSlot>,
+    song_ids: Vec<String>,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let playback = playback_of(&playback)?;
+    tauri::async_runtime::spawn_blocking(move || playback.play_mix(song_ids, context_label))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
 /// The buttons of the Albums page, on the albums shown (spec 6.4).
 #[tauri::command]
 pub async fn play_albums(
@@ -609,16 +673,39 @@ fn config_dir(app: &AppHandle) -> Result<PathBuf, CommandError> {
     })
 }
 
-/// `{local data dir}/libraries/{user@server-hash}.db`. Local (not roaming) on
-/// Windows, since the cache can get large.
+/// Whether this build is the performance test mode (`npm run tauri:perf`).
+#[tauri::command]
+pub fn is_test_library() -> bool {
+    test_library::ENABLED
+}
+
+/// Performance test mode: the made-up library of 50 000 songs, created on
+/// first use, with a server that does not exist. The real login and
+/// library are not touched.
+async fn open_test_library(app: &AppHandle, state: &State<'_, Arc<AppState>>) -> Result<SavedSession, CommandError> {
+    let db_path = test_library::db_path(&local_data_dir(app)?);
+    let path = db_path.clone();
+    run_blocking(move || test_library::ensure(&path)).await?;
+    let session = test_library::session();
+    let client = SubsonicClient::new(session.server_url.clone(), session.username.clone(), String::new())?;
+    state.set_active(Some(ActiveLibrary { client: Arc::new(client), db_path }));
+    Ok(session)
+}
+
+/// Local (not roaming) on Windows, since the cache can get large.
+fn local_data_dir(app: &AppHandle) -> Result<PathBuf, CommandError> {
+    app.path().app_local_data_dir().map_err(|e| CommandError::Storage {
+        detail: e.to_string(),
+    })
+}
+
+/// `{local data dir}/libraries/{user@server-hash}.db`.
 fn active_library(
     app: &AppHandle,
     client: SubsonicClient,
     session: &SavedSession,
 ) -> Result<ActiveLibrary, CommandError> {
-    let dir = app.path().app_local_data_dir().map_err(|e| CommandError::Storage {
-        detail: e.to_string(),
-    })?;
+    let dir = local_data_dir(app)?;
     let file = db::library_file_name(&session.server_url, &session.username);
     Ok(ActiveLibrary {
         client: Arc::new(client),

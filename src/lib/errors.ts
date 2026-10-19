@@ -42,6 +42,8 @@ export function describeError(error: unknown): ErrorMessage {
       return { message: m.error_song_not_found() };
     case "playback":
       return { message: m.error_playback(), detail: error.detail };
+    case "testLibrary":
+      return { message: m.error_test_library() };
   }
 }
 

@@ -9,10 +9,21 @@ use rusqlite::Connection;
 
 use super::{DbError, DbResult};
 
-const MIGRATIONS: &[&str] = &[
-    include_str!("migrations/001_initial.sql"),
-    include_str!("migrations/002_saved_queue.sql"),
-    include_str!("migrations/003_playlist_songs.sql"),
+/// A schema change, and optionally a step in Rust that fills the new columns
+/// (e.g. values SQLite cannot compute), run in the same transaction.
+struct Migration {
+    sql: &'static str,
+    then: Option<fn(&Connection) -> DbResult<()>>,
+}
+
+const MIGRATIONS: &[Migration] = &[
+    Migration { sql: include_str!("migrations/001_initial.sql"), then: None },
+    Migration { sql: include_str!("migrations/002_saved_queue.sql"), then: None },
+    Migration { sql: include_str!("migrations/003_playlist_songs.sql"), then: None },
+    Migration {
+        sql: include_str!("migrations/004_song_search.sql"),
+        then: Some(super::songs::fill_search_columns),
+    },
 ];
 
 /// Applies every migration newer than the database, each in its own transaction.
@@ -23,9 +34,12 @@ pub fn migrate(conn: &mut Connection) -> DbResult<()> {
         return Err(DbError::TooNew { found: current, supported });
     }
 
-    for (index, sql) in MIGRATIONS.iter().enumerate().skip(current.max(0) as usize) {
+    for (index, migration) in MIGRATIONS.iter().enumerate().skip(current.max(0) as usize) {
         let tx = conn.transaction()?;
-        tx.execute_batch(sql)?;
+        tx.execute_batch(migration.sql)?;
+        if let Some(then) = migration.then {
+            then(&tx)?;
+        }
         tx.pragma_update(None, "user_version", index as i64 + 1)?;
         tx.commit()?;
     }

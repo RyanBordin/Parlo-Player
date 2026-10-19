@@ -7,9 +7,11 @@ import {
   PLAYER_POSITION_EVENT,
   PLAYER_STATE_EVENT,
   QUEUE_CHANGED_EVENT,
+  QUEUE_POSITION_EVENT,
   type PlayerError,
   type PlayerPosition,
   type PlayerState,
+  type QueuePosition,
   type QueueState,
   type Track,
 } from "#lib/api.ts";
@@ -50,6 +52,8 @@ export function listenToPlayer(): Promise<void> {
       player.error = event.payload;
     });
     await listen<QueueState>(QUEUE_CHANGED_EVENT, (event) => Object.assign(queue, event.payload));
+    // The same songs: only the current one or the modes changed.
+    await listen<QueuePosition>(QUEUE_POSITION_EVENT, (event) => Object.assign(queue, event.payload));
     try {
       applyState(await getPlayerState());
       Object.assign(queue, await getQueue());

@@ -18,6 +18,7 @@ mod session;
 mod state;
 pub mod subsonic;
 mod sync;
+mod test_library;
 mod time;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -62,6 +63,10 @@ pub fn run() {
             commands::get_playlist_page,
             commands::play_shuffled,
             commands::list_albums,
+            commands::list_song_ids,
+            commands::get_song_rows,
+            commands::play_mix,
+            commands::is_test_library,
             commands::play_albums,
             commands::move_in_queue,
             commands::remove_from_queue,

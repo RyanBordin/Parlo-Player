@@ -2893,6 +2893,8 @@ name = "parlo-player"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
+ "icu_normalizer",
+ "icu_properties",
  "keyring",
  "libmpv2",
  "md-5",

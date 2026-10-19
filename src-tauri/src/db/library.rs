@@ -16,6 +16,7 @@ use rusqlite::{Connection, Statement, params};
 use serde::Serialize;
 
 use super::DbResult;
+use super::songs::{SearchColumns, SearchFields};
 use crate::subsonic::{Album, Artist, Genre, LibraryItems, Playlist, Song};
 
 /// A table and its columns, in the order the row writers bind them.
@@ -48,7 +49,7 @@ const SONGS: Table = Table {
         "composer", "track", "disc_number", "year", "genre", "genres", "duration", "bit_rate",
         "sampling_rate", "bit_depth", "channel_count", "suffix", "content_type", "size", "path",
         "created", "starred", "play_count", "played", "cover_art", "bpm", "music_brainz_id",
-        "raw_json",
+        "raw_json", "search_text", "sort_title", "sort_artist", "sort_album",
     ],
 };
 
@@ -387,6 +388,21 @@ impl Row for Album {
 impl Row for Song {
     const TABLE: &'static Table = &SONGS;
     fn bind(&self, stmt: &mut Statement) -> rusqlite::Result<usize> {
+        let genres: Vec<String> = self.genres.iter().map(|g| g.name.clone()).collect();
+        let search = SearchColumns::new(&SearchFields {
+            title: &self.title,
+            sort_name: self.sort_name.as_deref(),
+            artist: self.artist.as_deref(),
+            album: self.album.as_deref(),
+            album_artist: self.display_album_artist.as_deref(),
+            composer: self.display_composer.as_deref(),
+            genre: self.genre.as_deref(),
+            genres: &genres,
+            year: self.year,
+            suffix: self.suffix.as_deref(),
+            bit_rate: self.bit_rate,
+            path: self.path.as_deref(),
+        });
         stmt.execute(params![
             self.id, self.title, self.sort_name, self.album, self.album_id, self.artist,
             self.artist_id, self.display_album_artist, self.display_composer, self.track,
@@ -394,6 +410,7 @@ impl Row for Song {
             self.bit_rate, self.sampling_rate, self.bit_depth, self.channel_count, self.suffix,
             self.content_type, self.size, self.path, self.created, self.starred, self.play_count,
             self.played, self.cover_art, self.bpm, self.music_brainz_id, self.raw_json,
+            search.search_text, search.sort_title, search.sort_artist, search.sort_album,
         ])
     }
 }

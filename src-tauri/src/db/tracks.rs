@@ -32,6 +32,7 @@ pub struct TrackListSong {
     pub bit_rate: Option<i64>,
     pub path: Option<String>,
     pub starred: bool,
+    pub play_count: Option<i64>,
 }
 
 impl From<&Song> for TrackListSong {
@@ -56,15 +57,16 @@ impl From<&Song> for TrackListSong {
             bit_rate: song.bit_rate,
             path: song.path.clone(),
             starred: song.starred.is_some(),
+            play_count: song.play_count,
         }
     }
 }
 
-const TRACK_COLUMNS: &str = "id, title, artist, artist_id, album, album_id, album_artist, composer,
+pub(super) const TRACK_COLUMNS: &str = "id, title, artist, artist_id, album, album_id, album_artist, composer,
     cover_art, track, disc_number, year, genre, genres, duration, suffix, bit_rate, path,
-    starred IS NOT NULL";
+    starred IS NOT NULL, play_count";
 
-fn track_from_row(row: &rusqlite::Row) -> rusqlite::Result<TrackListSong> {
+pub(super) fn track_from_row(row: &rusqlite::Row) -> rusqlite::Result<TrackListSong> {
     let genres: String = row.get(13)?;
     Ok(TrackListSong {
         id: row.get(0)?,
@@ -86,6 +88,7 @@ fn track_from_row(row: &rusqlite::Row) -> rusqlite::Result<TrackListSong> {
         bit_rate: row.get(16)?,
         path: row.get(17)?,
         starred: row.get(18)?,
+        play_count: row.get(19)?,
     })
 }
 

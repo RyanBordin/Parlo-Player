@@ -7,6 +7,7 @@
   import { m } from "#lib/paraglide/messages.js";
   import { canGoBack, canGoForward } from "#lib/shell/history.svelte.ts";
   import ProfileMenu from "#lib/shell/ProfileMenu.svelte";
+  import { testLibrary } from "#lib/test-library.svelte.ts";
 
   let { session }: { session: SavedSession } = $props();
 
@@ -65,6 +66,9 @@
 
   <div class="spacer"></div>
 
+  {#if testLibrary.enabled}
+    <span class="test-badge" title={m.perf_badge_title()}>{m.perf_badge()}</span>
+  {/if}
   <ProfileMenu {session} />
 </header>
 
@@ -74,6 +78,18 @@
     align-items: center;
     gap: var(--space-4);
     padding: var(--space-4) var(--page-gutter);
+  }
+
+  /* Performance test mode only: this is not the real library. */
+  .test-badge {
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+    color: var(--color-text);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .history {

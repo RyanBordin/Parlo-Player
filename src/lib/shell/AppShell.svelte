@@ -5,6 +5,7 @@
   import { afterNavigate, beforeNavigate } from "$app/navigation";
   import { restoreQueue, type SavedSession } from "#lib/api.ts";
   import NowPlaying from "#lib/components/now-playing/NowPlaying.svelte";
+  import PerfMeter from "#lib/components/PerfMeter.svelte";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
   import Toasts from "#lib/components/Toasts.svelte";
   import { closeNowPlaying, nowPlaying } from "#lib/now-playing.svelte.ts";
@@ -13,6 +14,7 @@
   import { navHistory, trackNavigation } from "#lib/shell/history.svelte.ts";
   import Sidebar from "#lib/shell/Sidebar.svelte";
   import Topbar from "#lib/shell/Topbar.svelte";
+  import { checkTestLibrary, testLibrary } from "#lib/test-library.svelte.ts";
 
   let { session, children }: { session: SavedSession; children: Snippet } = $props();
 
@@ -54,6 +56,8 @@
     handleShortcut(event);
   }
 
+  checkTestLibrary();
+
   // Listen first, so the resumed queue (spec 5.6) reaches the player bar.
   $effect(() => {
     listenToPlayer()
@@ -78,6 +82,9 @@
       </main>
       {#if nowPlaying.open}
         <NowPlaying />
+      {/if}
+      {#if testLibrary.enabled}
+        <PerfMeter />
       {/if}
     </div>
   </div>

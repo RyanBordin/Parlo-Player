@@ -8,6 +8,7 @@ pub mod library;
 pub mod related;
 mod migrations;
 pub mod saved_queue;
+pub mod songs;
 pub mod tracks;
 
 use std::fs;

@@ -11,7 +11,8 @@
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage custom-system baseLocale",
     "check": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:perf": "tauri dev --features perf-library"
   },
   "license": "MIT",
   "imports": {

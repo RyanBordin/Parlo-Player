@@ -27,7 +27,8 @@ export type CommandError =
   | { kind: "notLoggedIn" }
   | { kind: "emptyLibrary"; reported: number }
   | { kind: "songNotFound" }
-  | { kind: "playback"; detail: string };
+  | { kind: "playback"; detail: string }
+  | { kind: "testLibrary" };
 
 /** Mirrors `LibraryStatus` in src-tauri/src/commands.rs. Dates are Unix seconds. */
 export type LibraryStatus = {
@@ -169,7 +170,27 @@ export type TrackListSong = {
   bitRate: number | null;
   path: string | null;
   starred: boolean;
+  playCount: number | null;
 };
+
+/** Columns the Songs page sorts by. Mirrors `SongSortKey` in src-tauri/src/db/songs.rs. */
+export type SongSortKey =
+  | "added"
+  | "title"
+  | "artist"
+  | "album"
+  | "duration"
+  | "year"
+  | "genre"
+  | "bitRate"
+  | "playCount"
+  | "played"
+  | "random";
+/** `seed`: the draw of "random" (ignored by the other keys). */
+export type SongSort = { key: SongSortKey; direction: "asc" | "desc"; seed?: number };
+
+/** The Songs page: IDs in the order shown, and the size of the library. */
+export type SongList = { ids: string[]; total: number };
 
 export type AlbumHeader = {
   id: string;
@@ -294,6 +315,12 @@ export type QueueState = {
   repeat: RepeatMode;
 };
 
+/** Sent instead of `queue-changed` when only the current song or the modes changed. */
+export const QUEUE_POSITION_EVENT = "queue-position";
+
+/** Payload of `queue-position`: `QueueState` without the songs. */
+export type QueuePosition = Omit<QueueState, "tracks">;
+
 export function listSongs(limit: number): Promise<SongSummary[]> {
   return invoke("list_songs", { limit });
 }
@@ -331,6 +358,26 @@ export function setAlbumStarred(albumId: string, starred: boolean): Promise<void
 /** "Shuffle" of a list: shuffle on, starting at a random song. */
 export function playShuffled(songIds: string[], contextLabel: string): Promise<void> {
   return invoke("play_shuffled", { songIds, contextLabel });
+}
+
+/** Whether this build is the performance test mode (`npm run tauri:perf`). */
+export function isTestLibrary(): Promise<boolean> {
+  return invoke("is_test_library");
+}
+
+/** Songs that match every word of `query` (all metadata), in `sort` order. */
+export function listSongIds(query: string, sort: SongSort): Promise<SongList> {
+  return invoke("list_song_ids", { query, sort });
+}
+
+/** The lines of these songs, in the same order. */
+export function getSongRows(ids: string[]): Promise<TrackListSong[]> {
+  return invoke("get_song_rows", { ids });
+}
+
+/** At most 100 of these songs, in a random order (spec 9). */
+export function playMix(songIds: string[], contextLabel: string): Promise<void> {
+  return invoke("play_mix", { songIds, contextLabel });
 }
 
 /** Every album of the library, last added first. */
