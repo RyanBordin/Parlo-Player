@@ -3,8 +3,8 @@
 //! IDs are always `String`. Each item also keeps its original JSON in
 //! `raw_json`, so new fields can be used later without a re-sync (spec 12.4).
 
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use super::error::SubsonicError;
@@ -159,7 +159,7 @@ pub struct PlayQueueEntry {
 }
 
 /// One item of `getOpenSubsonicExtensions`.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Extension {
     pub name: String,
     #[serde(default)]
@@ -251,6 +251,33 @@ pub struct SimilarArtist {
     pub id: String,
     #[serde(default)]
     pub name: String,
+}
+
+/// A music folder (`getMusicFolders`; a library on Navidrome).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MusicFolder {
+    /// Sent as a number by most servers; kept as text like every ID.
+    #[serde(deserialize_with = "string_or_number")]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+/// `getMusicFolders` returns `{ "musicFolders": { "musicFolder": [...] } }`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct MusicFolders {
+    #[serde(default)]
+    pub music_folder: Vec<MusicFolder>,
+}
+
+/// An ID the server may send as a number or as text.
+fn string_or_number<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    match Value::deserialize(deserializer)? {
+        Value::String(text) => Ok(text),
+        Value::Number(number) => Ok(number.to_string()),
+        other => Err(serde::de::Error::custom(format!("unexpected ID: {other}"))),
+    }
 }
 
 /// `getSimilarSongs2` and `getTopSongs` return `{ "<name>": { "song": [...] } }`.
@@ -350,6 +377,16 @@ mod tests {
         assert_eq!(info.similar_artist.len(), 2);
         assert_eq!(info.similar_artist[1].id, "", "artists the server does not have");
         assert!(info.raw_json.contains("largeImageUrl"));
+    }
+
+    #[test]
+    fn music_folder_ids_become_text() {
+        let folders: MusicFolders = serde_json::from_value(json!({
+            "musicFolder": [{"id": 1, "name": "Music"}, {"id": "lib-2", "name": "Audiobooks"}]
+        }))
+        .unwrap();
+        assert_eq!(folders.music_folder[0].id, "1");
+        assert_eq!(folders.music_folder[1].id, "lib-2");
     }
 
     #[test]

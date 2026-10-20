@@ -6,11 +6,12 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::auth::{generate_salt, make_token};
+use crate::settings::{StreamMode, StreamQuality};
 use super::error::SubsonicError;
 use super::response::{ResponseBody, parse_response};
 use super::secret_url::SecretUrl;
 use super::types::{
-    Album, ArtistInfo, Extension, LibraryItems, LyricsList, PlainLyrics, PlayQueue, Playlist, RawAlbumList,
+    Album, ArtistInfo, Extension, LibraryItems, MusicFolder, MusicFolders, LyricsList, PlainLyrics, PlayQueue, Playlist, RawAlbumList,
     RawLibraryItems, RawPlaylists, RawSongList, ScanStatus, Song, StructuredLyrics, with_raw_json,
 };
 
@@ -159,7 +160,12 @@ impl SubsonicClient {
     /// `GET /rest/search3` with an empty query, which OpenSubsonic servers
     /// answer with the whole library (paged).
     pub async fn search3(&self, page: SearchPage) -> Result<LibraryItems, SubsonicError> {
-        let params = [
+        self.search3_in(page, None).await
+    }
+
+    /// `search3` in one music folder only (`None`: every folder).
+    pub async fn search3_in(&self, page: SearchPage, folder: Option<&str>) -> Result<LibraryItems, SubsonicError> {
+        let mut params = vec![
             ("query", "\"\"".to_string()),
             ("artistCount", page.artist_count.to_string()),
             ("artistOffset", page.artist_offset.to_string()),
@@ -168,8 +174,15 @@ impl SubsonicClient {
             ("songCount", page.song_count.to_string()),
             ("songOffset", page.song_offset.to_string()),
         ];
+        params.extend(folder.map(|id| ("musicFolderId", id.to_string())));
         let mut body = self.get("search3", &params, LIBRARY_TIMEOUT).await?;
         body.take::<RawLibraryItems>("searchResult3")?.try_into()
+    }
+
+    /// `GET /rest/getMusicFolders` — the server's music folders (libraries).
+    pub async fn get_music_folders(&self) -> Result<Vec<MusicFolder>, SubsonicError> {
+        let mut body = self.get("getMusicFolders", &[], REQUEST_TIMEOUT).await?;
+        Ok(body.take::<MusicFolders>("musicFolders")?.music_folder)
     }
 
     /// `GET /rest/getAlbumList2` — `size` albums in that order, after the
@@ -204,17 +217,24 @@ impl SubsonicClient {
 
     /// `GET /rest/getStarred2` — starred artists, albums and songs.
     pub async fn get_starred2(&self) -> Result<LibraryItems, SubsonicError> {
-        let mut body = self.get("getStarred2", &[], LIBRARY_TIMEOUT).await?;
+        self.get_starred2_in(None).await
+    }
+
+    /// `getStarred2` in one music folder only (`None`: every folder).
+    pub async fn get_starred2_in(&self, folder: Option<&str>) -> Result<LibraryItems, SubsonicError> {
+        let params: Vec<(&str, String)> = folder.map(|id| ("musicFolderId", id.to_string())).into_iter().collect();
+        let mut body = self.get("getStarred2", &params, LIBRARY_TIMEOUT).await?;
         body.take::<RawLibraryItems>("starred2")?.try_into()
     }
 
-    /// URL of `GET /rest/stream` for a song, with a fresh salt. The server
-    /// sends the original file (no transcoding). Contains credentials.
-    pub fn stream_url(&self, song_id: &str) -> Result<SecretUrl, SubsonicError> {
+    /// URL of `GET /rest/stream` for a song, with a fresh salt, in the
+    /// quality chosen (spec 6.10). Contains credentials.
+    pub fn stream_url(&self, song_id: &str, quality: &StreamQuality) -> Result<SecretUrl, SubsonicError> {
         let mut url = reqwest::Url::parse(&format!("{}/rest/stream", self.base_url))
             .map_err(|e| SubsonicError::InvalidUrl(e.to_string()))?;
         url.query_pairs_mut()
             .append_pair("id", song_id)
+            .extend_pairs(stream_params(quality))
             .extend_pairs(self.auth_params(&generate_salt()));
         Ok(SecretUrl::new(url))
     }
@@ -475,6 +495,18 @@ fn scrobble_params(plays: &[(String, i64)], submission: bool) -> Vec<(&'static s
     params
 }
 
+/// `format=raw` asks for the original file, whatever the server's own
+/// transcoding settings; otherwise the format and the highest bitrate.
+fn stream_params(quality: &StreamQuality) -> Vec<(&'static str, String)> {
+    match quality.mode {
+        StreamMode::Original => vec![("format", "raw".to_string())],
+        StreamMode::Converted => vec![
+            ("format", quality.format.as_str().to_string()),
+            ("maxBitRate", quality.max_bit_rate.to_string()),
+        ],
+    }
+}
+
 /// The item's parameter repeats once per ID.
 fn star_params(item: StarItem, ids: &[String]) -> Vec<(&'static str, String)> {
     ids.iter().map(|id| (item.param(), id.clone())).collect()
@@ -509,6 +541,7 @@ impl fmt::Debug for SubsonicClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::StreamFormat;
 
     fn client() -> SubsonicClient {
         SubsonicClient::new("https://music.example.com/", "alice", "sesame").unwrap()
@@ -540,7 +573,7 @@ mod tests {
 
     #[test]
     fn stream_url_has_song_and_token_but_no_password() {
-        let url = client().stream_url("song-42").unwrap();
+        let url = client().stream_url("song-42", &StreamQuality::default()).unwrap();
         let full = reqwest::Url::parse(url.expose()).unwrap();
         let pairs: Vec<(String, String)> = full.query_pairs().into_owned().collect();
         let get = |key: &str| pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
@@ -552,6 +585,17 @@ mod tests {
         assert_eq!(get("p"), None, "plain password must never be sent");
         assert!(!url.expose().contains("sesame"));
         assert!(!url.to_string().contains(get("t").unwrap()), "Display must hide the token");
+        assert_eq!(get("format"), Some("raw"), "original: never converted");
+    }
+
+    #[test]
+    fn converted_streams_ask_for_the_format_and_bitrate() {
+        let quality = StreamQuality { mode: StreamMode::Converted, format: StreamFormat::Mp3, max_bit_rate: 256 };
+        assert_eq!(
+            stream_params(&quality),
+            [("format", "mp3".to_string()), ("maxBitRate", "256".to_string())]
+        );
+        assert_eq!(stream_params(&StreamQuality::default()), [("format", "raw".to_string())]);
     }
 
     #[test]
@@ -610,8 +654,8 @@ mod tests {
 
     #[test]
     fn each_stream_url_uses_a_new_salt() {
-        let a = client().stream_url("s1").unwrap();
-        let b = client().stream_url("s1").unwrap();
+        let a = client().stream_url("s1", &StreamQuality::default()).unwrap();
+        let b = client().stream_url("s1", &StreamQuality::default()).unwrap();
         assert_ne!(a.expose(), b.expose());
     }
 

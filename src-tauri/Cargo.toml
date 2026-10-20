@@ -30,6 +30,9 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 libmpv2 = { version = "6.0.0", default-features = false }
 icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
 icu_properties = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
+tauri-plugin-log = "2.10.1"
+tauri-plugin-opener = "2.7.2"
+log = "0.4.34"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

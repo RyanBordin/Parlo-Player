@@ -1,5 +1,6 @@
 // Runs before the app starts.
 import { defineCustomClientStrategy, type Locale } from "#lib/paraglide/runtime.js";
+import { appSettings } from "#lib/settings/app-settings.svelte.ts";
 
 declare global {
   interface Window {
@@ -19,8 +20,10 @@ function systemLocale(): Locale | undefined {
   return undefined;
 }
 
-defineCustomClientStrategy("custom-system", {
-  getLocale: systemLocale,
-  // The system language is read-only: a manual choice goes to localStorage.
+// The language of the preferences (spec 6.10), read before the first screen
+// (src/routes/+layout.ts); "system" follows the OS.
+defineCustomClientStrategy("custom-settings", {
+  getLocale: () => (appSettings.language === "system" ? systemLocale() : appSettings.language),
+  // Changed through the preferences (setLanguage), never by Paraglide.
   setLocale: () => {},
 });

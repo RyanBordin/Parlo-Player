@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Persistent sidebar (spec 4.2): brand, main menu and playlists.
+  // Persistent sidebar (spec 4.2): brand, main menu (arranged in Settings >
+  // Appearance, spec 6.10) and playlists.
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { page } from "$app/state";
   import symbol from "#lib/assets/logo-symbol.png";
@@ -7,13 +8,14 @@
   import { coverMode, setCoverExpanded } from "#lib/cover-mode.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import PlaylistList from "#lib/shell/PlaylistList.svelte";
-  import { isActive, NAV_ITEMS } from "#lib/shell/nav-items.ts";
+  import { isActive, sidebarItems } from "#lib/shell/nav-items.ts";
   import { player } from "#lib/player.svelte.ts";
 
   /** Sidebar width minus its padding. */
   const EXPANDED_COVER_SIZE = 208;
 
-  const items = NAV_ITEMS.filter((item) => !item.hidden);
+  // In the order of the preferences, without the hidden ones (spec 6.10).
+  let items = $derived(sidebarItems());
 </script>
 
 <aside class="sidebar">
@@ -25,7 +27,7 @@
 
   <nav aria-label={m.nav_label()}>
     <ul>
-      {#each items as item (item.href)}
+      {#each items as item (item.id)}
         {@const active = isActive(item, page.url.pathname)}
         <li>
           <a href={item.href} class:active aria-current={active ? "page" : undefined}>
@@ -133,7 +135,7 @@
     place-items: center;
     border: none;
     border-radius: var(--radius-pill);
-    background: rgb(0 0 0 / 65%);
+    background: var(--color-scrim);
     color: var(--color-text);
     opacity: 0;
     cursor: pointer;

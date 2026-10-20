@@ -54,6 +54,19 @@ p {
   font-weight: var(--font-weight-bold);
 }
 
+/*
+ * Reduce motion (spec 6.10): set on <html> by the preferences, following the
+ * system or the user's choice. Scrolls done in code check it too.
+ */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* --color-accent-text: the darker indigo is too faint on black (WCAG asks 3:1). */
 :focus-visible {
   outline: 2px solid var(--color-accent-text);

@@ -1,12 +1,13 @@
 <script lang="ts">
   // Discreet confirmations above the Player Bar (see #lib/toasts.svelte.ts).
   import { fly } from "svelte/transition";
+  import { reducedMotion } from "#lib/settings/app-settings.svelte.ts";
   import { toasts } from "#lib/toasts.svelte.ts";
 </script>
 
 <div class="toasts" role="status" aria-live="polite">
   {#each toasts as toast (toast.id)}
-    <p class="toast" transition:fly={{ y: 12, duration: 180 }}>{toast.text}</p>
+    <p class="toast" transition:fly={{ y: 12, duration: reducedMotion() ? 0 : 180 }}>{toast.text}</p>
   {/each}
 </div>
 
@@ -29,7 +30,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     background: var(--color-surface);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
+    box-shadow: var(--shadow-popover);
     font-size: 14px;
   }
 </style>

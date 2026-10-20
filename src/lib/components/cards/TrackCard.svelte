@@ -79,7 +79,7 @@
     border-radius: var(--radius-pill);
     background: var(--color-text);
     color: var(--color-text-inverse);
-    box-shadow: 0 6px 16px rgb(0 0 0 / 50%);
+    box-shadow: var(--shadow-button);
     opacity: 0;
     transition: opacity var(--transition-fast);
   }

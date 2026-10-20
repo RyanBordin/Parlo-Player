@@ -90,11 +90,11 @@
     border-radius: var(--radius-lg);
     background: var(--color-surface);
     color: var(--color-text);
-    box-shadow: 0 24px 64px rgb(0 0 0 / 60%);
+    box-shadow: var(--shadow-dialog);
   }
 
   dialog::backdrop {
-    background: rgb(0 0 0 / 60%);
+    background: var(--color-backdrop);
   }
 
   form {

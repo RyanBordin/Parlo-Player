@@ -303,6 +303,96 @@ export type ArtistAbout = {
   songOrder: string[] | null;
 };
 
+/** A Home section or sidebar item, in the order the user left them. */
+export type LayoutItem = { id: string; visible: boolean };
+
+/** App preferences (spec 6.10), in settings.json. Mirrors `AppSettings` in src-tauri/src/settings.rs. */
+export type AppSettings = {
+  language: "system" | "pt-BR" | "en";
+  /** Empty: the default order, all shown. */
+  homeSections: LayoutItem[];
+  /** Settings excluded (always last). Empty: the default order, all shown. */
+  sidebarItems: LayoutItem[];
+  density: "comfortable" | "compact";
+  /** Percent: 90, 100, 110 or 125. */
+  scale: number;
+  reduceMotion: "system" | "on" | "off";
+  /** Auto: album gain when the queue is one album in order, track gain otherwise. */
+  replayGain: "off" | "track" | "album" | "auto";
+  /** dB, −15 to +15. */
+  replayGainPreamp: number;
+  avoidClipping: boolean;
+  /** mpv's device name, or "auto" (the system's default). */
+  audioDevice: string;
+  /** Windows only. */
+  exclusiveAudio: boolean;
+  /** 50, 100, 200 or 500. */
+  mixSize: number;
+  stream: StreamQuality;
+  /** Cover cache limit, MB: 250, 500, 1024 or 2048. */
+  coverCacheMb: number;
+};
+
+/** Streaming quality (spec 6.10). Mirrors `StreamQuality` in src-tauri/src/settings.rs. */
+export type StreamQuality = {
+  mode: "original" | "converted";
+  format: "opus" | "mp3";
+  /** kbps: 320, 256, 192 or 128. */
+  maxBitRate: number;
+};
+
+/** Preferences of the signed-in server. Mirrors `LibrarySettings` in src-tauri/src/db/settings.rs. */
+export type LibrarySettings = {
+  /** Send plays to the server; off, the local history is still kept. */
+  scrobble: boolean;
+  /** Minutes between automatic syncs: 15, 30, 60, or 0 (manual only). */
+  syncIntervalMinutes: number;
+  /** Resume a queue another app saved on the server later (spec 5.6). */
+  continueOtherDevice: boolean;
+  /** Music folder IDs left out of the library. */
+  hiddenFolders: string[];
+};
+
+/** Mirrors `ServerInfo` + extensions: Settings > Server and account. */
+export type ServerStatus = {
+  online: boolean;
+  /** Why the server could not be reached. */
+  error: CommandError | null;
+  server: ServerInfo | null;
+  extensions: { name: string; versions: number[] }[];
+};
+
+/** Mirrors `SyncStatus` in src-tauri/src/commands.rs. */
+export type SyncStatus = {
+  /** Unix seconds. */
+  lastSyncAt: number | null;
+  /** The error of the last sync, if it failed. */
+  lastError: CommandError | null;
+  pendingScrobbles: number;
+  syncing: boolean;
+};
+
+/** Mirrors `LibrarySummary` in src-tauri/src/commands.rs. */
+export type LibrarySummary = {
+  songs: number;
+  albums: number;
+  artists: number;
+  databaseBytes: number;
+  coverCacheBytes: number;
+};
+
+/** A music folder of the server (a library on Navidrome). */
+export type MusicFolder = { id: string; name: string };
+
+/** Links of Settings > About; the backend knows the addresses. */
+export type ExternalLink = "repository" | "email";
+
+/** An audio output, as mpv lists it. "auto" is the system's default. */
+export type AudioDevice = { name: string; description: string };
+
+/** Payload: `AudioDevice[]`, when a device is plugged in or removed. */
+export const AUDIO_DEVICES_EVENT = "audio-devices";
+
 /** The buttons of the Albums page (spec 6.4). */
 export type AlbumsPlayMode = "inOrder" | "shuffledAlbums" | "mix";
 
@@ -423,6 +513,68 @@ export function setAlbumStarred(albumId: string, starred: boolean): Promise<void
 /** "Shuffle" of a list: shuffle on, starting at a random song. */
 export function playShuffled(songIds: string[], contextLabel: string): Promise<void> {
   return invoke("play_shuffled", { songIds, contextLabel });
+}
+
+/** The app preferences, or the defaults. */
+export function getAppSettings(): Promise<AppSettings> {
+  return invoke("get_app_settings");
+}
+
+/** Saves the app preferences; the backend applies the interface scale. Resolves to what was saved. */
+export function saveAppSettings(settings: AppSettings): Promise<AppSettings> {
+  return invoke("save_app_settings", { settings });
+}
+
+/** The audio outputs, the system's default first. */
+export function getAudioDevices(): Promise<AudioDevice[]> {
+  return invoke("get_audio_devices");
+}
+
+export function getLibrarySettings(): Promise<LibrarySettings> {
+  return invoke("get_library_settings");
+}
+
+export function saveLibrarySettings(settings: LibrarySettings): Promise<void> {
+  return invoke("save_library_settings", { settings });
+}
+
+/** "Full sync": rebuilds the library from scratch, keeping the play history. `false` if a sync is running. */
+export function rebuildLibrary(): Promise<boolean> {
+  return invoke("rebuild_library");
+}
+
+/** Pings the server and lists its OpenSubsonic extensions. */
+export function getServerStatus(): Promise<ServerStatus> {
+  return invoke("get_server_status");
+}
+
+export function getSyncStatus(): Promise<SyncStatus> {
+  return invoke("get_sync_status");
+}
+
+/** Sends every pending play. Resolves to how many were sent. */
+export function resendScrobbles(): Promise<number> {
+  return invoke("resend_scrobbles");
+}
+
+export function getLibrarySummary(): Promise<LibrarySummary> {
+  return invoke("get_library_summary");
+}
+
+export function getMusicFolders(): Promise<MusicFolder[]> {
+  return invoke("get_music_folders");
+}
+
+export function clearCoverCache(): Promise<void> {
+  return invoke("clear_cover_cache");
+}
+
+export function openLink(link: ExternalLink): Promise<void> {
+  return invoke("open_link", { link });
+}
+
+export function openLogsFolder(): Promise<void> {
+  return invoke("open_logs_folder");
 }
 
 /** Whether this build is the performance test mode (`npm run tauri:perf`). */

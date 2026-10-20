@@ -8,11 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
-    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy localStorage custom-system baseLocale",
+    "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --strategy custom-settings baseLocale",
     "check": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "npm run i18n && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "tauri:perf": "tauri dev --features perf-library"
+    "tauri:perf": "tauri dev --features perf-library",
+    "licenses": "node scripts/third-party-licenses.mjs"
   },
   "license": "MIT",
   "imports": {

@@ -17,6 +17,7 @@ use serde::Serialize;
 
 use super::DbResult;
 use super::songs::{SearchColumns, SearchFields};
+use crate::player::audio::ReplayGainData;
 use crate::subsonic::{Album, Artist, Genre, LibraryItems, Playlist, Song};
 
 /// A table and its columns, in the order the row writers bind them.
@@ -119,7 +120,25 @@ pub fn staged_song_count(conn: &Connection) -> DbResult<i64> {
 
 /// Replaces the cache with the staged data in a single transaction.
 pub fn finish_full_sync(conn: &mut Connection, server_scan: Option<&str>, now: i64) -> DbResult<()> {
+    finish(conn, server_scan, now, false)
+}
+
+/// "Full sync" of the settings (spec 6.10): the library is rebuilt from the
+/// staged data alone, and what was derived from it (playlists, artist info)
+/// is dropped to be read again. The play history, the saved queue and the
+/// preferences stay. Only runs once the download succeeded.
+pub fn finish_rebuild(conn: &mut Connection, server_scan: Option<&str>, now: i64) -> DbResult<()> {
+    finish(conn, server_scan, now, true)
+}
+
+fn finish(conn: &mut Connection, server_scan: Option<&str>, now: i64, rebuild: bool) -> DbResult<()> {
     let tx = conn.transaction()?;
+    if rebuild {
+        for table in FULL_SYNC_TABLES {
+            tx.execute(&format!("DELETE FROM main.{}", table.name), [])?;
+        }
+        tx.execute_batch("DELETE FROM playlists; DELETE FROM playlist_songs; DELETE FROM artist_info;")?;
+    }
     for table in FULL_SYNC_TABLES {
         let columns = table.columns.join(", ");
         // `WHERE true` avoids a parsing ambiguity between SELECT and ON CONFLICT.
@@ -298,6 +317,34 @@ pub fn song_summaries(conn: &Connection, ids: &[String]) -> DbResult<HashMap<Str
     Ok(songs)
 }
 
+/// The server's ReplayGain values (OpenSubsonic `replayGain`, kept in the
+/// raw JSON) of the songs that have any, keyed by ID (spec 12.1).
+pub fn replay_gains(conn: &Connection, ids: &[String]) -> DbResult<HashMap<String, ReplayGainData>> {
+    let ids = serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_string());
+    let mut stmt = conn.prepare(
+        "SELECT id, json_extract(raw_json, '$.replayGain.trackGain'), json_extract(raw_json, '$.replayGain.albumGain'),
+                json_extract(raw_json, '$.replayGain.trackPeak'), json_extract(raw_json, '$.replayGain.albumPeak')
+         FROM songs WHERE id IN (SELECT value FROM json_each(?1))",
+    )?;
+    let rows = stmt.query_map([ids], |row| {
+        let data = ReplayGainData {
+            track_gain: row.get(1)?,
+            album_gain: row.get(2)?,
+            track_peak: row.get(3)?,
+            album_peak: row.get(4)?,
+        };
+        Ok((row.get::<_, String>(0)?, data))
+    })?;
+    let mut gains = HashMap::new();
+    for row in rows {
+        let (id, data) = row?;
+        if data.track_gain.is_some() || data.album_gain.is_some() {
+            gains.insert(id, data);
+        }
+    }
+    Ok(gains)
+}
+
 /// Playlist fields shown in the sidebar (spec 4.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -338,6 +385,51 @@ pub fn stats(conn: &Connection) -> DbResult<LibraryStats> {
         last_full_sync_at: state.last_full_sync_at,
         last_light_sync_at: state.last_light_sync_at,
     })
+}
+
+/// The end of the last sync (spec 6.10): when, and the error sent to the UI
+/// as JSON (`None` on success).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyncResult {
+    /// Unix seconds.
+    pub at: Option<i64>,
+    pub error: Option<String>,
+}
+
+pub fn record_sync_result(conn: &Connection, at: i64, error: Option<&str>) -> DbResult<()> {
+    conn.execute(
+        "UPDATE sync_state SET last_sync_at = ?1, last_sync_error = ?2 WHERE id = 1",
+        params![at, error],
+    )?;
+    Ok(())
+}
+
+pub fn sync_result(conn: &Connection) -> DbResult<SyncResult> {
+    Ok(conn.query_row("SELECT last_sync_at, last_sync_error FROM sync_state WHERE id = 1", [], |row| {
+        Ok(SyncResult { at: row.get(0)?, error: row.get(1)? })
+    })?)
+}
+
+/// Which of these album IDs are in the local cache. With music folders
+/// hidden (spec 6.10), lists read from the server keep only these.
+pub fn known_album_ids(conn: &Connection, ids: &[String]) -> DbResult<std::collections::HashSet<String>> {
+    let ids = serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_string());
+    let mut stmt = conn.prepare("SELECT id FROM albums WHERE id IN (SELECT value FROM json_each(?1))")?;
+    let found = stmt.query_map([ids], |row| row.get(0))?.collect::<Result<_, _>>()?;
+    Ok(found)
+}
+
+/// Bytes of the database file, with its write-ahead log (spec 6.10, Library).
+pub fn database_size(path: &std::path::Path) -> u64 {
+    ["", "-wal", "-shm"]
+        .iter()
+        .filter_map(|suffix| {
+            let mut name = path.as_os_str().to_owned();
+            name.push(suffix);
+            std::fs::metadata(std::path::PathBuf::from(name)).ok()
+        })
+        .map(|meta| meta.len())
+        .sum()
 }
 
 pub fn sync_state(conn: &Connection) -> DbResult<SyncState> {
@@ -818,6 +910,59 @@ mod tests {
         let found = song_summaries(&conn, &["s2".into(), "missing".into(), "s1".into()]).unwrap();
         assert_eq!(found.len(), 2);
         assert_eq!(found["s2"].title, "Song s2");
+    }
+
+    #[test]
+    fn replay_gains_come_from_the_raw_json() {
+        let conn = open_in_memory().unwrap();
+        for (id, raw) in [
+            ("tagged", r#"{"replayGain":{"trackGain":-6.5,"albumGain":-7.1,"trackPeak":0.98}}"#),
+            ("empty", r#"{"replayGain":{}}"#),
+            ("none", "{}"),
+        ] {
+            conn.execute("INSERT INTO songs (id, title, raw_json) VALUES (?1, ?1, ?2)", params![id, raw]).unwrap();
+        }
+        let ids = ["tagged", "empty", "none"].map(String::from);
+        let gains = replay_gains(&conn, &ids).unwrap();
+        assert_eq!(gains.len(), 1, "only songs with a gain");
+        assert_eq!(
+            gains["tagged"],
+            ReplayGainData { track_gain: Some(-6.5), album_gain: Some(-7.1), track_peak: Some(0.98), album_peak: None }
+        );
+    }
+
+    #[test]
+    fn a_rebuild_keeps_the_history_and_drops_what_the_server_lost() {
+        let mut conn = open_in_memory().unwrap();
+        full_sync(&mut conn, &[library(vec![song("s1", "al1"), song("s2", "al1")])], 1000);
+        conn.execute_batch(
+            "INSERT INTO play_history (song_id, played_at) VALUES ('s1', 5);
+             INSERT INTO artist_info (artist_id, fetched_at, raw_json) VALUES ('ar1', 1, '{}');
+             INSERT INTO playlists (id, name, raw_json) VALUES ('p1', 'Old', '{}');",
+        )
+        .unwrap();
+
+        begin_full_sync(&conn).unwrap();
+        stage(&mut conn, &library(vec![song("s2", "al1")])).unwrap();
+        finish_rebuild(&mut conn, Some("scan-2"), 2000).unwrap();
+
+        let songs: Vec<String> =
+            conn.prepare("SELECT id FROM songs").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert_eq!(songs, ["s2"]);
+        let count = |table: &str| -> i64 { conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap() };
+        assert_eq!(count("play_history"), 1, "the history stays");
+        assert_eq!((count("artist_info"), count("playlists")), (0, 0), "read again later");
+        assert_eq!(sync_state(&conn).unwrap().last_full_sync_at, Some(2000));
+    }
+
+    #[test]
+    fn the_last_sync_result_is_kept() {
+        let conn = open_in_memory().unwrap();
+        assert_eq!(sync_result(&conn).unwrap(), SyncResult::default());
+        record_sync_result(&conn, 100, Some(r#"{"kind":"timeout"}"#)).unwrap();
+        assert_eq!(sync_result(&conn).unwrap().error.as_deref(), Some(r#"{"kind":"timeout"}"#));
+        record_sync_result(&conn, 200, None).unwrap();
+        assert_eq!(sync_result(&conn).unwrap(), SyncResult { at: Some(200), error: None });
     }
 
     #[test]

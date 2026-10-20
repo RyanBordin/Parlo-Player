@@ -9,11 +9,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::SystemTime;
-
-/// Default limit of the cover cache (spec 12.4).
-pub const DEFAULT_LIMIT_BYTES: u64 = 500 * 1024 * 1024;
 
 /// After going over the limit, delete down to this share of it, so the next
 /// covers do not each trigger a cleanup.
@@ -48,14 +46,45 @@ impl Index {
 
 pub struct CoverCache {
     dir: PathBuf,
-    limit: u64,
+    /// Bytes; changed from the settings (spec 6.10).
+    limit: AtomicU64,
     /// `None` until the folder is scanned.
     index: Mutex<Option<Index>>,
 }
 
 impl CoverCache {
     pub fn new(dir: PathBuf, limit: u64) -> Self {
-        Self { dir, limit, index: Mutex::new(None) }
+        Self { dir, limit: AtomicU64::new(limit), index: Mutex::new(None) }
+    }
+
+    /// A new limit; a smaller one deletes the least recently used covers now.
+    pub fn set_limit(&self, limit: u64) {
+        self.limit.store(limit, Ordering::Relaxed);
+        let mut guard = self.index();
+        if let Some(index) = guard.as_mut() {
+            self.evict(index, limit);
+        }
+    }
+
+    /// Bytes on disk.
+    pub fn size(&self) -> u64 {
+        self.index().as_ref().map_or(0, |index| index.total)
+    }
+
+    /// Deletes every cover ("Clear cache"); they are downloaded again when shown.
+    pub fn clear(&self) -> io::Result<()> {
+        let mut guard = self.index();
+        if let Some(index) = guard.as_mut() {
+            let keys: Vec<String> = index.entries.keys().cloned().collect();
+            for key in keys {
+                match fs::remove_file(self.dir.join(&key)) {
+                    Ok(()) => index.remove(&key),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => index.remove(&key),
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The cached image, if any. Marks it as just used.
@@ -97,12 +126,16 @@ impl CoverCache {
         let mut guard = self.index();
         let Some(index) = guard.as_mut() else { return Ok(()) };
         index.insert(key.to_string(), Entry { size: bytes.len() as u64, last_used: SystemTime::now() });
-        for victim in pick_evictions(&index.entries, index.total, self.limit) {
+        self.evict(index, self.limit.load(Ordering::Relaxed));
+        Ok(())
+    }
+
+    fn evict(&self, index: &mut Index, limit: u64) {
+        for victim in pick_evictions(&index.entries, index.total, limit) {
             // A file that cannot be deleted now is found again by the next scan.
             let _ = fs::remove_file(self.dir.join(&victim));
             index.remove(&victim);
         }
-        Ok(())
     }
 
     /// The index, scanning the folder the first time.
@@ -210,6 +243,28 @@ mod tests {
         // A new cache over the same folder finds what is there.
         let reopened = CoverCache::new(dir.clone(), 100);
         assert!(reopened.get("c").is_some());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_limit_changes_and_the_cache_clears() {
+        let dir = std::env::temp_dir().join(format!("parlo-covers-limit-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let cache = CoverCache::new(dir.clone(), 1000);
+        for (index, key) in ["a", "b", "c"].iter().enumerate() {
+            cache.put(key, &[1; 100]).unwrap();
+            std::thread::sleep(Duration::from_millis(20 * (index as u64 + 1)));
+        }
+        assert_eq!(cache.size(), 300);
+
+        // A smaller limit deletes the oldest at once: down to 90% of 200.
+        cache.set_limit(200);
+        assert_eq!(cache.size(), 100);
+        assert!(cache.get("c").is_some() && cache.get("a").is_none());
+
+        cache.clear().unwrap();
+        assert_eq!(cache.size(), 0);
+        assert!(!dir.join("c").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 }

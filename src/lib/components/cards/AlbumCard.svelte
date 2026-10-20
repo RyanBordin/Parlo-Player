@@ -87,7 +87,7 @@
     display: grid;
     place-items: center;
     border-radius: var(--radius-pill);
-    background: rgb(0 0 0 / 60%);
+    background: var(--color-scrim);
     color: var(--color-text);
     pointer-events: none;
   }

@@ -332,7 +332,7 @@
     place-items: center;
     border: none;
     border-radius: var(--radius-sm);
-    background: rgb(0 0 0 / 55%);
+    background: var(--color-scrim);
     color: var(--color-text);
     opacity: 0;
     cursor: pointer;

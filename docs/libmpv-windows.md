@@ -128,6 +128,13 @@ No Linux, o app usa a libmpv do sistema; nada vai em `src-tauri/lib/mpv/`.
 - A crate `libmpv2` é **LGPL-2.1**, e o app a usa por link dinâmico.
 - Os builds do shinchiro são compilados com componentes **GPL**. Distribuir essa DLL dentro do
   instalador de um app MIT pode trazer obrigações da GPL para a distribuição.
+- **Verificado (20/10/2026)** na DLL em uso, pela propriedade `mpv-configuration`: mpv
+  v0.41.0-1205, sem `-Dgpl=false` (portanto build GPL), com rubberband e outros componentes GPL; o
+  FFmpeg embutido é um build de desenvolvimento.
+- O código do repositório continua MIT (compatível com a GPL). O que muda é o **pacote
+  distribuído**: com esta DLL, ele precisa levar os textos de licença e o acesso ao código-fonte
+  correspondente da libmpv/FFmpeg. A lista do app fica em Configurações → Sobre → Licenças de
+  terceiros (`npm run licenses` a gera).
 - Para desenvolver, nada muda. Antes de publicar um instalador, decidir entre: aceitar as
   condições da GPL na distribuição, ou usar um build da libmpv compilado em modo LGPL
   (`-Dgpl=false`).

@@ -9,6 +9,7 @@
   import { NOW_PLAYING_TABS, nowPlaying, setNowPlayingTab, type NowPlayingTab } from "#lib/now-playing.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
+  import { reducedMotion } from "#lib/settings/app-settings.svelte.ts";
 
   /** Asked as 1024 px on any screen: the cover in high resolution. */
   const COVER_SIZE = 600;
@@ -19,10 +20,10 @@
     related: m.now_playing_related,
   };
 
-  /** Rises from the bottom (and goes back down). */
+  /** Rises from the bottom (and goes back down); at once with reduced motion. */
   function rise(_node: Element) {
     return {
-      duration: 280,
+      duration: reducedMotion() ? 0 : 280,
       easing: cubicOut,
       css: (t: number) => `transform: translateY(${(1 - t) * 100}%)`,
     };
@@ -98,7 +99,7 @@
   .frame {
     width: min(100%, calc(100vh - var(--player-bar-height) - 300px));
     border-radius: var(--radius-lg);
-    box-shadow: 0 24px 64px rgb(0 0 0 / 50%);
+    box-shadow: var(--shadow-dialog);
   }
 
   .title {

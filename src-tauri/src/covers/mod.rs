@@ -21,7 +21,7 @@ use md5::{Digest, Md5};
 use tauri::http::{Response, StatusCode, Uri, header};
 use tauri::{AppHandle, Manager, Runtime};
 
-pub use cache::{CoverCache, DEFAULT_LIMIT_BYTES};
+pub use cache::CoverCache;
 
 use crate::state::AppState;
 use crate::subsonic::{SubsonicClient, SubsonicError};
@@ -46,6 +46,11 @@ pub struct Covers {
 impl Covers {
     pub fn new(cache: CoverCache) -> Self {
         Self { cache, placeholders: Mutex::new(HashMap::new()) }
+    }
+
+    /// The cover cache, for its settings (spec 6.10: size, limit, clear).
+    pub fn cache(&self) -> &CoverCache {
+        &self.cache
     }
 
     /// Whether `bytes` is the server's generic artist image at this size.
@@ -192,7 +197,7 @@ async fn serve<R: Runtime>(app: &AppHandle<R>, uri: &Uri) -> Response<Vec<u8>> {
     let stored = bytes.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(error) = covers.cache.put(&key, &stored) {
-            eprintln!("covers: could not cache a cover: {error}");
+            log::warn!("covers: could not cache a cover: {error}");
         }
     });
     image(bytes)

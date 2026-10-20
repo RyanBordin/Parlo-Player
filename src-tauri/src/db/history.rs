@@ -1,7 +1,9 @@
 //! Play history (spec 11.4) and scrobbles waiting to be sent (spec 5.7).
 //!
-//! Every counted play is a row in `play_history`. Rows with `scrobbled = 0`
-//! are the pending scrobbles: the server did not confirm them yet.
+//! Every counted play is a row in `play_history`. `scrobbled` says what
+//! happened to it on the server: 0 pending (not confirmed yet), 1 sent, 2 not
+//! to be sent (scrobble was off for this server, spec 6.10: the local history
+//! is kept anyway).
 
 use rusqlite::{Connection, params};
 
@@ -15,14 +17,26 @@ pub struct PendingScrobble {
     pub played_at: i64,
 }
 
+const PENDING: i64 = 0;
+const NOT_SENT: i64 = 2;
+
 /// Records a counted play: adds it to the history (pending scrobble) and bumps
 /// the local play counts of the song and its album, like the server does.
 /// Returns the history row ID.
 pub fn record_play(conn: &mut Connection, song_id: &str, played_at: i64) -> DbResult<i64> {
+    record(conn, song_id, played_at, PENDING)
+}
+
+/// Same as `record_play`, for a play that is never sent (scrobble off).
+pub fn record_local_play(conn: &mut Connection, song_id: &str, played_at: i64) -> DbResult<i64> {
+    record(conn, song_id, played_at, NOT_SENT)
+}
+
+fn record(conn: &mut Connection, song_id: &str, played_at: i64, scrobbled: i64) -> DbResult<i64> {
     let tx = conn.transaction()?;
     tx.execute(
-        "INSERT INTO play_history (song_id, played_at, scrobbled) VALUES (?1, ?2, 0)",
-        params![song_id, played_at],
+        "INSERT INTO play_history (song_id, played_at, scrobbled) VALUES (?1, ?2, ?3)",
+        params![song_id, played_at, scrobbled],
     )?;
     let history_id = tx.last_insert_rowid();
 
@@ -59,6 +73,11 @@ pub fn pending_scrobbles(conn: &Connection, limit: u32) -> DbResult<Vec<PendingS
     Ok(rows)
 }
 
+/// How many plays wait to be sent (spec 6.10, Sync).
+pub fn pending_count(conn: &Connection) -> DbResult<i64> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM play_history WHERE scrobbled = 0", [], |row| row.get(0))?)
+}
+
 /// Marks history rows as confirmed by the server.
 pub fn mark_scrobbled(conn: &Connection, history_ids: &[i64]) -> DbResult<()> {
     let ids = serde_json::to_string(history_ids).unwrap_or_else(|_| "[]".to_string());
@@ -80,6 +99,20 @@ mod tests {
             params![id, album_id, play_count],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn plays_kept_local_are_never_pending() {
+        let mut conn = open_in_memory().unwrap();
+        insert_song(&conn, "s1", "al1", Some(2));
+        record_local_play(&mut conn, "s1", 1000).unwrap();
+        assert!(pending_scrobbles(&conn, 10).unwrap().is_empty());
+        assert_eq!(pending_count(&conn).unwrap(), 0);
+        let plays: i64 = conn.query_row("SELECT play_count FROM songs", [], |r| r.get(0)).unwrap();
+        assert_eq!(plays, 3, "the local count still goes up");
+
+        record_play(&mut conn, "s1", 2000).unwrap();
+        assert_eq!(pending_count(&conn).unwrap(), 1, "only the play to send");
     }
 
     #[test]

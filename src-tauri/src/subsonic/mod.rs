@@ -11,6 +11,6 @@ pub use client::{AlbumListType, SearchPage, ServerInfo, StarItem, SubsonicClient
 pub use error::SubsonicError;
 pub use secret_url::SecretUrl;
 pub use types::{
-    Album, Artist, ArtistInfo, Genre, LibraryItems, LyricsLine, PlayQueue, PlayQueueEntry, Playlist, ScanStatus, SimilarArtist,
+    Album, Artist, ArtistInfo, Extension, Genre, LibraryItems, MusicFolder, LyricsLine, PlayQueue, PlayQueueEntry, Playlist, ScanStatus, SimilarArtist,
     Song, StructuredLyrics,
 };

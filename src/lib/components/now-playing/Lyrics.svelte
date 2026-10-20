@@ -6,6 +6,7 @@
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
+  import { scrollBehavior } from "#lib/settings/app-settings.svelte.ts";
   import { keepLyrics, lyricsBySong } from "#lib/song-cache.svelte.ts";
 
   /** After scrolling by hand, the lyrics stay put this long. */
@@ -48,7 +49,7 @@
     const line = lineElements[current];
     if (!scroller || !line) return;
     const top = line.offsetTop - scroller.clientHeight / 2 + line.clientHeight / 2;
-    scroller.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "instant" });
+    scroller.scrollTo({ top: Math.max(0, top), behavior: smooth ? scrollBehavior() : "instant" });
   }
 
   $effect(() => {

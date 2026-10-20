@@ -1,14 +1,18 @@
 <script lang="ts">
+  // Language of the sign-in screen: the same preference as in Settings > General.
+  import type { AppSettings } from "#lib/api.ts";
   import { m } from "#lib/paraglide/messages.js";
-  import { getLocale, locales, setLocale, type Locale } from "#lib/paraglide/runtime.js";
+  import { locales } from "#lib/paraglide/runtime.js";
+  import { appSettings, setLanguage } from "#lib/settings/app-settings.svelte.ts";
 
-  // setLocale saves the choice (localStorage) and reloads the page in the new language.
+  // Saved in the preferences; the page reloads in the new language.
   function onchange(event: Event) {
-    setLocale((event.currentTarget as HTMLSelectElement).value as Locale);
+    setLanguage((event.currentTarget as HTMLSelectElement).value as AppSettings["language"]);
   }
 </script>
 
-<select class="language" aria-label={m.language_label()} value={getLocale()} {onchange}>
+<select class="language" aria-label={m.language_label()} value={appSettings.language} {onchange}>
+  <option value="system">{m.settings_follow_system()}</option>
   {#each locales as locale (locale)}
     <!-- Each language is shown in its own language, e.g. "English", "Português (Brasil)". -->
     <option value={locale}>{m.language_name({}, { locale })}</option>

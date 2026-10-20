@@ -1,9 +1,25 @@
 // Playback keyboard shortcuts (spec 12.2).
 import { next, previous, seekBy, togglePause } from "#lib/api.ts";
+import { m } from "#lib/paraglide/messages.js";
 import { player, queue } from "#lib/player.svelte.ts";
 
 /** Seconds moved by ← and →. */
 const SEEK_STEP = 5;
+
+/**
+ * Every shortcut of the app, for the read-only list in Settings > General
+ * (spec 6.10). Keep it in step with `actionFor` below, Ctrl+K (Topbar) and
+ * Esc (app shell).
+ */
+export const SHORTCUTS: { keys: () => string[]; label: () => string }[] = [
+  { keys: () => [m.key_space()], label: m.shortcut_play_pause },
+  { keys: () => ["Ctrl", "→"], label: m.shortcut_next },
+  { keys: () => ["Ctrl", "←"], label: m.shortcut_previous },
+  { keys: () => ["→"], label: () => m.shortcut_forward({ seconds: SEEK_STEP }) },
+  { keys: () => ["←"], label: () => m.shortcut_back({ seconds: SEEK_STEP }) },
+  { keys: () => ["Ctrl", "K"], label: m.shortcut_search },
+  { keys: () => ["Esc"], label: m.shortcut_close_now_playing },
+];
 
 type Action = "togglePause" | "next" | "previous" | "back" | "forward";
 

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   SYNC_FINISHED_EVENT,
   SYNC_PROGRESS_EVENT,
+  rebuildLibrary,
   syncLibrary,
   syncLight,
   type CommandError,
@@ -48,6 +49,22 @@ export async function startSync(forceFull: boolean): Promise<void> {
   syncState.error = null;
   try {
     if (await syncLibrary(forceFull)) {
+      syncState.running = true;
+    }
+  } catch (error) {
+    syncState.error = error as CommandError;
+  }
+}
+
+/**
+ * "Full sync" of Settings > Sync (spec 6.10): rebuilds the library from
+ * scratch, keeping the play history. Same events as any sync.
+ */
+export async function startRebuild(): Promise<void> {
+  await listenToSyncEvents();
+  syncState.error = null;
+  try {
+    if (await rebuildLibrary()) {
       syncState.running = true;
     }
   } catch (error) {

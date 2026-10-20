@@ -69,7 +69,7 @@
   .shade {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, rgb(0 0 0 / 15%), rgb(0 0 0 / 55%) 60%, var(--color-bg));
+    background: var(--shade-hero);
   }
 
   .content {
@@ -83,7 +83,7 @@
     flex: none;
     width: 208px;
     border-radius: var(--radius-lg);
-    box-shadow: 0 16px 40px rgb(0 0 0 / 45%);
+    box-shadow: var(--shadow-cover);
   }
 
   .info {
@@ -148,7 +148,7 @@
     padding: 2px var(--space-3);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-pill);
-    background: rgb(0 0 0 / 30%);
+    background: var(--color-glass);
     color: var(--color-text);
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);

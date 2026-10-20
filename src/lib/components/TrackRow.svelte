@@ -63,13 +63,22 @@
     width: 48px;
   }
 
+  /* Compact list density (spec 6.10). */
+  :global(:root[data-density="compact"]) .row {
+    padding-block: var(--space-1);
+  }
+
+  :global(:root[data-density="compact"]) .cover {
+    width: 40px;
+  }
+
   .play {
     position: absolute;
     inset: 0;
     display: grid;
     place-items: center;
     border-radius: var(--radius-sm);
-    background: rgb(0 0 0 / 55%);
+    background: var(--color-scrim);
     color: var(--color-text);
     opacity: 0;
     transition: opacity var(--transition-fast);

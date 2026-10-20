@@ -10,12 +10,12 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [
     // Keep `strategy` in sync with the "i18n" script in package.json.
-    // Locale: the one saved by the language selector, otherwise the system
-    // language (src/hooks.client.ts), otherwise Portuguese (baseLocale).
+    // Locale: the one in the app preferences, or the system language when
+    // they say "system" (src/hooks.client.ts), otherwise Portuguese (baseLocale).
     paraglideVitePlugin({
       project: "./project.inlang",
       outdir: "./src/lib/paraglide",
-      strategy: ["localStorage", "custom-system", "baseLocale"],
+      strategy: ["custom-settings", "baseLocale"],
     }),
     // Tauri has no Node.js server for SSR, so adapter-static with a fallback
     // to index.html runs the app in SPA mode.

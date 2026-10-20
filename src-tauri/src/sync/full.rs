@@ -44,15 +44,19 @@ impl Kind {
     }
 }
 
+/// `folders`: only these music folders (`None`: all). `rebuild`: the library
+/// is replaced from scratch (see `library::finish_rebuild`).
 pub(super) async fn run(
     client: &SubsonicClient,
     db: &SyncDb,
     scan: &ScanStatus,
+    folders: Option<&[String]>,
+    rebuild: bool,
     progress: &(dyn Fn(SyncProgress) + Send + Sync),
 ) -> Result<(), SyncError> {
     db.call(|conn| library::begin_full_sync(conn)).await?;
 
-    if let Err(error) = download(client, db, scan, progress).await {
+    if let Err(error) = download(client, db, scan, folders, progress).await {
         // The real tables were never touched: just discard what was downloaded.
         let _ = db.call(|conn| library::drop_staging(conn)).await;
         return Err(error);
@@ -60,17 +64,29 @@ pub(super) async fn run(
 
     progress(SyncProgress { phase: Phase::Saving, done: 0, total: None, full: true });
     let last_scan = scan.last_scan.clone();
-    db.call(move |conn| library::finish_full_sync(conn, last_scan.as_deref(), now()))
-        .await
+    db.call(move |conn| {
+        if rebuild {
+            library::finish_rebuild(conn, last_scan.as_deref(), now())
+        } else {
+            library::finish_full_sync(conn, last_scan.as_deref(), now())
+        }
+    })
+    .await
 }
 
 async fn download(
     client: &SubsonicClient,
     db: &SyncDb,
     scan: &ScanStatus,
+    folders: Option<&[String]>,
     progress: &(dyn Fn(SyncProgress) + Send + Sync),
 ) -> Result<(), SyncError> {
-    let song_total = scan.count.and_then(|c| u64::try_from(c).ok());
+    // The server's count covers every folder: no total when some are hidden.
+    let song_total = if folders.is_some() { None } else { scan.count.and_then(|c| u64::try_from(c).ok()) };
+    let folders: Vec<Option<&str>> = match folders {
+        Some(ids) => ids.iter().map(|id| Some(id.as_str())).collect(),
+        None => vec![None],
+    };
 
     for kind in [Kind::Artists, Kind::Albums, Kind::Songs] {
         let total = matches!(kind, Kind::Songs).then_some(song_total).flatten();
@@ -78,30 +94,36 @@ async fn download(
             progress(SyncProgress { phase: kind.phase(), done: done.into(), total, full: true })
         };
 
-        let mut offset = 0;
-        let mut previous_first: Option<String> = None;
+        let mut done = 0;
         report(0);
-        loop {
-            let items = client.search3(kind.page(offset)).await?;
-            let (received, first) = kind.received(&items);
-            if received > 0 && first == previous_first {
-                return Err(SyncError::PagingNotSupported);
-            }
+        for &folder in &folders {
+            let mut offset = 0;
+            let mut previous_first: Option<String> = None;
+            loop {
+                let items = client.search3_in(kind.page(offset), folder).await?;
+                let (received, first) = kind.received(&items);
+                if received > 0 && first == previous_first {
+                    return Err(SyncError::PagingNotSupported);
+                }
 
-            db.call(move |conn| library::stage(conn, &items)).await?;
-            offset += received;
-            report(offset);
+                db.call(move |conn| library::stage(conn, &items)).await?;
+                offset += received;
+                done += received;
+                report(done);
 
-            if received < PAGE_SIZE {
-                break;
+                if received < PAGE_SIZE {
+                    break;
+                }
+                previous_first = first;
             }
-            previous_first = first;
         }
     }
 
+    // An empty answer must not wipe the library. Hidden folders can leave a
+    // visible one empty on purpose.
     let staged = db.call(|conn| library::staged_song_count(conn)).await?;
     let reported = scan.count.unwrap_or(0);
-    if staged == 0 && reported > 0 {
+    if staged == 0 && reported > 0 && song_total.is_some() {
         return Err(SyncError::EmptyLibrary(reported));
     }
     Ok(())

@@ -4,6 +4,8 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+use super::audio::{AudioDevice, ReplayGainData};
+
 /// Song being played, with what the UI shows.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +21,9 @@ pub struct Track {
     /// Seconds, from the library cache (mpv reports the exact value later).
     pub duration: Option<f64>,
     pub starred: bool,
+    /// The server's ReplayGain values (spec 12.1); the UI does not need them.
+    #[serde(skip)]
+    pub replay_gain: Option<ReplayGainData>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -72,6 +77,8 @@ pub enum PlayerEvent {
     Finished { song_id: String },
     /// The playback position was moved (seek), so it must not count as listened.
     Seeked,
+    /// The audio outputs changed (a device was plugged in or removed).
+    DevicesChanged(Vec<AudioDevice>),
 }
 
 /// Limits `player-position` events: mpv reports the position many times per

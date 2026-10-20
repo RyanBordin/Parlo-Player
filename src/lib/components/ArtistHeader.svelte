@@ -118,14 +118,12 @@
   .shade {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, rgb(0 0 0 / 15%), rgb(0 0 0 / 55%) 60%, var(--color-bg));
+    background: var(--shade-hero);
   }
 
   /* Over a photo: darker at the bottom and on the left, where the text is. */
   .with-photo .shade {
-    background:
-      linear-gradient(to bottom, rgb(0 0 0 / 0%) 30%, rgb(0 0 0 / 70%) 75%, var(--color-bg)),
-      linear-gradient(to right, rgb(0 0 0 / 45%), rgb(0 0 0 / 0%) 65%);
+    background: var(--shade-photo);
   }
 
   .content {
@@ -144,7 +142,7 @@
     font-weight: var(--font-weight-bold);
     letter-spacing: -0.02em;
     line-height: 1.05;
-    text-shadow: 0 2px 24px rgb(0 0 0 / 35%);
+    text-shadow: var(--shadow-text);
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
@@ -153,7 +151,7 @@
   .bio {
     display: -webkit-box;
     overflow: hidden;
-    color: rgb(255 255 255 / 80%);
+    color: var(--color-text-on-image);
     font-size: 14px;
     line-height: 1.5;
     /* One line per paragraph, as the backend sends it. */

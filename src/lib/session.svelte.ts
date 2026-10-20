@@ -6,6 +6,7 @@ import { clearArtists } from "#lib/artists.svelte.ts";
 import { clearFavorites } from "#lib/favorites.svelte.ts";
 import { clearHome } from "#lib/home.svelte.ts";
 import { clearPages } from "#lib/page-cache.svelte.ts";
+import { clearLibrarySettings, loadLibrarySettings } from "#lib/settings/library-settings.svelte.ts";
 import { clearSongCache } from "#lib/song-cache.svelte.ts";
 import { clearSongs } from "#lib/songs.svelte.ts";
 import { startSync } from "#lib/sync.svelte.ts";
@@ -39,6 +40,7 @@ export async function openLibrary(session: SavedSession): Promise<void> {
   } catch {
     // The first sync screen shows any database error raised by the sync.
   }
+  await loadLibrarySettings();
   app.view = neverSynced ? { name: "firstSync", session } : { name: "connected", session };
   startSync(false);
 }
@@ -57,6 +59,7 @@ export async function signOut(): Promise<void> {
   clearArtists();
   clearSongCache();
   clearSongs();
+  clearLibrarySettings();
   app.view = { name: "login" };
   await goto("/", { replaceState: true });
 }

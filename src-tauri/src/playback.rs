@@ -3,7 +3,9 @@
 //! The queue lives here and is the source of truth; the player (mpv) only
 //! knows the current song and the preloaded next one. The controller also
 //! counts the time really listened, scrobbles plays, and saves the queue
-//! (locally and on the server) so the next start can resume it.
+//! (locally and on the server) so the next start can resume it. The audio
+//! preferences (spec 6.10: ReplayGain, output, streaming quality) are applied
+//! to each song it loads, and again when they change.
 //!
 //! Player events arrive through a channel and are handled on the
 //! `playback-events` thread, so a command holding the controller lock never
@@ -26,12 +28,14 @@ use thiserror::Error;
 
 use crate::db::library::SongSummary;
 use crate::db::{self, DbError, DbResult, history, library, saved_queue};
+use crate::player::audio::{self, AudioDevice, ReplayGainData};
 use crate::player::listen::ListenTracker;
 use crate::player::queue::{Queue, Removed, RepeatMode, Step};
 use crate::player::resume::{self, SavedQueue, ServerQueue, Source};
-use crate::player::{PlaybackStatus, Player, PlayerError, PlayerEvent, Track};
+use crate::player::{Media, PlaybackStatus, Player, PlayerError, PlayerEvent, Track};
+use crate::settings::AppSettings;
 use crate::state::{ActiveLibrary, AppState};
-use crate::subsonic::{SecretUrl, SubsonicClient, SubsonicError};
+use crate::subsonic::{SubsonicClient, SubsonicError};
 
 pub const QUEUE_CHANGED_EVENT: &str = "queue-changed";
 /// Sent instead of `queue-changed` when the songs are the same and only the
@@ -41,9 +45,8 @@ const QUEUE_POSITION_EVENT: &str = "queue-position";
 const PLAYER_STATE_EVENT: &str = "player-state";
 const PLAYER_POSITION_EVENT: &str = "player-position";
 const PLAYER_ERROR_EVENT: &str = "player-error";
-
-/// Songs of a random mix of a big set (spec 9).
-pub const MIX_SIZE: usize = 100;
+/// Payload: the audio outputs (`AudioDevice` list), when they change.
+const AUDIO_DEVICES_EVENT: &str = "audio-devices";
 
 /// The three buttons of the Albums page (spec 6.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -53,7 +56,7 @@ pub enum AlbumsPlayMode {
     InOrder,
     /// The albums in a random order, each album's songs in order.
     ShuffledAlbums,
-    /// The songs of all the albums mixed, at most `MIX_SIZE`.
+    /// The songs of all the albums mixed, at most the mix size (spec 6.10).
     Mix,
 }
 
@@ -184,6 +187,7 @@ impl Playback {
 
         let inner = Mutex::new(Inner::default());
         let playback = Arc::new(Self { player, inner, app, saver, writing });
+        playback.apply_output(&playback.settings());
 
         // A weak reference, so the thread does not keep the controller alive.
         let weak: Weak<Self> = Arc::downgrade(&playback);
@@ -217,16 +221,16 @@ impl Playback {
         self.play_list(song_ids, 0, label, ShuffleMode::On)
     }
 
-    /// "Shuffle" of the Songs page (spec 6.3, 9): at most `MIX_SIZE` songs
-    /// drawn from the list, in a random order. Shuffle turns off, as for the
-    /// other mixes.
+    /// "Shuffle" of the Songs page (spec 6.3, 9): at most the mix size
+    /// (spec 6.10) of songs drawn from the list, in a random order. Shuffle
+    /// turns off, as for the other mixes.
     pub fn play_mix(&self, song_ids: Vec<String>, label: String) -> Result<(), PlaybackError> {
-        let ids = mix(song_ids, &mut rand::rng());
+        let ids = mix(song_ids, self.mix_size(), &mut rand::rng());
         self.play_list(ids, 0, label, ShuffleMode::Off)
     }
 
-    /// "Random mix" of the Artists page (spec 6.6): at most `MIX_SIZE` songs
-    /// where the artists shown appear.
+    /// "Random mix" of the Artists page (spec 6.6): at most the mix size of
+    /// songs where the artists shown appear.
     pub fn play_artists_mix(&self, artist_ids: &[String], label: String) -> Result<(), PlaybackError> {
         let library = self.library()?;
         let songs = read_db(&library.db_path, |conn| db::artists::songs_of_artists(conn, artist_ids))?;
@@ -238,7 +242,7 @@ impl Playback {
     pub fn play_albums(&self, album_ids: &[String], mode: AlbumsPlayMode, label: String) -> Result<(), PlaybackError> {
         let library = self.library()?;
         let albums = read_db(&library.db_path, |conn| db::albums::songs_of_albums(conn, album_ids))?;
-        let ids = arrange_albums(albums, mode, &mut rand::rng());
+        let ids = arrange_albums(albums, mode, self.mix_size(), &mut rand::rng());
         self.play_list(ids, 0, label, ShuffleMode::Off)
     }
 
@@ -252,7 +256,9 @@ impl Playback {
         shuffle: ShuffleMode,
     ) -> Result<(), PlaybackError> {
         let library = self.library()?;
-        let found = read_db(&library.db_path, |conn| library::song_summaries(conn, &song_ids))?;
+        let (found, gains) = read_db(&library.db_path, |conn| {
+            Ok((library::song_summaries(conn, &song_ids)?, library::replay_gains(conn, &song_ids)?))
+        })?;
 
         let (ids, start) = kept_start(song_ids, start_index, |id| found.contains_key(id));
         if ids.is_empty() {
@@ -261,7 +267,7 @@ impl Playback {
 
         let mut rng = rand::rng();
         let mut inner = self.lock();
-        inner.tracks = found.into_iter().map(|(id, song)| (id, track_of(song))).collect();
+        inner.tracks = tracks_of(found, gains);
         let start = match shuffle {
             ShuffleMode::Keep => start,
             ShuffleMode::On => {
@@ -387,12 +393,23 @@ impl Playback {
             inner.restored = Some(library.db_path.clone());
         }
 
+        // Spec 6.10: with "continue from another device" off, the app always
+        // resumes its own queue, so the server's is not even asked.
+        let path = library.db_path.clone();
+        let continue_other = blocking(move || db::settings::load(&db::open(&path)?))
+            .await
+            .map_or(true, |settings| settings.continue_other_device);
+
         // Offline (or an old server): the local record is enough.
-        let server = match library.client.get_play_queue().await {
-            Ok(queue) => queue.map(ServerQueue::from),
-            Err(error) => {
-                eprintln!("playback: could not read the server queue: {error}");
-                None
+        let server = if !continue_other {
+            None
+        } else {
+            match library.client.get_play_queue().await {
+                Ok(queue) => queue.map(ServerQueue::from),
+                Err(error) => {
+                    log::warn!("playback: could not read the server queue: {error}");
+                    None
+                }
             }
         };
 
@@ -412,6 +429,7 @@ impl Playback {
         let mut ids: Vec<String> = local.iter().flat_map(|l| l.queue.songs.iter().cloned()).collect();
         ids.extend(server.iter().flat_map(|s| s.ids.iter().cloned()));
         let found = library::song_summaries(&conn, &ids)?;
+        let gains = library::replay_gains(&conn, &ids)?;
         let exists = |id: &str| found.contains_key(id);
 
         let restored = match resume::choose(local.as_ref(), server.as_ref()) {
@@ -429,11 +447,8 @@ impl Playback {
         if !inner.queue.is_empty() {
             return Ok(());
         }
-        inner.tracks = found
-            .into_iter()
-            .filter(|(id, _)| restored.queue.songs.contains(id))
-            .map(|(id, song)| (id, track_of(song)))
-            .collect();
+        let found = found.into_iter().filter(|(id, _)| restored.queue.songs.contains(id)).collect();
+        inner.tracks = tracks_of(found, gains);
         inner.queue = Queue::from_snapshot(restored.queue);
         // Nothing changed yet: no need to save right after resuming.
         inner.last_save = Some(Instant::now());
@@ -506,9 +521,10 @@ impl Playback {
             return Ok(());
         };
         let track = inner.tracks[id].clone();
-        let url = library.client.stream_url(id)?;
+        let settings = self.settings();
+        let media = self.media_for(inner, library, id, &settings)?;
         let next = self.upcoming(inner, library)?;
-        self.player.play(track, &url, next, start, paused)?;
+        self.player.play(track, &media, next, start, paused)?;
         self.begin_counting(inner, library, !paused);
         Ok(())
     }
@@ -519,11 +535,77 @@ impl Playback {
     }
 
     /// The song that plays after the current one ends, with a fresh URL.
-    fn upcoming(&self, inner: &Inner, library: &ActiveLibrary) -> Result<Option<(Track, SecretUrl)>, PlaybackError> {
+    fn upcoming(&self, inner: &Inner, library: &ActiveLibrary) -> Result<Option<(Track, Media)>, PlaybackError> {
         let Some(id) = inner.queue.upcoming().and_then(|p| inner.queue.id_at(p)) else {
             return Ok(None);
         };
-        Ok(Some((inner.tracks[id].clone(), library.client.stream_url(id)?)))
+        let media = self.media_for(inner, library, id, &self.settings())?;
+        Ok(Some((inner.tracks[id].clone(), media)))
+    }
+
+    /// A song's stream, in the quality chosen, and its ReplayGain.
+    fn media_for(&self, inner: &Inner, library: &ActiveLibrary, id: &str, settings: &AppSettings) -> Result<Media, PlaybackError> {
+        Ok(Media {
+            url: library.client.stream_url(id, &settings.stream)?,
+            gain: gain_of(inner, id, settings),
+        })
+    }
+
+    /// The preferences changed (spec 6.10): the song playing takes the new
+    /// gain at once; the preloaded one is loaded again, so the next song
+    /// already has the new gain and streaming quality.
+    pub fn settings_changed(&self, old: &AppSettings, new: &AppSettings) {
+        if (&old.audio_device, old.exclusive_audio) != (&new.audio_device, new.exclusive_audio) {
+            self.apply_output(new);
+        }
+        let gain_changed = (old.replay_gain, old.replay_gain_preamp, old.avoid_clipping)
+            != (new.replay_gain, new.replay_gain_preamp, new.avoid_clipping);
+        if !gain_changed && old.stream == new.stream {
+            return;
+        }
+        let Ok(library) = self.library() else { return };
+        let inner = self.lock();
+        if self.player.state().track.is_none() {
+            return;
+        }
+        let mut result = Ok(());
+        if gain_changed && let Some(id) = inner.queue.current_id() {
+            result = self.player.apply_gain(&gain_of(&inner, id, new)).map_err(PlaybackError::from);
+        }
+        let result = result.and_then(|()| self.preload_next(&inner, &library));
+        drop(inner);
+        if let Err(error) = result {
+            self.report(&error);
+        }
+    }
+
+    /// The output device (or the system's default while it is missing) and
+    /// the exclusive mode.
+    fn apply_output(&self, settings: &AppSettings) {
+        self.use_device(settings, &self.player.audio_devices());
+        if let Err(error) = self.player.set_exclusive(cfg!(windows) && settings.exclusive_audio) {
+            log_error("playback: could not change the exclusive mode", &error);
+        }
+    }
+
+    fn use_device(&self, settings: &AppSettings, available: &[AudioDevice]) {
+        let device = audio::device_to_use(&settings.audio_device, available);
+        if let Err(error) = self.player.set_audio_device(device) {
+            log_error("playback: could not change the audio device", &error);
+        }
+    }
+
+    /// The audio outputs, for the settings (spec 6.10).
+    pub fn audio_devices(&self) -> Vec<AudioDevice> {
+        self.player.audio_devices()
+    }
+
+    fn settings(&self) -> AppSettings {
+        self.app.state::<Arc<AppState>>().settings()
+    }
+
+    fn mix_size(&self) -> usize {
+        usize::from(self.settings().mix_size)
     }
 
     /// A new play of the current song starts: count from zero and tell the
@@ -532,10 +614,15 @@ impl Playback {
         inner.listen = ListenTracker::default();
         inner.counting = inner.queue.current_id().map(str::to_string);
         if let (true, Some(id)) = (now_playing, inner.counting.clone()) {
-            let client = Arc::clone(&library.client);
+            let library = library.clone();
             tauri::async_runtime::spawn(async move {
+                // Scrobble off for this server (spec 6.10): nothing is sent.
+                let path = library.db_path.clone();
+                if !blocking(move || db::settings::load(&db::open(&path)?)).await.is_ok_and(|s| s.scrobble) {
+                    return;
+                }
                 // Only informative: a failure is not kept for later.
-                let _ = client.scrobble(&[(id, now() * 1000)], false).await;
+                let _ = library.client.scrobble(&[(id, now() * 1000)], false).await;
             });
         }
     }
@@ -574,6 +661,11 @@ impl Playback {
                 }
             }
             PlayerEvent::Seeked => self.lock().listen.on_seek(),
+            PlayerEvent::DevicesChanged(devices) => {
+                // The chosen device left or came back (spec 6.10).
+                self.use_device(&self.settings(), &devices);
+                let _ = self.app.emit(AUDIO_DEVICES_EVENT, devices);
+            }
             PlayerEvent::Advanced(track) => self.on_advanced(&track),
             PlayerEvent::Finished { .. } => {
                 if let Err(error) = self.step(Queue::finish_current) {
@@ -603,13 +695,27 @@ impl Playback {
     }
 
     /// Spec 5.7: history + local play count now, scrobble right after
-    /// (or later, if the server cannot be reached).
+    /// (or later, if the server cannot be reached). With scrobble off for
+    /// this server (spec 6.10), only the local history.
     fn record_play(&self, song_id: &str, started: i64) {
         let Ok(library) = self.library() else { return };
-        let recorded = db::open(&library.db_path)
-            .and_then(|mut conn| history::record_play(&mut conn, song_id, started));
-        if let Err(error) = recorded {
-            eprintln!("playback: could not record a play: {error}");
+        let recorded = db::open(&library.db_path).and_then(|mut conn| {
+            let scrobble = db::settings::load(&conn)?.scrobble;
+            if scrobble {
+                history::record_play(&mut conn, song_id, started)?;
+            } else {
+                history::record_local_play(&mut conn, song_id, started)?;
+            }
+            Ok(scrobble)
+        });
+        let scrobble = match recorded {
+            Ok(scrobble) => scrobble,
+            Err(error) => {
+                log::warn!("playback: could not record a play: {error}");
+                return;
+            }
+        };
+        if !scrobble {
             return;
         }
         tauri::async_runtime::spawn(async move {
@@ -678,6 +784,19 @@ impl Playback {
     }
 }
 
+/// "Send again" of Settings > Sync (spec 6.10): every pending play, batch
+/// after batch, until none is left or the server fails. Returns how many were sent.
+pub async fn send_all_pending_scrobbles(client: &SubsonicClient, db_path: &Path) -> Result<usize, PlaybackError> {
+    let mut total = 0;
+    loop {
+        let sent = send_pending_scrobbles(client, db_path).await?;
+        if sent == 0 {
+            return Ok(total);
+        }
+        total += sent;
+    }
+}
+
 /// Sends the pending scrobbles (oldest first) and marks them as sent. Runs
 /// after each counted play and at every light sync. Returns how many were sent.
 pub async fn send_pending_scrobbles(client: &SubsonicClient, db_path: &Path) -> Result<usize, PlaybackError> {
@@ -726,7 +845,7 @@ fn write_save(job: &SaveJob, writing: &Mutex<()>, timeout: Duration) {
     let saved = &job.saved;
     let local = db::open(&job.library.db_path).and_then(|conn| saved_queue::save(&conn, saved));
     if let Err(error) = local {
-        eprintln!("playback: could not save the queue locally: {error}");
+        log::warn!("playback: could not save the queue locally: {error}");
     }
 
     let Some(current) = saved.queue.current_id() else { return };
@@ -735,7 +854,7 @@ fn write_save(job: &SaveJob, writing: &Mutex<()>, timeout: Duration) {
     let client = &job.library.client;
     let sent = tauri::async_runtime::block_on(client.save_play_queue(&ids, current, position_ms, timeout));
     if let Err(error) = sent {
-        eprintln!("playback: could not save the queue on the server: {error}");
+        log::warn!("playback: could not save the queue on the server: {error}");
     }
 }
 
@@ -774,22 +893,60 @@ fn queue_state(inner: &Inner) -> QueueState {
 }
 
 /// One queue from the songs of several albums (each list in track order).
-fn arrange_albums(mut albums: Vec<Vec<String>>, mode: AlbumsPlayMode, rng: &mut impl Rng) -> Vec<String> {
+fn arrange_albums(mut albums: Vec<Vec<String>>, mode: AlbumsPlayMode, mix_size: usize, rng: &mut impl Rng) -> Vec<String> {
     match mode {
         AlbumsPlayMode::InOrder => albums.concat(),
         AlbumsPlayMode::ShuffledAlbums => {
             albums.shuffle(rng);
             albums.concat()
         }
-        AlbumsPlayMode::Mix => mix(albums.concat(), rng),
+        AlbumsPlayMode::Mix => mix(albums.concat(), mix_size, rng),
     }
 }
 
-/// At most `MIX_SIZE` of the songs, in a random order (spec 9).
-fn mix(mut songs: Vec<String>, rng: &mut impl Rng) -> Vec<String> {
+/// At most `size` of the songs, in a random order (spec 9).
+fn mix(mut songs: Vec<String>, size: usize, rng: &mut impl Rng) -> Vec<String> {
     songs.shuffle(rng);
-    songs.truncate(MIX_SIZE);
+    songs.truncate(size);
     songs
+}
+
+/// A song's gain with the preferences, for the queue as it is now.
+fn gain_of(inner: &Inner, id: &str, settings: &AppSettings) -> audio::Gain {
+    let data = inner.tracks.get(id).and_then(|track| track.replay_gain.as_ref());
+    audio::gain_for(
+        settings.replay_gain,
+        settings.replay_gain_preamp,
+        settings.avoid_clipping,
+        album_in_order(&inner.queue, &inner.tracks),
+        data,
+    )
+}
+
+/// "One album played in order" (spec 6.10, automatic ReplayGain): shuffle
+/// off and every song of the queue from the same album.
+fn album_in_order(queue: &Queue, tracks: &HashMap<String, Track>) -> bool {
+    if queue.shuffle() || queue.is_empty() {
+        return false;
+    }
+    let mut albums = queue.ids_in_order().into_iter().map(|id| tracks.get(id).and_then(|t| t.album_id.as_deref()));
+    let first = albums.next().flatten();
+    first.is_some() && albums.all(|album| album == first)
+}
+
+fn tracks_of(found: HashMap<String, SongSummary>, mut gains: HashMap<String, ReplayGainData>) -> HashMap<String, Track> {
+    found
+        .into_iter()
+        .map(|(id, song)| {
+            let mut track = track_of(song);
+            track.replay_gain = gains.remove(&id);
+            (id, track)
+        })
+        .collect()
+}
+
+fn log_error(context: &str, error: &PlayerError) {
+    log::warn!("{context}: {error}");
 }
 
 /// The songs kept (those in the library) and where the clicked one is among
@@ -822,6 +979,7 @@ fn track_of(song: SongSummary) -> Track {
         cover_art: song.cover_art,
         duration: song.duration.map(|d| d as f64),
         starred: song.starred,
+        replay_gain: None,
     }
 }
 
@@ -865,7 +1023,7 @@ mod tests {
 
     #[test]
     fn play_all_follows_the_albums_shown_one_after_the_other() {
-        let songs = arrange_albums(albums(), AlbumsPlayMode::InOrder, &mut StdRng::seed_from_u64(1));
+        let songs = arrange_albums(albums(), AlbumsPlayMode::InOrder, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(songs.len(), 300);
         assert_eq!(songs[..2], ["a0-t0", "a0-t1"]);
         assert_eq!(songs[10], "a1-t0");
@@ -873,7 +1031,7 @@ mod tests {
 
     #[test]
     fn shuffled_albums_keep_each_album_in_order() {
-        let songs = arrange_albums(albums(), AlbumsPlayMode::ShuffledAlbums, &mut StdRng::seed_from_u64(1));
+        let songs = arrange_albums(albums(), AlbumsPlayMode::ShuffledAlbums, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(songs.len(), 300);
         let order: Vec<&str> = songs.chunks(10).map(|album| album[0].split('-').next().unwrap()).collect();
         assert_ne!(order[..5], ["a0", "a1", "a2", "a3", "a4"], "the albums are shuffled");
@@ -886,13 +1044,44 @@ mod tests {
 
     #[test]
     fn a_mix_has_at_most_100_different_songs() {
-        let songs = arrange_albums(albums(), AlbumsPlayMode::Mix, &mut StdRng::seed_from_u64(1));
-        assert_eq!(songs.len(), MIX_SIZE);
+        let songs = arrange_albums(albums(), AlbumsPlayMode::Mix, 100, &mut StdRng::seed_from_u64(1));
+        assert_eq!(songs.len(), 100);
         let unique: std::collections::HashSet<&String> = songs.iter().collect();
-        assert_eq!(unique.len(), MIX_SIZE);
+        assert_eq!(unique.len(), 100);
 
-        let small = arrange_albums(vec![vec!["x".into(), "y".into()]], AlbumsPlayMode::Mix, &mut StdRng::seed_from_u64(1));
+        let small = arrange_albums(vec![vec!["x".into(), "y".into()]], AlbumsPlayMode::Mix, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(small.len(), 2, "fewer songs than the limit: all of them");
+    }
+
+    #[test]
+    fn the_mix_size_comes_from_the_preferences() {
+        let songs = mix(albums().concat(), 200, &mut StdRng::seed_from_u64(1));
+        assert_eq!(songs.len(), 200);
+        assert_eq!(mix(albums().concat(), 50, &mut StdRng::seed_from_u64(1)).len(), 50);
+    }
+
+    fn queue_of(songs: &[(&str, &str)], shuffle: bool) -> (Queue, HashMap<String, Track>) {
+        let mut rng = StdRng::seed_from_u64(1);
+        let mut queue = Queue::default();
+        queue.set_shuffle(shuffle, &mut rng);
+        queue.replace(songs.iter().map(|(id, _)| id.to_string()).collect(), 0, "Test".into(), &mut rng);
+        let tracks = songs
+            .iter()
+            .map(|(id, album)| (id.to_string(), Track { id: id.to_string(), album_id: Some(album.to_string()), ..Track::default() }))
+            .collect();
+        (queue, tracks)
+    }
+
+    #[test]
+    fn one_album_in_order_uses_the_album_gain() {
+        let (queue, tracks) = queue_of(&[("a", "al1"), ("b", "al1")], false);
+        assert!(album_in_order(&queue, &tracks));
+
+        let (queue, tracks) = queue_of(&[("a", "al1"), ("b", "al1")], true);
+        assert!(!album_in_order(&queue, &tracks), "shuffled");
+
+        let (queue, tracks) = queue_of(&[("a", "al1"), ("b", "al2")], false);
+        assert!(!album_in_order(&queue, &tracks), "two albums");
     }
 
     #[test]

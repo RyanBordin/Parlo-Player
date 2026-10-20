@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::playback::Playback;
+use crate::settings::AppSettings;
 use crate::subsonic::SubsonicClient;
 
 /// The playback controller, or why it could not start (e.g. libmpv failed to
@@ -23,9 +24,21 @@ pub struct ActiveLibrary {
 pub struct AppState {
     active: Mutex<Option<ActiveLibrary>>,
     syncing: AtomicBool,
+    /// The app preferences as saved (read at startup, replaced on each save).
+    settings: Mutex<AppSettings>,
 }
 
 impl AppState {
+    pub fn settings(&self) -> AppSettings {
+        self.settings.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    /// Replaces the preferences and returns the previous ones.
+    pub fn set_settings(&self, settings: AppSettings) -> AppSettings {
+        let mut current = self.settings.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::mem::replace(&mut current, settings)
+    }
+
     pub fn active(&self) -> Option<ActiveLibrary> {
         self.lock().clone()
     }

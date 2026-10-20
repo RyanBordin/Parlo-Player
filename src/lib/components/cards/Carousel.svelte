@@ -7,6 +7,7 @@
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { m } from "#lib/paraglide/messages.js";
+  import { scrollBehavior } from "#lib/settings/app-settings.svelte.ts";
 
   let {
     title,
@@ -45,7 +46,7 @@
     if (!track) return;
     // Cards: a bit less than the visible width, so one card stays in view.
     const step = paged ? track.clientWidth : track.clientWidth * 0.9;
-    track.scrollBy({ left: direction * step, behavior: "smooth" });
+    track.scrollBy({ left: direction * step, behavior: scrollBehavior() });
   }
 
   // Again when the items or the window size change.

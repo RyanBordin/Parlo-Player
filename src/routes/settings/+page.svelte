@@ -1,22 +1,10 @@
 <script lang="ts">
-  // Settings (spec 6.10) come later. For now this page holds the temporary
-  // library status, which has no other place yet.
-  import LibraryStatus from "#lib/components/LibraryStatus.svelte";
-  import UnderConstruction from "#lib/components/UnderConstruction.svelte";
-  import { m } from "#lib/paraglide/messages.js";
+  // Settings opens on the sector seen last (spec 6.10).
+  import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { lastSector } from "#lib/settings/registry.ts";
+
+  onMount(() => {
+    goto(`/settings/${lastSector()}`, { replaceState: true });
+  });
 </script>
-
-<UnderConstruction title={m.nav_settings()} />
-
-<div class="page temporary">
-  <LibraryStatus />
-</div>
-
-<style>
-  .temporary {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    padding-top: 0;
-  }
-</style>

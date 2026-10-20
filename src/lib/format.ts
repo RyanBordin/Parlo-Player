@@ -13,6 +13,23 @@ export function formatDateTime(unixSeconds: number): string {
   );
 }
 
+/** Space on disk, e.g. "350 KB", "12.4 MB", "1.2 GB". */
+export function formatBytes(bytes: number): string {
+  const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const;
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return new Intl.NumberFormat(getLocale(), {
+    style: "unit",
+    unit: units[unit],
+    unitDisplay: "short",
+    maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0,
+  }).format(value);
+}
+
 /** A date from the API (ISO 8601), e.g. "Jul 21, 2026". Empty if unreadable. */
 export function formatDate(iso: string): string {
   const date = new Date(iso);

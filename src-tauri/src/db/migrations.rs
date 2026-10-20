@@ -29,6 +29,8 @@ const MIGRATIONS: &[Migration] = &[
         then: Some(super::artists::fill_song_artists),
     },
     Migration { sql: include_str!("migrations/006_artist_info.sql"), then: None },
+    Migration { sql: include_str!("migrations/007_library_settings.sql"), then: None },
+    Migration { sql: include_str!("migrations/008_sync_result.sql"), then: None },
 ];
 
 /// Applies every migration newer than the database, each in its own transaction.
@@ -72,7 +74,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        for table in ["albums", "artist_info", "artists", "play_history", "playlist_songs", "playlists", "saved_queue", "song_artists", "songs", "sync_state"] {
+        for table in ["albums", "artist_info", "artists", "play_history", "playlist_songs", "playlists", "saved_queue", "settings", "song_artists", "songs", "sync_state"] {
             assert!(tables.contains(&table.to_string()), "missing table {table}");
         }
     }

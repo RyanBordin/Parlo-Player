@@ -26,6 +26,29 @@
   --color-warning: #fbbf24;
   --color-error: #f87171;
 
+  /* Over images and behind dialogs. */
+  /* Dark layer on covers: play overlays, badges, buttons on a cover. */
+  --color-scrim: rgb(0 0 0 / 60%);
+  /* Behind a modal dialog. */
+  --color-backdrop: rgb(0 0 0 / 60%);
+  /* Pills over a header image. */
+  --color-glass: rgb(0 0 0 / 30%);
+  /* Body text over a photo (artist biography). */
+  --color-text-on-image: rgb(255 255 255 / 80%);
+  /* Header image fading into the page: blurred cover (album, playlist,
+     artist without photo) and artist photo, darker where the text is. */
+  --shade-hero: linear-gradient(to bottom, rgb(0 0 0 / 15%), rgb(0 0 0 / 55%) 60%, var(--color-bg));
+  --shade-photo:
+    linear-gradient(to bottom, rgb(0 0 0 / 0%) 30%, rgb(0 0 0 / 70%) 75%, var(--color-bg)),
+    linear-gradient(to right, rgb(0 0 0 / 45%), rgb(0 0 0 / 0%) 65%);
+
+  /* Shadows */
+  --shadow-button: 0 6px 16px rgb(0 0 0 / 50%);
+  --shadow-cover: 0 16px 40px rgb(0 0 0 / 45%);
+  --shadow-popover: 0 12px 32px rgb(0 0 0 / 60%);
+  --shadow-dialog: 0 24px 64px rgb(0 0 0 / 60%);
+  --shadow-text: 0 2px 24px rgb(0 0 0 / 35%);
+
   /* Corner radii */
   --radius-sm: 6px;
   --radius-md: 10px;

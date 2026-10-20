@@ -18,9 +18,9 @@
   import { formatDuration, formatNumber } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
+  import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
   import { COLUMNS, gridColumns, type ColumnId, type TableRow, type TableSort } from "#lib/track-columns.ts";
 
-  const SONG_HEIGHT = 56;
   const DISC_HEIGHT = 48;
 
   let {
@@ -67,6 +67,9 @@
 
   let songCount = $derived(rows.reduce((count, row) => count + (row.kind === "song" ? 1 : 0), 0));
   let template = $derived(gridColumns(columns));
+  // List density (spec 6.10).
+  let songHeight = $derived(songRowHeight());
+  let coverSize = $derived(songCoverSize());
 
   function isCurrent(song: TrackListSong) {
     return player.track?.id === song.id;
@@ -210,7 +213,7 @@
   {:else if column === "title"}
     <div class="title-cell" role="cell">
       {#if showCover}
-        <span class="cover"><Cover id={song.coverArt} size={40} radius="var(--radius-sm)" /></span>
+        <span class="cover"><Cover id={song.coverArt} size={coverSize} radius="var(--radius-sm)" /></span>
       {/if}
       <span class="text">
         <span class="title" title={song.title}>{song.title}</span>
@@ -269,7 +272,7 @@
   {/if}
 {/snippet}
 
-<div class="table" role="table" aria-rowcount={songCount} style:--columns={template}>
+<div class="table" role="table" aria-rowcount={songCount} style:--columns={template} style:--cover={`${coverSize}px`}>
   <div class="head grid" role="row">
     {#each columns as column (column)}
       {@render header(column)}
@@ -278,7 +281,7 @@
 
   <VirtualList
     items={rows}
-    height={(row) => (row.kind === "disc" ? DISC_HEIGHT : SONG_HEIGHT)}
+    height={(row) => (row.kind === "disc" ? DISC_HEIGHT : songHeight)}
     key={(row) => (row.kind === "disc" ? `disc-${row.disc}` : `song-${selectKey(row.index)}`)}
   >
     {#snippet row(row: TableRow)}
@@ -444,11 +447,11 @@
 
   .cover {
     flex: none;
-    width: 40px;
+    width: var(--cover);
   }
 
   .cover.placeholder {
-    height: 40px;
+    height: var(--cover);
     border-radius: var(--radius-sm);
     background: var(--color-surface);
   }

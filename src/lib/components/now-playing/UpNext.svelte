@@ -16,12 +16,15 @@
   import { m } from "#lib/paraglide/messages.js";
   import { getLocale } from "#lib/paraglide/runtime.js";
   import { player, queue } from "#lib/player.svelte.ts";
+  import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
 
-  const ROW_HEIGHT = 56;
   /** Near the list's top or bottom edge while dragging, it scrolls. */
   const EDGE = 48;
   const EDGE_SPEED = 12;
 
+  // List density (spec 6.10).
+  let rowHeight = $derived(songRowHeight());
+  let coverSize = $derived(songCoverSize());
   let scroller = $state<HTMLElement>();
   let rows = $state<HTMLElement>();
   let error = $state<ErrorMessage | null>(null);
@@ -53,7 +56,7 @@
   $effect(() => {
     if (scrolledToCurrent || !scroller || !rows || queue.currentIndex === null) return;
     scrolledToCurrent = true;
-    const top = rows.offsetTop + queue.currentIndex * ROW_HEIGHT;
+    const top = rows.offsetTop + queue.currentIndex * rowHeight;
     scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 3);
   });
 
@@ -82,7 +85,7 @@
 
   function positionAt(clientY: number): number {
     if (!rows) return 0;
-    const index = Math.floor((clientY - rows.getBoundingClientRect().top) / ROW_HEIGHT);
+    const index = Math.floor((clientY - rows.getBoundingClientRect().top) / rowHeight);
     return Math.min(Math.max(index, 0), queue.tracks.length - 1);
   }
 
@@ -155,8 +158,8 @@
       <p class="error">{error.message}</p>
     {/if}
 
-    <div class="rows" class:dragging={drag !== null} bind:this={rows}>
-      <VirtualList {items} height={() => ROW_HEIGHT} key={(item) => `${item.index}-${item.track.id}`}>
+    <div class="rows" class:dragging={drag !== null} bind:this={rows} style:--cover={`${coverSize}px`}>
+      <VirtualList {items} height={() => rowHeight} key={(item) => `${item.index}-${item.track.id}`}>
         {#snippet row({ track, index }: (typeof items)[number])}
           {@const current = index === queue.currentIndex}
           <div
@@ -169,7 +172,7 @@
             onkeydown={(event) => onRowKeydown(event, index)}
           >
             <span class="cover">
-              <Cover id={track.coverArt} size={40} radius="var(--radius-sm)" />
+              <Cover id={track.coverArt} size={coverSize} radius="var(--radius-sm)" />
               {#if current}
                 <span class="state" aria-hidden="true">
                   {#if player.status === "playing"}<Play size={16} fill="currentColor" />{:else}<Pause
@@ -211,7 +214,7 @@
       </VirtualList>
       {#if drag && drag.to !== drag.from}
         <!-- Where the song would land. -->
-        <div class="drop" style:top={`${(drag.to + (drag.to > drag.from ? 1 : 0)) * ROW_HEIGHT}px`}></div>
+        <div class="drop" style:top={`${(drag.to + (drag.to > drag.from ? 1 : 0)) * rowHeight}px`}></div>
       {/if}
     </div>
   {/if}
@@ -285,7 +288,7 @@
   .row {
     height: 100%;
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) auto 28px 28px;
+    grid-template-columns: var(--cover) minmax(0, 1fr) auto 28px 28px;
     align-items: center;
     gap: var(--space-3);
     padding: 0 var(--space-2);
@@ -304,7 +307,7 @@
 
   .cover {
     position: relative;
-    width: 40px;
+    width: var(--cover);
   }
 
   /* Spec 4.4: play / pause icon over the current song's cover. */
@@ -314,7 +317,7 @@
     display: grid;
     place-items: center;
     border-radius: var(--radius-sm);
-    background: rgb(0 0 0 / 55%);
+    background: var(--color-scrim);
     color: var(--color-accent-text);
   }
 

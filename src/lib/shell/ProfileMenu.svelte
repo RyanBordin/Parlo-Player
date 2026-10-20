@@ -107,7 +107,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 60%);
+    box-shadow: var(--shadow-popover);
   }
 
   dl {

@@ -8,12 +8,17 @@
 //! Gapless: mpv's own playlist always holds the current song and, when there
 //! is one, the next song of the queue. With `prefetch-playlist`, mpv opens the
 //! next song before the current one ends and moves to it without silence.
+//!
+//! Each song is loaded with its own ReplayGain options (see `audio`); the
+//! output device and the exclusive mode apply to the whole player.
 
+pub mod audio;
 mod events;
 pub mod listen;
 pub mod queue;
 pub mod resume;
 
+pub use audio::{AudioDevice, Gain};
 pub use events::{PlaybackError, PlaybackStatus, PlayerEvent, PlayerState, Position, Track};
 
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -54,6 +59,14 @@ const OBSERVE_TIME_POS: u64 = 1;
 const OBSERVE_DURATION: u64 = 2;
 const OBSERVE_PAUSE: u64 = 3;
 const OBSERVE_PLAYLIST_POS: u64 = 4;
+const OBSERVE_DEVICES: u64 = 5;
+
+/// What mpv loads for a song: its stream and how loud it plays.
+#[derive(Debug, Clone)]
+pub struct Media {
+    pub url: SecretUrl,
+    pub gain: Gain,
+}
 
 #[derive(Debug, Error)]
 pub enum PlayerError {
@@ -117,6 +130,7 @@ impl Player {
         mpv.observe_property("duration", Format::Double, OBSERVE_DURATION)?;
         mpv.observe_property("pause", Format::Flag, OBSERVE_PAUSE)?;
         mpv.observe_property("playlist-pos", Format::Int64, OBSERVE_PLAYLIST_POS)?;
+        mpv.observe_property("audio-device-list", Format::String, OBSERVE_DEVICES)?;
         let volume: f64 = mpv.get_property("volume")?;
 
         let mpv = Arc::new(mpv);
@@ -145,8 +159,8 @@ impl Player {
     pub fn play(
         &self,
         track: Track,
-        url: &SecretUrl,
-        next: Option<(Track, SecretUrl)>,
+        media: &Media,
+        next: Option<(Track, Media)>,
         start_secs: f64,
         paused: bool,
     ) -> Result<(), PlayerError> {
@@ -162,21 +176,56 @@ impl Player {
         (self.sink)(PlayerEvent::State(state));
 
         self.mpv.set_property("pause", paused)?;
-        self.load(url, &title, "replace", start_secs)?;
+        self.load(media, &title, "replace", start_secs)?;
         self.set_next(next)
     }
 
     /// Replaces the preloaded song (after shuffle, repeat or queue changes).
-    pub fn set_next(&self, next: Option<(Track, SecretUrl)>) -> Result<(), PlayerError> {
+    pub fn set_next(&self, next: Option<(Track, Media)>) -> Result<(), PlayerError> {
         // `playlist-clear` removes every entry except the current one.
         self.mpv.command("playlist-clear", &[])?;
-        let Some((track, url)) = next else {
+        let Some((track, media)) = next else {
             lock(&self.shared).next = None;
             return Ok(());
         };
         let title = track.title.clone();
         lock(&self.shared).next = Some(track);
-        self.load(&url, &title, "append", 0.0)
+        self.load(&media, &title, "append", 0.0)
+    }
+
+    /// Changes the gain of the song playing, at once (a ReplayGain setting changed).
+    pub fn apply_gain(&self, gain: &Gain) -> Result<(), PlayerError> {
+        for (name, value) in gain.options() {
+            self.mpv.set_property(name, value.as_str())?;
+        }
+        Ok(())
+    }
+
+    /// Sends the sound to another output without stopping the music.
+    pub fn set_audio_device(&self, name: &str) -> Result<(), PlayerError> {
+        let current: String = self.mpv.get_property("audio-device").unwrap_or_default();
+        if current != name {
+            self.mpv.set_property("audio-device", name)?;
+        }
+        Ok(())
+    }
+
+    /// Exclusive mode (WASAPI): the output is reopened, so a short gap is heard.
+    pub fn set_exclusive(&self, exclusive: bool) -> Result<(), PlayerError> {
+        if self.mpv.get_property::<bool>("audio-exclusive").unwrap_or(false) == exclusive {
+            return Ok(());
+        }
+        self.mpv.set_property("audio-exclusive", exclusive)?;
+        if self.has_track() {
+            self.mpv.command("ao-reload", &[])?;
+        }
+        Ok(())
+    }
+
+    /// The audio outputs mpv can use, the system's default first.
+    pub fn audio_devices(&self) -> Vec<AudioDevice> {
+        let list: String = self.mpv.get_property("audio-device-list").unwrap_or_default();
+        audio::parse_devices(&list)
     }
 
     /// Play/pause. Does nothing when no song is loaded.
@@ -287,15 +336,19 @@ impl Player {
         lock(&self.shared).track.is_some()
     }
 
-    /// `loadfile <url> <mode> -1 force-media-title=...[,start=...]`. Without
-    /// the title, mpv's own title would be the URL (and its credentials).
-    fn load(&self, url: &SecretUrl, title: &str, mode: &str, start_secs: f64) -> Result<(), PlayerError> {
+    /// `loadfile <url> <mode> -1 force-media-title=...[,start=...],<gain>`.
+    /// Without the title, mpv's own title would be the URL (and its
+    /// credentials). The gain options apply to this song only.
+    fn load(&self, media: &Media, title: &str, mode: &str, start_secs: f64) -> Result<(), PlayerError> {
         // `%N%text` quotes the value, so commas in the title are safe.
         let mut options = format!("force-media-title=%{}%{title}", title.len());
         if start_secs > 0.0 {
             options.push_str(&format!(",start={start_secs:.3}"));
         }
-        self.mpv.command("loadfile", &[url.expose(), mode, "-1", options.as_str()])?;
+        for (name, value) in media.gain.options() {
+            options.push_str(&format!(",{name}={value}"));
+        }
+        self.mpv.command("loadfile", &[media.url.expose(), mode, "-1", options.as_str()])?;
         Ok(())
     }
 }
@@ -375,6 +428,10 @@ fn event_loop(mpv: &Mpv, shared: &Mutex<Shared>, sink: &EventSink) {
             }
 
             Ok(Event::Seek) => vec![PlayerEvent::Seeked],
+
+            Ok(Event::PropertyChange { name: "audio-device-list", change: PropertyData::Str(list), .. }) => {
+                vec![PlayerEvent::DevicesChanged(audio::parse_devices(list))]
+            }
 
             // After a seek, show the new position right away.
             Ok(Event::PlaybackRestart) => {
@@ -457,8 +514,12 @@ mod tests {
     }
 
     /// A synthetic tone: no network and, with `ao=null`, no sound card.
-    fn tone(frequency: u32) -> SecretUrl {
-        SecretUrl::for_test(&format!("av://lavfi:sine=frequency={frequency}:duration=1"))
+    fn tone(frequency: u32) -> Media {
+        media(&format!("av://lavfi:sine=frequency={frequency}:duration=1"))
+    }
+
+    fn media(url: &str) -> Media {
+        Media { url: SecretUrl::for_test(url), gain: Gain::Off }
     }
 
     fn test_player() -> (Player, mpsc::Receiver<PlayerEvent>) {
@@ -579,7 +640,7 @@ mod tests {
     #[ignore = "starts libmpv; run with --ignored"]
     fn missing_file_reports_an_error() {
         let (player, rx) = test_player();
-        let url = SecretUrl::for_test("file:///definitely/missing.flac");
+        let url = media("file:///definitely/missing.flac");
         player.play(track("x", "X"), &url, None, 0.0, false).unwrap();
 
         loop {
@@ -622,7 +683,7 @@ mod tests {
     #[ignore = "starts libmpv; run with --ignored"]
     fn seeks_relative_to_the_position() {
         let (player, rx) = test_player();
-        let long_tone = SecretUrl::for_test("av://lavfi:sine=frequency=440:duration=20");
+        let long_tone = media("av://lavfi:sine=frequency=440:duration=20");
         player.play(track("a", "A"), &long_tone, None, 2.0, true).unwrap();
         loop {
             if let PlayerEvent::State(s) = next_event(&rx)
@@ -635,6 +696,27 @@ mod tests {
         player.seek_by(5.0).unwrap();
         let position = wait_for_position(&player, before + 5.0);
         assert!((position - (before + 5.0)).abs() < 0.15, "from {before} to {position}");
+    }
+
+    #[test]
+    #[ignore = "starts libmpv; run with --ignored"]
+    fn gain_options_reach_mpv() {
+        let (player, rx) = test_player();
+        let quieter = Media { gain: Gain::Fixed(-6.5), ..tone(440) };
+        player.play(track("a", "A"), &quieter, None, 0.0, true).unwrap();
+        loop {
+            if let PlayerEvent::State(s) = next_event(&rx)
+                && s.status == PlaybackStatus::Paused
+            {
+                break;
+            }
+        }
+        let gain: f64 = player.mpv.get_property("volume-gain").unwrap();
+        assert!((gain + 6.5).abs() < 0.01, "volume-gain {gain}");
+
+        player.apply_gain(&Gain::Off).unwrap();
+        assert_eq!(player.mpv.get_property::<f64>("volume-gain").unwrap(), 0.0);
+        assert!(!player.audio_devices().is_empty(), "at least the system default");
     }
 
     #[test]

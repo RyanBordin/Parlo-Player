@@ -6,7 +6,7 @@
 >
 > Sempre que este documento for fornecido como contexto, todas as decisões de interface (UI), experiência do usuário (UX), fluxos de navegação, regras de reprodução, integrações de API e tecnologias abaixo devem ser estritamente respeitadas.
 
-**Última atualização:** 18/10/2026
+**Última atualização:** 20/10/2026
 
 ---
 
@@ -438,22 +438,82 @@ Referência: resultados do Swing Music + melhor resultado do YouTube Music.
 
 ### 6.10. Configurações
 
-Página com menu de seções à esquerda. Referência de personalização: Symfonium.
+Página dividida **por setores**, nunca com opções misturadas. Referência de personalização: Symfonium.
 
-* **Geral**
-  * **Aparência:** temas e personalização (cores, logo etc.). `[Detalhes em aberto]`
-  * **Perfil:** usuário conectado, nome, senha, servidor (troca de servidor).
-  * **Contas:** gestão de usuários no estilo Swing Music (lista com selo ADMIN, "+ Novo usuário", remover). `[Depois]` — ver limitação na Seção 13. No MVP, mostra só o usuário atual.
-* **Reprodução e playlists**
-  * Tamanho máximo do mix aleatório (padrão: 100).
-  * Qualidade de streaming e de download (original ou convertida).
-  * Playlists automáticas (Seção 11).
-* **Downloads** `[v0.2]`: pasta dos downloads, espaço ocupado, limpar tudo.
-* **Biblioteca** `[v0.2]`
-  * **Pastas:** origem das músicas (`getMusicFolders`), **rescan** (`startScan`, com opção `fullScan`) e status (`getScanStatus`, inclui data do último scan).
-  * **Metadados:** origem dos metadados, no limite do que a API informa.
-  * Resumo: nº de faixas, álbuns e artistas.
-* **Sobre:** versão, link do GitHub, descrição do projeto, e-mail de contato (opcional).
+**Estrutura da página**
+
+* Menu de setores à esquerda; o conteúdo do setor escolhido à direita, com as opções agrupadas sob subtítulos.
+* **Busca nas configurações** no topo: filtra as opções de todos os setores pelo nome e pela descrição, no idioma atual, mostrando o setor de cada resultado.
+* Cada opção tem nome e, quando não for óbvia, uma descrição curta em tom secundário.
+* As mudanças **valem na hora**, sem botão Salvar.
+* **"Restaurar padrões"** no fim de cada setor, com confirmação.
+* Setores e opções de versões futuras ficam **ocultos** até existirem (mesma regra do Baixados): nada de "Em breve".
+* O último setor aberto é lembrado.
+* **Onde fica cada preferência:** as do app (idioma, aparência, sistema, áudio) num arquivo de configuração global; as ligadas à biblioteca (pastas visíveis, sincronização) no banco do servidor + usuário (Seção 12.4).
+
+**1. Geral**
+
+* **Idioma:** seguir o sistema (padrão), português ou inglês. Números e datas seguem o idioma escolhido.
+* **Iniciar com o sistema** (padrão: desligado), com a opção **iniciar minimizado na bandeja**.
+* **Ao fechar a janela:** continuar na bandeja (padrão, Seção 12.2) ou encerrar o app.
+* **Notificação ao trocar de faixa** (padrão: desligado). Só aparece quando a janela não está em foco.
+* **Atalhos de teclado:** lista dos atalhos da Seção 12.2, só leitura. `[Depois]` personalizar.
+
+**2. Aparência**
+
+* **Organizar a Home:** lista das seções da Início (Seção 6.1) com alça para arrastar e chave para ocultar. A ordem padrão é a da Seção 6.1. Pelo menos uma seção precisa ficar visível.
+* **Organizar a barra lateral:** mesma lógica para os itens de navegação (Seção 4.2). **Configurações** fica sempre por último e não pode ser oculta, para o usuário nunca perder o acesso.
+* **Densidade das listas:** confortável (padrão) ou compacta. Vale para a tracklist e as listas de faixas.
+* **Escala da interface:** 90%, 100% (padrão), 110%, 125%. Útil em monitores de alta resolução. A largura mínima da janela é recalculada com a escala.
+* **Reduzir animações** (padrão: seguir o sistema).
+* `[Depois]` **Temas:** temas prontos, **cor de destaque** escolhida pelo usuário e **cor tirada da capa** da música tocando, como no Symfonium. Toda cor da interface já deve vir de variáveis de tema, para essa etapa não exigir reescrever telas.
+
+**3. Reprodução e áudio**
+
+* **ReplayGain:** desligado, por faixa, por álbum ou **automático** (padrão: álbum quando a fila é um álbum tocado em ordem; faixa nos demais casos). Com **pré-amplificação** (−15 a +15 dB, padrão 0) e **evitar distorção** (padrão: ligado).
+* **Dispositivo de saída:** padrão do sistema ou um dispositivo específico. A troca vale na hora, sem parar a música. Se o dispositivo escolhido sumir, volta ao padrão do sistema.
+* **Modo exclusivo** (só Windows, padrão: desligado): o app usa a saída de áudio sozinho, sem mixagem do Windows. Para quem usa DAC.
+* **Tamanho do mix aleatório:** 50, 100 (padrão), 200, 500 (Seção 9).
+* **Enviar reproduções ao servidor (scrobble)** (padrão: ligado). Desligado, o histórico local continua sendo gravado (Seção 5.7).
+* `[Depois]` crossfade e equalizador.
+
+**4. Streaming**
+
+* **Qualidade do streaming:** original (padrão) ou convertida pelo servidor, com **formato** (Opus ou MP3) e **bitrate máximo** (320, 256, 192, 128 kbps). Usa `format` e `maxBitRate` do endpoint `stream`.
+* A mudança vale a partir da próxima faixa.
+* `[v0.2]` Qualidade dos downloads, separada da do streaming.
+
+**5. Servidor e conta**
+
+* **Servidor:** endereço, status (conectado/offline), versão do servidor e **recursos OpenSubsonic** disponíveis (`getOpenSubsonicExtensions`), com o aviso de HTTP da Seção 12.5. Botão **Testar conexão** (`ping`).
+* **Perfil:** usuário conectado e **Sair** (Seção 12.4: apaga as credenciais, mantém o banco).
+* `[Depois]` **Contas** no estilo Swing Music (Seção 13) e vários servidores.
+
+**6. Sincronização**
+
+* **Sincronizar automaticamente:** ao abrir o app (sempre) e a cada 15 min, 30 min (padrão), 1 h ou só manual. A verificação periódica roda a sincronização leve e confere a data do último scan (`getScanStatus`) para decidir se precisa da completa (Seção 12.4).
+* **Sincronizar agora**, com a data e hora da última sincronização e o resultado.
+* **Sincronização completa:** reconstrói o banco local da biblioteca do zero, **preservando o histórico de reproduções**. Com confirmação.
+* **Continuar a fila de outro dispositivo** (padrão: ligado): a regra "a mais recente vence" da Seção 5.6. Desligado, o Parlo sempre restaura a própria fila.
+* **Reproduções pendentes:** quantas aguardam envio ao servidor, com botão para reenviar. Só aparece quando houver alguma.
+
+**7. Biblioteca**
+
+* **Resumo:** nº de faixas, álbuns e artistas, e espaço ocupado pelo banco local.
+* **Pastas de música:** lista das pastas do servidor (`getMusicFolders`), com chave para escolher quais aparecem no app. Só aparece quando o servidor tem mais de uma pasta.
+* **Cache de capas:** espaço ocupado, limite (250 MB, 500 MB padrão, 1 GB, 2 GB) e **Limpar cache**.
+* `[v0.2]` **Rescan** do servidor (`startScan`, com opção `fullScan`) e status (`getScanStatus`). Exige permissão de administrador; sem ela, a opção não aparece.
+* `[v0.2]` **Metadados:** origem dos metadados, no limite do que a API informa.
+
+**8. Playlists automáticas** `[v0.2]`: recaps e playlists vivas (Seção 11).
+
+**9. Downloads** `[v0.2]`: pasta dos downloads, qualidade, espaço ocupado e limpar tudo.
+
+**10. Sobre**
+
+* Logo com o nome, versão, descrição do projeto, link do GitHub e e-mail de contato (opcional).
+* **Abrir pasta de logs**, para relatar problemas. Os logs nunca contêm senhas, tokens ou URLs com credenciais (Seção 12.5).
+* **Licenças de terceiros:** lista das bibliotecas usadas e suas licenças, incluindo a da libmpv distribuída com o app.
 
 ### 6.11. Primeiro Uso (Login)
 
@@ -540,9 +600,10 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 ### 12.1. Áudio
 
 * **Gapless** e **pré-carregamento** da próxima faixa.
-* **ReplayGain** (faixa/álbum), com dados das extensões OpenSubsonic.
+* **ReplayGain** (desligado, faixa, álbum ou automático, com pré-amplificação), com dados das extensões OpenSubsonic.
+* Dispositivo de saída selecionável e modo exclusivo no Windows (Seção 6.10).
 * Formatos: FLAC, ALAC, MP3, AAC, Opus, OGG, WAV.
-* Qualidade configurável, separada para streaming e download: original ou convertida pelo servidor (`format`, `maxBitRate`).
+* Qualidade configurável, separada para streaming e download `[v0.2]`: original ou convertida pelo servidor (`format`, `maxBitRate`).
 * `[Depois]` crossfade e equalizador.
 
 ### 12.2. Integração com o sistema
@@ -619,6 +680,7 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 * Busca (painel e resultados), busca rápida e ordenação nas listas.
 * Menus `...`, favoritar, criar/editar playlists, salvar mix.
 * MPRIS/SMTC, bandeja/segundo plano, atalhos.
+* Configurações (Seção 6.10): Geral, Aparência (organizar Home e barra lateral, densidade, escala), Reprodução e áudio, Streaming, Servidor e conta, Sincronização, Biblioteca (resumo, pastas, cache) e Sobre.
 * Visual Swing Music com um tema escuro fixo; português e inglês.
 
 ### v0.2
@@ -627,11 +689,13 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 * Playlists automáticas (recaps e playlists vivas).
 * Filtros avançados por metadado.
 * Botões na miniatura da barra de tarefas do Windows.
-* Configurações de Biblioteca.
+* Configurações: Biblioteca (rescan e metadados), Playlists automáticas e Downloads.
 
 ### Depois
 
-* Temas e personalização da aparência.
+* Temas, cor de destaque e cor tirada da capa.
+* Personalizar atalhos de teclado.
+* Vários servidores.
 * Contas (gestão de usuários).
 * Alternar grade/lista em Álbuns, crossfade, equalizador, Discord Rich Presence, atualização automática.
 
@@ -639,9 +703,8 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 
 ## 15. Itens em Aberto
 
-* [ ] **Aparência e temas:** lista de opções de personalização (cores, logo etc.).
+* [ ] **Temas:** quais temas prontos e o que mais da aparência o usuário pode mudar (logo etc.), além do que está na Seção 6.10.
 * [ ] **Playlists manuais:** reordenar faixas por drag-and-drop dentro da página da playlist?
-* [ ] **Ordem dos carrosséis da Home:** fixa ou configurável pelo usuário?
 * [ ] **Novos tipos de playlist automática** além de recaps e "Mais escutadas".
 
 ---
@@ -685,3 +748,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 18/10/2026 | Tocando Agora detalhado (referência YouTube Music): fila completa virtualizada, salvar fila com nome sugerido, letra clicável para pular, Relacionados em 4 seções. |
 | 19/10/2026 | Favoritos: Tocar tudo e Aleatório no cabeçalho, 10 músicas na tabela com Ver tudo, Ver mais em álbuns/artistas, item desfavoritado permanece até sair da página, sincronização leve ao abrir. |
 | 19/10/2026 | Artistas e página do artista: filtros avançados na v0.2; lista única do artista ordenada por reproduções (Tocar, Top 5 e Ver todas); biografia como texto limpo; Álbuns × Singles e EPs; info do artista em cache por 7 dias. |
+| 20/10/2026 | Configurações por setores (Geral, Aparência, Reprodução e áudio, Streaming, Servidor e conta, Sincronização, Biblioteca, Playlists automáticas, Downloads, Sobre), com busca e "Restaurar padrões". Ordem da Home e da barra lateral configurável já na v0.1. Setores futuros ocultos até existirem. Temas e cor tirada da capa ficam para depois. |

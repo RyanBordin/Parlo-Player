@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::artist_page::{self, ArtistAbout};
 use crate::covers::Covers;
@@ -19,13 +20,17 @@ use crate::now_playing::{self, Lyrics, Related};
 use crate::db::albums::{self, AlbumListItem};
 use crate::db::artists::{self, ArtistListItem};
 use crate::db::songs::{self, SongSort};
-use crate::playback::{AlbumsPlayMode, Playback, PlaybackError, QueueState};
+use crate::db::settings::LibrarySettings;
+use crate::db::history;
+use crate::playback::{self, AlbumsPlayMode, Playback, PlaybackError, QueueState};
+use crate::player::AudioDevice;
 use crate::player::queue::RepeatMode;
 use crate::player::{PlayerError, PlayerState};
 use crate::session::{self, SavedSession, SessionError};
+use crate::settings::{self, AppSettings, SettingsError};
 use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
-use crate::subsonic::{AlbumListType, ServerInfo, StarItem, SubsonicClient, SubsonicError};
-use crate::sync::{self, SyncError, SyncProgress};
+use crate::subsonic::{Album, AlbumListType, Extension, MusicFolder, ServerInfo, StarItem, SubsonicClient, SubsonicError};
+use crate::sync::{self, FullSync, SyncError, SyncProgress};
 use crate::test_library;
 
 /// Event with a `SyncProgress` payload, sent while a sync runs.
@@ -91,6 +96,12 @@ impl From<SubsonicError> for CommandError {
 
 impl From<SessionError> for CommandError {
     fn from(error: SessionError) -> Self {
+        Self::Storage { detail: error.to_string() }
+    }
+}
+
+impl From<SettingsError> for CommandError {
+    fn from(error: SettingsError) -> Self {
         Self::Storage { detail: error.to_string() }
     }
 }
@@ -248,14 +259,23 @@ pub fn sync_light(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<boo
     start_sync(app, &state, SyncKind::Light)
 }
 
+/// "Full sync" of Settings > Sync (spec 6.10): rebuilds the library from
+/// scratch, keeping the play history. `false` if a sync is already running.
+#[tauri::command]
+pub fn rebuild_library(app: AppHandle, state: State<'_, Arc<AppState>>) -> Result<bool, CommandError> {
+    start_sync(app, &state, SyncKind::Rebuild)
+}
+
 #[derive(Debug, Clone, Copy)]
-enum SyncKind {
+pub(crate) enum SyncKind {
     /// Full sync if due (or forced), then the light one.
     Rules { force_full: bool },
     Light,
+    /// Full sync rebuilding the library, then the light one.
+    Rebuild,
 }
 
-fn start_sync(app: AppHandle, state: &Arc<AppState>, kind: SyncKind) -> Result<bool, CommandError> {
+pub(crate) fn start_sync(app: AppHandle, state: &Arc<AppState>, kind: SyncKind) -> Result<bool, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     // The test library has no server to sync with.
     if test_library::ENABLED {
@@ -269,14 +289,30 @@ fn start_sync(app: AppHandle, state: &Arc<AppState>, kind: SyncKind) -> Result<b
         let emit_progress = |progress: SyncProgress| {
             let _ = app.emit(SYNC_PROGRESS_EVENT, progress);
         };
+        let path = active.db_path.clone();
         let result = match kind {
-            SyncKind::Rules { force_full } => sync::run(&active.client, active.db_path, force_full, &emit_progress).await,
-            SyncKind::Light => sync::run_light(&active.client, active.db_path, &emit_progress).await,
+            SyncKind::Rules { force_full } => {
+                let mode = if force_full { FullSync::Forced } else { FullSync::IfDue };
+                sync::run(&active.client, path, mode, &emit_progress).await
+            }
+            SyncKind::Light => sync::run_light(&active.client, path, &emit_progress).await,
+            SyncKind::Rebuild => sync::run(&active.client, path, FullSync::Rebuild, &emit_progress).await,
         };
+        let error = result.err().map(CommandError::from);
+
+        // Spec 6.10: the date and result of the last sync, kept for the settings.
+        let error_json = error.as_ref().and_then(|e| serde_json::to_string(e).ok());
+        let path = active.db_path.clone();
+        let recorded = run_blocking(move || {
+            library::record_sync_result(&db::open(&path)?, sync::now(), error_json.as_deref())
+        })
+        .await;
+        if let Err(e) = recorded {
+            log::warn!("commands: could not keep the sync result: {e:?}");
+        }
 
         // Clear the flag first, so the UI sees `syncing: false` when it reacts.
         drop(guard);
-        let error = result.err().map(CommandError::from);
         let _ = app.emit(SYNC_FINISHED_EVENT, SyncFinished { error });
     });
     Ok(true)
@@ -309,7 +345,12 @@ pub async fn get_home_library(state: State<'_, Arc<AppState>>) -> Result<HomeLib
 pub async fn get_home_activity(state: State<'_, Arc<AppState>>) -> Result<HomeActivity, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     let frequent = active.client.get_album_list2(AlbumListType::Frequent, ROW_SIZE as u32, 0).await.ok();
-    run_blocking(move || home::activity(&db::open(&active.db_path)?, frequent)).await
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        let frequent = without_hidden_albums(&conn, frequent)?;
+        home::activity(&conn, frequent)
+    })
+    .await
 }
 
 /// Everything starred, from the local cache, for the Favorites page (spec 6.2).
@@ -330,7 +371,25 @@ pub async fn get_home_section(
         Some(kind) => active.client.get_all_album_list2(kind).await.ok(),
         None => None,
     };
-    run_blocking(move || home::section(&db::open(&active.db_path)?, section, server)).await
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        let server = without_hidden_albums(&conn, server)?;
+        home::section(&conn, section, server)
+    })
+    .await
+}
+
+/// With music folders hidden (spec 6.10), only the albums the library has:
+/// the others are in a hidden folder.
+fn without_hidden_albums(conn: &rusqlite::Connection, albums: Option<Vec<Album>>) -> Result<Option<Vec<Album>>, DbError> {
+    let Some(mut albums) = albums else { return Ok(None) };
+    if db::settings::load(conn)?.hidden_folders.is_empty() {
+        return Ok(Some(albums));
+    }
+    let ids: Vec<String> = albums.iter().map(|a| a.id.clone()).collect();
+    let known = library::known_album_ids(conn, &ids)?;
+    albums.retain(|album| known.contains(&album.id));
+    Ok(Some(albums))
 }
 
 /// Playlists from the local cache, by name (sidebar, spec 4.2).
@@ -432,7 +491,7 @@ pub async fn set_song_starred(
     })
     .await;
     if let Err(error) = saved {
-        eprintln!("commands: star saved on the server but not locally: {error:?}");
+        log::warn!("commands: star saved on the server but not locally: {error:?}");
     }
     if let Ok(playback) = &playback.0 {
         playback.song_starred(&song_id, starred);
@@ -451,7 +510,7 @@ pub async fn set_album_starred(
     active.client.set_starred(StarItem::Album, std::slice::from_ref(&album_id), starred).await?;
     let saved = run_blocking(move || tracks::set_album_starred(&db::open(&active.db_path)?, &album_id, starred)).await;
     if let Err(error) = saved {
-        eprintln!("commands: album star saved on the server but not locally: {error:?}");
+        log::warn!("commands: album star saved on the server but not locally: {error:?}");
     }
     Ok(())
 }
@@ -476,7 +535,21 @@ pub async fn get_playlist_page(
 ) -> Result<Option<PlaylistPage>, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     match active.client.get_playlist(&playlist_id).await {
-        Ok((playlist, songs)) => {
+        Ok((playlist, mut songs)) => {
+            // Spec 6.10: songs of hidden music folders are left out.
+            let path = active.db_path.clone();
+            let ids: Vec<String> = songs.iter().map(|s| s.id.clone()).collect();
+            let known = run_blocking(move || {
+                let conn = db::open(&path)?;
+                if db::settings::load(&conn)?.hidden_folders.is_empty() {
+                    return Ok::<_, DbError>(None);
+                }
+                Ok(Some(library::song_summaries(&conn, &ids)?))
+            })
+            .await?;
+            if let Some(known) = known {
+                songs.retain(|song| known.contains_key(&song.id));
+            }
             let page = PlaylistPage {
                 playlist: PlaylistHeader {
                     id: playlist.id.clone(),
@@ -495,7 +568,7 @@ pub async fn get_playlist_page(
             })
             .await;
             if let Err(error) = saved {
-                eprintln!("commands: could not keep the playlist for offline use: {error:?}");
+                log::warn!("commands: could not keep the playlist for offline use: {error:?}");
             }
             Ok(Some(page))
         }
@@ -636,7 +709,7 @@ pub async fn get_artist_about(
                 })
                 .await;
                 if let Err(error) = saved {
-                    eprintln!("commands: could not keep the artist info: {error:?}");
+                    log::warn!("commands: could not keep the artist info: {error:?}");
                 }
                 Some(fresh)
             }
@@ -667,7 +740,7 @@ pub async fn set_artist_starred(
     active.client.set_starred(StarItem::Artist, std::slice::from_ref(&artist_id), starred).await?;
     let saved = run_blocking(move || artists::set_artist_starred(&db::open(&active.db_path)?, &artist_id, starred)).await;
     if let Err(error) = saved {
-        eprintln!("commands: artist star saved on the server but not locally: {error:?}");
+        log::warn!("commands: artist star saved on the server but not locally: {error:?}");
     }
     Ok(())
 }
@@ -795,6 +868,146 @@ pub fn get_player_state(playback: State<'_, PlaybackSlot>) -> Result<PlayerState
     Ok(playback_of(&playback)?.player().state())
 }
 
+/// Settings > Server and account (spec 6.10): asked when the sector opens
+/// and by "Test connection".
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerStatus {
+    pub online: bool,
+    /// Why the server could not be reached.
+    pub error: Option<CommandError>,
+    pub server: Option<ServerInfo>,
+    /// OpenSubsonic extensions the server announces.
+    pub extensions: Vec<Extension>,
+}
+
+#[tauri::command]
+pub async fn get_server_status(state: State<'_, Arc<AppState>>) -> Result<ServerStatus, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    match active.client.ping().await {
+        Ok(info) => {
+            let extensions = if info.open_subsonic {
+                active.client.get_open_subsonic_extensions().await.unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            Ok(ServerStatus { online: true, error: None, server: Some(info), extensions })
+        }
+        Err(error) => Ok(ServerStatus { online: false, error: Some(error.into()), server: None, extensions: Vec::new() }),
+    }
+}
+
+/// Settings > Sync (spec 6.10): the last sync and the plays waiting to be sent.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStatus {
+    /// Unix seconds.
+    pub last_sync_at: Option<i64>,
+    /// The `CommandError` of the last sync, if it failed.
+    pub last_error: Option<serde_json::Value>,
+    pub pending_scrobbles: i64,
+    pub syncing: bool,
+}
+
+#[tauri::command]
+pub async fn get_sync_status(state: State<'_, Arc<AppState>>) -> Result<SyncStatus, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let syncing = state.is_syncing();
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        let result = library::sync_result(&conn)?;
+        Ok::<_, DbError>(SyncStatus {
+            last_sync_at: result.at,
+            last_error: result.error.and_then(|text| serde_json::from_str(&text).ok()),
+            pending_scrobbles: history::pending_count(&conn)?,
+            syncing,
+        })
+    })
+    .await
+}
+
+/// "Send again" of the pending plays. Returns how many were sent.
+#[tauri::command]
+pub async fn resend_scrobbles(state: State<'_, Arc<AppState>>) -> Result<usize, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    Ok(playback::send_all_pending_scrobbles(&active.client, &active.db_path).await?)
+}
+
+/// Settings > Library (spec 6.10): counts and space on disk.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibrarySummary {
+    pub songs: i64,
+    pub albums: i64,
+    pub artists: i64,
+    pub database_bytes: u64,
+    pub cover_cache_bytes: u64,
+}
+
+#[tauri::command]
+pub async fn get_library_summary(
+    state: State<'_, Arc<AppState>>,
+    covers: State<'_, Arc<Covers>>,
+) -> Result<LibrarySummary, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let covers = Arc::clone(&covers);
+    run_blocking(move || {
+        let stats = library::stats(&db::open(&active.db_path)?)?;
+        Ok::<_, DbError>(LibrarySummary {
+            songs: stats.songs,
+            albums: stats.albums,
+            artists: stats.artists,
+            database_bytes: library::database_size(&active.db_path),
+            cover_cache_bytes: covers.cache().size(),
+        })
+    })
+    .await
+}
+
+/// The server's music folders (spec 6.10), to choose which ones show.
+#[tauri::command]
+pub async fn get_music_folders(state: State<'_, Arc<AppState>>) -> Result<Vec<MusicFolder>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    Ok(active.client.get_music_folders().await?)
+}
+
+/// "Clear cache" of the covers: they are downloaded again when shown.
+#[tauri::command]
+pub async fn clear_cover_cache(covers: State<'_, Arc<Covers>>) -> Result<(), CommandError> {
+    let covers = Arc::clone(&covers);
+    run_blocking(move || covers.cache().clear().map_err(DbError::from)).await
+}
+
+/// Links of Settings > About, fixed here so the interface cannot open anything else.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExternalLink {
+    Repository,
+    Email,
+}
+
+const REPOSITORY_URL: &str = "https://github.com/RyanBordin/Parlo-Player";
+const CONTACT_EMAIL: &str = "mailto:ryanbordin@proton.me";
+
+#[tauri::command]
+pub fn open_link(app: AppHandle, link: ExternalLink) -> Result<(), CommandError> {
+    let url = match link {
+        ExternalLink::Repository => REPOSITORY_URL,
+        ExternalLink::Email => CONTACT_EMAIL,
+    };
+    app.opener().open_url(url, None::<&str>).map_err(|e| CommandError::Storage { detail: e.to_string() })
+}
+
+/// "Open logs folder" (spec 6.10): for reporting problems.
+#[tauri::command]
+pub fn open_logs_folder(app: AppHandle) -> Result<(), CommandError> {
+    let dir = app.path().app_log_dir().map_err(|e| CommandError::Storage { detail: e.to_string() })?;
+    std::fs::create_dir_all(&dir).map_err(|e| CommandError::Storage { detail: e.to_string() })?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| CommandError::Storage { detail: e.to_string() })
+}
+
 fn playback_of(slot: &State<'_, PlaybackSlot>) -> Result<Arc<Playback>, CommandError> {
     slot.0.clone().map_err(|detail| CommandError::Playback { detail })
 }
@@ -803,6 +1016,71 @@ fn config_dir(app: &AppHandle) -> Result<PathBuf, CommandError> {
     app.path().app_config_dir().map_err(|e| CommandError::Storage {
         detail: e.to_string(),
     })
+}
+
+/// The app preferences (spec 6.10), or the defaults.
+#[tauri::command]
+pub async fn get_app_settings(app: AppHandle) -> Result<AppSettings, CommandError> {
+    let dir = config_dir(&app)?;
+    run_blocking(move || Ok::<_, SettingsError>(settings::load(&dir))).await
+}
+
+/// Saves the app preferences and applies the ones the backend handles (the
+/// interface scale, audio and streaming). Returns them as saved (values out
+/// of range fixed).
+#[tauri::command]
+pub async fn save_app_settings(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    covers: State<'_, Arc<Covers>>,
+    settings: AppSettings,
+) -> Result<AppSettings, CommandError> {
+    let settings = settings.normalized();
+    let dir = config_dir(&app)?;
+    let saved = settings.clone();
+    run_blocking(move || settings::save(&dir, &saved)).await?;
+
+    let old = state.set_settings(settings.clone());
+    if old.scale != settings.scale
+        && let Err(error) = settings::apply_scale(&window, settings.scale)
+    {
+        log::warn!("commands: could not apply the interface scale: {error}");
+    }
+    if old.cover_cache_mb != settings.cover_cache_mb {
+        let (covers, limit) = (Arc::clone(&covers), settings.cover_cache_bytes());
+        // A smaller limit deletes files.
+        tauri::async_runtime::spawn_blocking(move || covers.cache().set_limit(limit));
+    }
+    if let Ok(playback) = &playback.0 {
+        let (playback, new) = (Arc::clone(playback), settings.clone());
+        // Loading the next song reads the library cache.
+        tauri::async_runtime::spawn_blocking(move || playback.settings_changed(&old, &new));
+    }
+    Ok(settings)
+}
+
+/// The audio outputs (spec 6.10), the system's default first.
+#[tauri::command]
+pub fn get_audio_devices(playback: State<'_, PlaybackSlot>) -> Result<Vec<AudioDevice>, CommandError> {
+    Ok(playback_of(&playback)?.audio_devices())
+}
+
+/// The preferences of the signed-in server (spec 6.10).
+#[tauri::command]
+pub async fn get_library_settings(state: State<'_, Arc<AppState>>) -> Result<LibrarySettings, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || db::settings::load(&db::open(&active.db_path)?)).await
+}
+
+#[tauri::command]
+pub async fn save_library_settings(
+    state: State<'_, Arc<AppState>>,
+    settings: LibrarySettings,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || db::settings::save(&mut db::open(&active.db_path)?, &settings)).await
 }
 
 /// Whether this build is the performance test mode (`npm run tauri:perf`).
