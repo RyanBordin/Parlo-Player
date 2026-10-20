@@ -232,7 +232,28 @@ pub struct PlainLyrics {
     pub value: Option<String>,
 }
 
-/// `getSimilarSongs2` returns `{ "similarSongs2": { "song": [...] } }`.
+/// `getArtistInfo2`: biography and similar artists (Last.fm on Navidrome).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInfo {
+    /// HTML, often ending with a "Read more on Last.fm" link.
+    pub biography: Option<String>,
+    #[serde(default)]
+    pub similar_artist: Vec<SimilarArtist>,
+    #[serde(skip)]
+    pub raw_json: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct SimilarArtist {
+    /// Empty for artists the server does not have.
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+/// `getSimilarSongs2` and `getTopSongs` return `{ "<name>": { "song": [...] } }`.
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct RawSongList {
     #[serde(default)]
@@ -266,7 +287,7 @@ macro_rules! impl_has_raw_json {
         })*
     };
 }
-impl_has_raw_json!(Artist, Album, Song, Playlist);
+impl_has_raw_json!(Artist, Album, Song, Playlist, ArtistInfo);
 
 /// Types each JSON item and keeps its original text in `raw_json`.
 pub(super) fn with_raw_json<T: HasRawJson>(values: Vec<Value>) -> Result<Vec<T>, SubsonicError> {
@@ -315,6 +336,20 @@ mod tests {
         let artists: Vec<Artist> = with_raw_json(vec![json!({"id": "ar1", "name": "A"})]).unwrap();
         assert_eq!(artists[0].starred, None);
         assert!(artists[0].roles.is_empty());
+    }
+
+    #[test]
+    fn artist_info_keeps_the_biography_and_similar_artists() {
+        let value = json!({
+            "biography": "A band. <a href=\"https://www.last.fm/music/A\">Read more on Last.fm</a>",
+            "largeImageUrl": "https://example.com/a.jpg",
+            "similarArtist": [{"id": "ar2", "name": "B"}, {"name": "Not here"}]
+        });
+        let info: ArtistInfo = with_raw_json(vec![value]).unwrap().pop().unwrap();
+        assert!(info.biography.unwrap().starts_with("A band."));
+        assert_eq!(info.similar_artist.len(), 2);
+        assert_eq!(info.similar_artist[1].id, "", "artists the server does not have");
+        assert!(info.raw_json.contains("largeImageUrl"));
     }
 
     #[test]

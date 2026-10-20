@@ -156,7 +156,7 @@
       numberTitle={m.songs_sort_added()}
       numberOf={(index) => index + 1}
       showCover
-      subtitleOf={() => null}
+      artistBelow={() => false}
       selectKey={(index) => ids[index]}
       onplay={play}
       onerror={showError}

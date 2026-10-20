@@ -143,7 +143,7 @@
             numberTitle={m.tracklist_default_order()}
             numberOf={(index) => index + 1}
             showCover
-            subtitleOf={() => null}
+            artistBelow={() => false}
             selectKey={(index) => songs[index]?.id ?? index}
             onplay={playSong}
             onerror={showError}

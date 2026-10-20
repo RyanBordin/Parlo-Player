@@ -19,8 +19,8 @@
     onerror,
   }: {
     songs: TrackListSong[];
-    /** Album: #, title, duration, heart. Playlist: also cover and album. Favorites: also artist. */
-    kind: "album" | "playlist" | "favorites";
+    /** Album: #, title, duration, heart. Playlist: also cover and album. Favorites and artist: also artist. */
+    kind: "album" | "playlist" | "favorites" | "artist";
     /** "Playing from" when a song is clicked. */
     contextLabel: string;
     /** Album pages: a song by someone else (compilations) shows its artist. */
@@ -34,6 +34,7 @@
     album: ["number", "title", "duration", "favorite"],
     playlist: ["number", "title", "album", "duration", "favorite"],
     favorites: ["number", "title", "artist", "album", "duration", "favorite"],
+    artist: ["number", "title", "artist", "album", "duration", "favorite"],
   };
   const SORT_KEYS: Partial<Record<ColumnId, SortKey | null>> = {
     number: null,
@@ -74,16 +75,17 @@
     return kind === "album" ? (song.track ?? position + 1) : position + 1;
   }
 
-  function subtitleOf(song: TrackListSong) {
-    if (kind === "playlist") return song.artist;
-    if (kind === "favorites") return null; // the artist has its own column
-    return song.artist && song.artist !== albumArtist ? song.artist : null;
+  function artistBelow(song: TrackListSong) {
+    if (kind === "playlist") return true;
+    if (kind === "favorites" || kind === "artist") return false; // the artist has its own column
+    return song.artist !== albumArtist;
   }
 
   const EMPTY: Record<typeof kind, () => string> = {
     album: m.tracklist_empty_album,
     playlist: m.tracklist_empty_playlist,
     favorites: m.home_starred_songs_empty,
+    artist: m.artist_songs_empty,
   };
 
   function onsort(key: string | null) {
@@ -122,7 +124,7 @@
       numberTitle={m.tracklist_default_order()}
       {numberOf}
       showCover={kind !== "album"}
-      {subtitleOf}
+      {artistBelow}
       selectKey={(index) => shown[index].position}
       {onplay}
       {onerror}

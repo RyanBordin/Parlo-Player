@@ -6,6 +6,7 @@ use covers::{CoverCache, Covers};
 use playback::Playback;
 use state::{AppState, PlaybackSlot};
 
+mod artist_page;
 mod commands;
 mod covers;
 mod db;
@@ -72,6 +73,9 @@ pub fn run() {
             commands::play_albums,
             commands::list_artists,
             commands::play_artists_mix,
+            commands::get_artist_page,
+            commands::get_artist_about,
+            commands::set_artist_starred,
             commands::move_in_queue,
             commands::remove_from_queue,
             commands::create_playlist,

@@ -6,6 +6,9 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::artist_page::{self, ArtistAbout};
+use crate::covers::Covers;
+use crate::db::artist_page::{self as artist_page_db, ArtistPage};
 use crate::db::favorites::{self, Favorites};
 use crate::db::library::{self, LibraryStats, PlaylistSummary, SongSummary};
 use crate::db::related::SongContext;
@@ -588,6 +591,84 @@ pub async fn play_artists_mix(
     tauri::async_runtime::spawn_blocking(move || playback.play_artists_mix(&artist_ids, context_label))
         .await
         .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
+/// The artist page from the local cache (spec 6.7). `None` if the artist is
+/// not in the library.
+#[tauri::command]
+pub async fn get_artist_page(
+    state: State<'_, Arc<AppState>>,
+    artist_id: String,
+) -> Result<Option<ArtistPage>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || artist_page_db::artist_page(&db::open(&active.db_path)?, &artist_id)).await
+}
+
+/// The artist page's parts from the server (spec 6.7): `getArtistInfo2`,
+/// kept 7 days (the old answer stands in without connection), and the
+/// `getTopSongs` order while the artist has no plays. `None` if the artist
+/// is not in the library.
+#[tauri::command]
+pub async fn get_artist_about(
+    state: State<'_, Arc<AppState>>,
+    covers: State<'_, Arc<Covers>>,
+    artist_id: String,
+) -> Result<Option<ArtistAbout>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let (db_path, id) = (active.db_path.clone(), artist_id.clone());
+    let inputs = run_blocking(move || artist_page_db::info_inputs(&db::open(&db_path)?, &id)).await?;
+    let Some(inputs) = inputs else { return Ok(None) };
+
+    let now = sync::now();
+    let mut info = inputs.cached.clone().filter(|cached| artist_page::is_fresh(cached.fetched_at, now));
+    if info.is_none() {
+        info = match active.client.get_artist_info2(&artist_id).await {
+            Ok(fetched) => {
+                let has_photo = match inputs.cover_art.as_deref() {
+                    Some(cover) => covers.is_artist_photo(&active.client, &active.db_path, cover).await,
+                    None => Some(false),
+                };
+                let fresh = artist_page::to_cache(&fetched, has_photo, now);
+                let (db_path, id, kept) = (active.db_path.clone(), artist_id.clone(), fresh.clone());
+                let saved = run_blocking(move || {
+                    artist_page_db::save_info(&db::open(&db_path)?, &id, &kept, &fetched.raw_json)
+                })
+                .await;
+                if let Err(error) = saved {
+                    eprintln!("commands: could not keep the artist info: {error:?}");
+                }
+                Some(fresh)
+            }
+            Err(_) => inputs.cached,
+        };
+    }
+
+    let top_songs: Vec<String> = if inputs.has_plays {
+        Vec::new()
+    } else {
+        let songs = active.client.get_top_songs(&inputs.name, artist_page::TOP_SONGS_COUNT).await;
+        songs.unwrap_or_default().into_iter().map(|s| s.id).collect()
+    };
+    run_blocking(move || {
+        artist_page::about(&db::open(&active.db_path)?, &artist_id, info.as_ref(), &top_songs).map(Some)
+    })
+    .await
+}
+
+/// Stars or unstars an artist (heart of the artist page, spec 6.7).
+#[tauri::command]
+pub async fn set_artist_starred(
+    state: State<'_, Arc<AppState>>,
+    artist_id: String,
+    starred: bool,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    active.client.set_starred(StarItem::Artist, std::slice::from_ref(&artist_id), starred).await?;
+    let saved = run_blocking(move || artists::set_artist_starred(&db::open(&active.db_path)?, &artist_id, starred)).await;
+    if let Err(error) = saved {
+        eprintln!("commands: artist star saved on the server but not locally: {error:?}");
+    }
     Ok(())
 }
 

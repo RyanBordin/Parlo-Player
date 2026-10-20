@@ -348,5 +348,15 @@
   "artists_type_album_artists": "Album artists",
   "artists_type_all": "All artists",
   "artists_empty": "No artists in the library yet.",
-  "artists_no_results": "No artists match “{query}”."
+  "artists_no_results": "No artists match “{query}”.",
+  "artist_not_found": "This artist is not in the library. Try syncing.",
+  "artist_bio_more": "More",
+  "artist_bio_less": "Less",
+  "artist_top_songs": "Top songs",
+  "artist_see_all": "See all",
+  "artist_albums": "Albums",
+  "artist_singles_eps": "Singles & EPs",
+  "artist_appears_on": "Appears on",
+  "artist_similar": "Similar artists",
+  "artist_songs_empty": "No songs by this artist are in the library."
 }

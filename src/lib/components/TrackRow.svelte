@@ -1,6 +1,7 @@
 <script lang="ts">
   // Compact song line: small cover, title, "artist • album". A click plays
-  // (spec 5.1); the current song is in the accent color (spec 5.5).
+  // (spec 5.1); the artist's name opens the artist. The current song is in
+  // the accent color (spec 5.5).
   import Play from "@lucide/svelte/icons/play";
   import type { SongSummary } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
@@ -13,36 +14,43 @@
 
   let current = $derived(player.track?.id === song.id);
   let subtitle = $derived([song.artist, song.album].filter(Boolean).join(" • "));
+  /** What follows the artist link. */
+  let albumPart = $derived(song.album ? ` • ${song.album}` : "");
 </script>
 
-<button class="row" class:current type="button" onclick={onplay} aria-label={m.card_play({ name: song.title })}>
+<div class="row" class:current>
   <span class="cover">
     <Cover id={song.coverArt} size={COVER} radius="var(--radius-sm)" />
     <span class="play" aria-hidden="true"><Play size={18} fill="currentColor" /></span>
   </span>
   <span class="text">
-    <span class="title" title={song.title}>{song.title}</span>
+    <!-- Its ::after covers the whole line, so a click anywhere plays. -->
+    <button type="button" class="title" onclick={onplay} aria-label={m.card_play({ name: song.title })} title={song.title}>
+      {song.title}
+    </button>
     {#if subtitle}
-      <span class="subtitle" title={subtitle}>{subtitle}</span>
+      <span class="subtitle" title={subtitle}>
+        {#if song.artist && song.artistId}
+          <a href={`/artists/${encodeURIComponent(song.artistId)}`}>{song.artist}</a>{albumPart}
+        {:else}
+          {subtitle}
+        {/if}
+      </span>
     {/if}
   </span>
-</button>
+</div>
 
 <style>
   .row {
+    position: relative;
     width: 100%;
     min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2);
-    border: none;
     border-radius: var(--radius-md);
-    background: transparent;
     color: var(--color-text);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
   }
 
   .row:hover {
@@ -68,7 +76,7 @@
   }
 
   .row:hover .play,
-  .row:focus-visible .play {
+  .row:has(.title:focus-visible) .play {
     opacity: 1;
   }
 
@@ -76,19 +84,45 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 2px;
   }
 
   .title,
   .subtitle {
+    max-width: 100%;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .title {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
     font-size: 14px;
     font-weight: var(--font-weight-semibold);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .title::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-md);
+  }
+
+  /* The focus ring goes around the whole line, not only the title. */
+  .title:focus-visible {
+    outline: none;
+  }
+
+  .title:focus-visible::after {
+    outline: 2px solid var(--color-accent-text);
+    outline-offset: -2px;
   }
 
   .current .title {
@@ -98,5 +132,18 @@
   .subtitle {
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
+  }
+
+  /* Above the title's ::after, so it opens the artist instead of playing. */
+  .subtitle a {
+    position: relative;
+    z-index: 1;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .subtitle a:hover {
+    color: var(--color-text);
+    text-decoration: underline;
   }
 </style>

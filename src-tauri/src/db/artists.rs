@@ -59,24 +59,27 @@ pub fn fill_song_artists(conn: &Connection) -> DbResult<()> {
     Ok(())
 }
 
+/// SQL for the cover shown when the server has no photo of artist `ar`: the
+/// latest album's cover or, for featured artists, the latest song's.
+pub(super) const FALLBACK_COVER: &str = "COALESCE(
+    (SELECT al.cover_art FROM albums al
+      WHERE al.artist_id = ar.id AND al.cover_art IS NOT NULL
+      ORDER BY al.year DESC NULLS LAST, julianday(al.created) DESC LIMIT 1),
+    (SELECT s.cover_art FROM song_artists sa JOIN songs s ON s.id = sa.song_id
+      WHERE sa.artist_id = ar.id AND s.cover_art IS NOT NULL
+      ORDER BY s.year DESC NULLS LAST, julianday(s.created) DESC LIMIT 1)
+)";
+
 /// Album artists and featured artists, by name.
 pub fn artist_list(conn: &Connection) -> DbResult<Vec<ArtistListItem>> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "WITH stats AS (
              SELECT l.artist_id, SUM(COALESCE(s.play_count, 0)) AS plays, MAX(julianday(s.created)) AS added
                FROM (SELECT DISTINCT artist_id, song_id FROM song_artists) l
                JOIN songs s ON s.id = l.song_id
               GROUP BY l.artist_id
          )
-         SELECT ar.id, ar.name, ar.sort_name, ar.cover_art,
-                COALESCE(
-                    (SELECT al.cover_art FROM albums al
-                      WHERE al.artist_id = ar.id AND al.cover_art IS NOT NULL
-                      ORDER BY al.year DESC NULLS LAST, julianday(al.created) DESC LIMIT 1),
-                    (SELECT s.cover_art FROM song_artists sa JOIN songs s ON s.id = sa.song_id
-                      WHERE sa.artist_id = ar.id AND s.cover_art IS NOT NULL
-                      ORDER BY s.year DESC NULLS LAST, julianday(s.created) DESC LIMIT 1)
-                ),
+         SELECT ar.id, ar.name, ar.sort_name, ar.cover_art, {FALLBACK_COVER},
                 ar.starred IS NOT NULL,
                 COALESCE(ar.album_count, (SELECT COUNT(*) FROM albums al WHERE al.artist_id = ar.id)),
                 COALESCE(st.plays, 0),
@@ -86,8 +89,8 @@ pub fn artist_list(conn: &Connection) -> DbResult<Vec<ArtistListItem>> {
                     OR ar.id IN (SELECT artist_id FROM albums WHERE artist_id IS NOT NULL) AS album_artist
            FROM artists ar LEFT JOIN stats st ON st.artist_id = ar.id
           WHERE album_artist OR ar.id IN (SELECT artist_id FROM song_artists WHERE role = 'artist')
-          ORDER BY COALESCE(ar.sort_name, ar.name) COLLATE NOCASE",
-    )?;
+          ORDER BY COALESCE(ar.sort_name, ar.name) COLLATE NOCASE"
+    ))?;
     let artists = stmt
         .query_map([], |row| {
             Ok(ArtistListItem {
@@ -119,11 +122,46 @@ pub fn songs_of_artists(conn: &Connection, artist_ids: &[String]) -> DbResult<Ve
     Ok(songs)
 }
 
+/// Records a star / unstar of an artist done in the app (see
+/// `library::set_song_starred`).
+pub fn set_artist_starred(conn: &Connection, artist_id: &str, starred: bool) -> DbResult<()> {
+    if starred {
+        conn.execute(
+            "UPDATE artists SET starred = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                                raw_json = json_set(raw_json, '$.starred', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+             WHERE id = ?1",
+            [artist_id],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE artists SET starred = NULL, raw_json = json_remove(raw_json, '$.starred') WHERE id = ?1",
+            [artist_id],
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
     use rusqlite::params;
+
+    #[test]
+    fn starring_an_artist_updates_the_column_and_the_json() {
+        let conn = open_in_memory().unwrap();
+        artist(&conn, "a", "[]");
+        let starred = |conn: &Connection| -> (bool, String) {
+            conn.query_row("SELECT starred IS NOT NULL, raw_json FROM artists", [], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+        };
+        set_artist_starred(&conn, "a", true).unwrap();
+        let (is_starred, raw) = starred(&conn);
+        assert!(is_starred && raw.contains("starred"));
+        set_artist_starred(&conn, "a", false).unwrap();
+        let (is_starred, raw) = starred(&conn);
+        assert!(!is_starred && !raw.contains("starred"));
+    }
 
     fn artist(conn: &Connection, id: &str, roles: &str) {
         conn.execute(

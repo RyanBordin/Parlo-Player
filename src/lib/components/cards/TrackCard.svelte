@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Song card: a click plays it in its row's list (spec 5.1). The current
-  // song is in the accent color (spec 5.5).
+  // Song card: a click plays it in its row's list (spec 5.1); the artist's
+  // name opens the artist. The current song is in the accent color (spec 5.5).
   import Play from "@lucide/svelte/icons/play";
   import type { SongSummary } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
@@ -29,14 +29,7 @@
   let current = $derived(player.track?.id === song.id);
 </script>
 
-<button
-  class="card"
-  class:current
-  type="button"
-  style:width={fluid ? "100%" : `${size}px`}
-  onclick={onplay}
-  aria-label={m.card_play({ name: song.title })}
->
+<div class="card" class:current style:width={fluid ? "100%" : `${size}px`}>
   <span class="cover">
     <Cover id={song.coverArt} {size} />
     <span class="play" class:large aria-hidden="true">
@@ -46,26 +39,26 @@
   {#if label}
     <span class="label">{label}</span>
   {/if}
-  <span class="title" title={song.title}>{song.title}</span>
-  {#if song.artist}
+  <!-- Its ::after covers the whole card, so a click anywhere plays. -->
+  <button type="button" class="title" onclick={onplay} aria-label={m.card_play({ name: song.title })} title={song.title}>
+    {song.title}
+  </button>
+  {#if song.artist && song.artistId}
+    <a class="subtitle" href={`/artists/${encodeURIComponent(song.artistId)}`} title={song.artist}>{song.artist}</a>
+  {:else if song.artist}
     <span class="subtitle" title={song.artist}>{song.artist}</span>
   {/if}
-</button>
+</div>
 
 <style>
   .card {
+    position: relative;
     flex: none;
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    padding: 0;
-    border: none;
-    background: transparent;
     color: var(--color-text);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
   }
 
   .cover {
@@ -99,7 +92,7 @@
   }
 
   .card:hover .play,
-  .card:focus-visible .play {
+  .card:has(.title:focus-visible) .play {
     opacity: 1;
   }
 
@@ -119,8 +112,32 @@
   }
 
   .title {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
     font-size: 14px;
     font-weight: var(--font-weight-semibold);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .title::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-md);
+  }
+
+  /* The focus ring goes around the whole card, not only the title. */
+  .title:focus-visible {
+    outline: none;
+  }
+
+  .title:focus-visible::after {
+    outline: 2px solid var(--color-accent-text);
+    outline-offset: 2px;
   }
 
   .current .title {
@@ -130,5 +147,19 @@
   .subtitle {
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
+    text-decoration: none;
+  }
+
+  /* Above the title's ::after, so it opens the artist instead of playing. */
+  a.subtitle {
+    position: relative;
+    z-index: 1;
+    align-self: flex-start;
+    max-width: 100%;
+  }
+
+  a.subtitle:hover {
+    color: var(--color-text);
+    text-decoration: underline;
   }
 </style>

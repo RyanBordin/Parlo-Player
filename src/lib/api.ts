@@ -276,6 +276,33 @@ export type ArtistListItem = ArtistCard & {
   albumArtist: boolean;
 };
 
+/** Mirrors `ArtistHeader` in src-tauri/src/db/artist_page.rs. */
+export type ArtistHeader = ArtistCard & { starred: boolean };
+
+/** The artist page from the local cache (spec 6.7). Mirrors `ArtistPage`. */
+export type ArtistPage = {
+  artist: ArtistHeader;
+  /** Every song the artist appears on, most played first. */
+  songs: TrackListSong[];
+  /** Newest first; singles and EPs apart when the server gives release types. */
+  albums: AlbumCard[];
+  singlesAndEps: AlbumCard[];
+  /** Albums of other artists with songs of this one. */
+  appearsOn: AlbumCard[];
+};
+
+/** The artist page's parts from the server. Mirrors `ArtistAbout` in src-tauri/src/artist_page.rs. */
+export type ArtistAbout = {
+  /** Plain text (HTML removed by the backend). */
+  biography: string | null;
+  /** Similar artists that are in the library. */
+  similar: ArtistCard[];
+  /** The photo is real (not the server's generic image); `null`: unknown. */
+  hasPhoto: boolean | null;
+  /** Every song in the `getTopSongs` order, while the artist has no plays. */
+  songOrder: string[] | null;
+};
+
 /** The buttons of the Albums page (spec 6.4). */
 export type AlbumsPlayMode = "inOrder" | "shuffledAlbums" | "mix";
 
@@ -436,6 +463,21 @@ export function listArtists(): Promise<ArtistListItem[]> {
 /** At most 100 songs of these artists, in a random order (spec 6.6). */
 export function playArtistsMix(artistIds: string[], contextLabel: string): Promise<void> {
   return invoke("play_artists_mix", { artistIds, contextLabel });
+}
+
+/** An artist page from the local cache; `null` if not in the library. */
+export function getArtistPage(artistId: string): Promise<ArtistPage | null> {
+  return invoke("get_artist_page", { artistId });
+}
+
+/** Biography, similar artists and photo (kept 7 days); `null` if not in the library. */
+export function getArtistAbout(artistId: string): Promise<ArtistAbout | null> {
+  return invoke("get_artist_about", { artistId });
+}
+
+/** Star / unstar an artist on the server and in the local cache. */
+export function setArtistStarred(artistId: string, starred: boolean): Promise<void> {
+  return invoke("set_artist_starred", { artistId, starred });
 }
 
 /** Plays a whole album in disc and track order. */

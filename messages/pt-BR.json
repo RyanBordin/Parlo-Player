@@ -348,5 +348,15 @@
   "artists_type_album_artists": "Artistas de álbum",
   "artists_type_all": "Todos os artistas",
   "artists_empty": "Ainda não há artistas na biblioteca.",
-  "artists_no_results": "Nenhum artista encontrado para “{query}”."
+  "artists_no_results": "Nenhum artista encontrado para “{query}”.",
+  "artist_not_found": "Este artista não está na biblioteca. Tente sincronizar.",
+  "artist_bio_more": "Mais",
+  "artist_bio_less": "Menos",
+  "artist_top_songs": "Top músicas",
+  "artist_see_all": "Ver todas",
+  "artist_albums": "Álbuns",
+  "artist_singles_eps": "Singles e EPs",
+  "artist_appears_on": "Aparece em",
+  "artist_similar": "Artistas parecidos",
+  "artist_songs_empty": "Nenhuma música deste artista está na biblioteca."
 }

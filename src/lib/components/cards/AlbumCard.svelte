@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Album card (spec 5.2): click opens the album, Play on the cover plays it.
+  // Album card (spec 5.2): click opens the album, Play on the cover plays it,
+  // the artist's name opens the artist.
   import Heart from "@lucide/svelte/icons/heart";
   import { playAlbum, type AlbumCard } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
@@ -51,7 +52,9 @@
     <span class="label">{label}</span>
   {/if}
   <a class="title" {href} title={album.name}>{album.name}</a>
-  {#if album.artist}
+  {#if album.artist && album.artistId}
+    <a class="subtitle" href={`/artists/${encodeURIComponent(album.artistId)}`} title={album.artist}>{album.artist}</a>
+  {:else if album.artist}
     <span class="subtitle" title={album.artist}>{album.artist}</span>
   {/if}
 </article>
@@ -118,5 +121,11 @@
   .subtitle {
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
+    text-decoration: none;
+  }
+
+  a.subtitle:hover {
+    color: var(--color-text);
+    text-decoration: underline;
   }
 </style>

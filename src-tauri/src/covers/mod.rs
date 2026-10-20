@@ -24,7 +24,7 @@ use tauri::{AppHandle, Manager, Runtime};
 pub use cache::{CoverCache, DEFAULT_LIMIT_BYTES};
 
 use crate::state::AppState;
-use crate::subsonic::SubsonicClient;
+use crate::subsonic::{SubsonicClient, SubsonicError};
 
 pub const SCHEME: &str = "cover";
 
@@ -65,6 +65,21 @@ impl Covers {
             },
         };
         placeholder.as_slice() == bytes
+    }
+
+    /// Whether the server has a real photo for this artist cover, not its
+    /// generic image (artist page banner, spec 6.7). `None` when the server
+    /// cannot be reached.
+    pub async fn is_artist_photo(&self, client: &SubsonicClient, library: &Path, cover_id: &str) -> Option<bool> {
+        // The smallest size: only compared, never shown.
+        let size = SIZES[0];
+        match client.get_cover_art(cover_id, size).await {
+            Ok(bytes) if image_type(&bytes).is_some() => {
+                Some(!self.is_placeholder(client, library, size, &bytes).await)
+            }
+            Err(SubsonicError::Http(e)) if !e.is_status() => None,
+            _ => Some(false),
+        }
     }
 
     fn lock_placeholders(&self) -> MutexGuard<'_, HashMap<String, Arc<Vec<u8>>>> {

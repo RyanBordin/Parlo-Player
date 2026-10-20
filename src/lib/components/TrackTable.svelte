@@ -33,7 +33,7 @@
     numberTitle,
     numberOf,
     showCover,
-    subtitleOf,
+    artistBelow,
     selectKey,
     onplay,
     onerror,
@@ -52,8 +52,8 @@
     numberOf: (index: number, song: TrackListSong) => number;
     /** A small cover before the title. */
     showCover: boolean;
-    /** Line under the title (e.g. the artist), if any. */
-    subtitleOf: (song: TrackListSong) => string | null;
+    /** The song's artist under the title (playlists, compilations). */
+    artistBelow: (song: TrackListSong) => boolean;
     /** What a line is selected by; kept while the list is sorted again. */
     selectKey: (index: number) => string | number;
     /** A click on a song that is not the current one. */
@@ -208,14 +208,21 @@
       {/if}
     </div>
   {:else if column === "title"}
-    {@const subtitle = subtitleOf(song)}
     <div class="title-cell" role="cell">
       {#if showCover}
         <span class="cover"><Cover id={song.coverArt} size={40} radius="var(--radius-sm)" /></span>
       {/if}
       <span class="text">
         <span class="title" title={song.title}>{song.title}</span>
-        {#if subtitle}<span class="subtitle" title={subtitle}>{subtitle}</span>{/if}
+        {#if song.artist && artistBelow(song)}
+          <span class="subtitle" title={song.artist}>
+            {#if song.artistId}
+              <a href={`/artists/${encodeURIComponent(song.artistId)}`} onclick={stop}>{song.artist}</a>
+            {:else}
+              {song.artist}
+            {/if}
+          </span>
+        {/if}
       </span>
     </div>
   {:else if column === "artist"}
@@ -488,12 +495,14 @@
     text-overflow: ellipsis;
   }
 
-  .muted a {
+  .muted a,
+  .subtitle a {
     color: inherit;
     text-decoration: none;
   }
 
-  .muted a:hover {
+  .muted a:hover,
+  .subtitle a:hover {
     color: var(--color-text);
     text-decoration: underline;
   }

@@ -10,7 +10,7 @@ use super::error::SubsonicError;
 use super::response::{ResponseBody, parse_response};
 use super::secret_url::SecretUrl;
 use super::types::{
-    Album, Extension, LibraryItems, LyricsList, PlainLyrics, PlayQueue, Playlist, RawAlbumList,
+    Album, ArtistInfo, Extension, LibraryItems, LyricsList, PlainLyrics, PlayQueue, Playlist, RawAlbumList,
     RawLibraryItems, RawPlaylists, RawSongList, ScanStatus, Song, StructuredLyrics, with_raw_json,
 };
 
@@ -355,6 +355,25 @@ impl SubsonicClient {
         let params = [("id", artist_id.to_string()), ("count", count.to_string())];
         let mut body = self.get("getSimilarSongs2", &params, LIBRARY_TIMEOUT).await?;
         with_raw_json(body.take::<RawSongList>("similarSongs2")?.song)
+    }
+
+    /// `getArtistInfo2` — biography and similar artists (Last.fm on
+    /// Navidrome). Only artists the server has are asked for.
+    pub async fn get_artist_info2(&self, artist_id: &str) -> Result<ArtistInfo, SubsonicError> {
+        let params = [("id", artist_id.to_string()), ("includeNotPresent", "false".to_string())];
+        let mut body = self.get("getArtistInfo2", &params, REQUEST_TIMEOUT).await?;
+        let info: Value = body.take("artistInfo2")?;
+        with_raw_json::<ArtistInfo>(vec![info])?
+            .pop()
+            .ok_or_else(|| SubsonicError::InvalidResponse("getArtistInfo2: no info".into()))
+    }
+
+    /// `getTopSongs` — the artist's most popular songs, by name (Last.fm on
+    /// Navidrome; empty without it).
+    pub async fn get_top_songs(&self, artist_name: &str, count: u32) -> Result<Vec<Song>, SubsonicError> {
+        let params = [("artist", artist_name.to_string()), ("count", count.to_string())];
+        let mut body = self.get("getTopSongs", &params, REQUEST_TIMEOUT).await?;
+        with_raw_json(body.take::<RawSongList>("topSongs")?.song)
     }
 
     /// `getPlayQueue` — the queue saved on the server, `None` if there is none.

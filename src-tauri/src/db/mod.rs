@@ -2,6 +2,7 @@
 //! One database file per server + user (spec 12.4).
 
 pub mod albums;
+pub mod artist_page;
 pub mod artists;
 pub mod favorites;
 pub mod history;
