@@ -41,7 +41,7 @@ export const SECTORS: Sector[] = [
     id: "appearance",
     label: m.settings_sector_appearance,
     icon: Palette,
-    defaults: ["homeSections", "sidebarItems", "density", "scale", "reduceMotion"],
+    defaults: ["homeSections", "sidebarItems", "density", "scale", "reduceMotion", "nowPlayingBackdrop"],
   },
   {
     id: "playback",
@@ -120,6 +120,12 @@ export const OPTIONS: SettingOption[] = [
     sector: "appearance",
     label: m.settings_reduce_motion,
     description: m.settings_reduce_motion_description,
+  },
+  {
+    id: "now-playing-backdrop",
+    sector: "appearance",
+    label: m.settings_now_playing_backdrop,
+    description: m.settings_now_playing_backdrop_description,
   },
   { id: "replay-gain", sector: "playback", label: m.settings_replay_gain, description: m.settings_replay_gain_description },
   { id: "preamp", sector: "playback", label: m.settings_preamp, description: m.settings_preamp_description },

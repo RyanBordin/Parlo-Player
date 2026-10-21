@@ -31,17 +31,27 @@ const MIGRATIONS: &[Migration] = &[
     Migration { sql: include_str!("migrations/006_artist_info.sql"), then: None },
     Migration { sql: include_str!("migrations/007_library_settings.sql"), then: None },
     Migration { sql: include_str!("migrations/008_sync_result.sql"), then: None },
+    Migration {
+        sql: include_str!("migrations/009_search.sql"),
+        then: Some(super::search::fill_search_columns),
+    },
+    Migration { sql: include_str!("migrations/010_search_index.sql"), then: None },
 ];
 
 /// Applies every migration newer than the database, each in its own transaction.
 pub fn migrate(conn: &mut Connection) -> DbResult<()> {
+    migrate_to(conn, MIGRATIONS.len())
+}
+
+/// Applies the migrations newer than the database, up to version `target`.
+fn migrate_to(conn: &mut Connection, target: usize) -> DbResult<()> {
     let current: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
     let supported = MIGRATIONS.len() as i64;
     if current > supported {
         return Err(DbError::TooNew { found: current, supported });
     }
 
-    for (index, migration) in MIGRATIONS.iter().enumerate().skip(current.max(0) as usize) {
+    for (index, migration) in MIGRATIONS.iter().enumerate().take(target).skip(current.max(0) as usize) {
         let tx = conn.transaction()?;
         tx.execute_batch(migration.sql)?;
         if let Some(then) = migration.then {
@@ -74,7 +84,7 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        for table in ["albums", "artist_info", "artists", "play_history", "playlist_songs", "playlists", "saved_queue", "settings", "song_artists", "songs", "sync_state"] {
+        for table in ["albums", "artist_info", "artists", "play_history", "playlist_songs", "playlists", "recent_searches", "saved_queue", "settings", "song_artists", "songs", "songs_fts", "sync_state"] {
             assert!(tables.contains(&table.to_string()), "missing table {table}");
         }
     }
@@ -90,6 +100,49 @@ mod tests {
         assert_eq!(version(&conn), MIGRATIONS.len() as i64);
         let plays: i64 = conn.query_row("SELECT COUNT(*) FROM play_history", [], |r| r.get(0)).unwrap();
         assert_eq!(plays, 1);
+    }
+
+    fn check_search_indexes(conn: &Connection) {
+        for index in ["songs_fts", "albums_fts", "artists_fts"] {
+            let check = conn.execute_batch(&format!("INSERT INTO {index} ({index}, rank) VALUES ('integrity-check', 1)"));
+            assert!(check.is_ok(), "{index}: {check:?}");
+        }
+    }
+
+    #[test]
+    fn the_search_indexes_take_the_library_already_cached() {
+        use crate::db::search::search;
+
+        // A library synced before the search existed (version 8): its songs
+        // already have the `search_text` of migration 4.
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_to(&mut conn, 8).unwrap();
+        conn.execute_batch(
+            "INSERT INTO artists (id, name, roles, raw_json) VALUES ('ar', 'João Gilberto', '[\"albumartist\"]', '{}');
+             INSERT INTO albums (id, name, artist, artist_id, year, genres, raw_json)
+                  VALUES ('al', 'Chega de Saudade', 'João Gilberto', 'ar', 1959, '[\"Bossa Nova\"]', '{}');
+             INSERT INTO songs (id, title, artist, album_id, search_text, raw_json)
+                  VALUES ('s', 'Desafinado', 'João Gilberto', 'al', 'desafinado\njoao gilberto', '{}');",
+        )
+        .unwrap();
+
+        migrate(&mut conn).unwrap();
+        assert_eq!(version(&conn), MIGRATIONS.len() as i64);
+        check_search_indexes(&conn);
+        let results = search(&conn, "joao").unwrap();
+        assert_eq!(results.song_ids, ["s"]);
+        assert_eq!(results.albums[0].year, Some(1959));
+        assert_eq!(results.artists.len(), 1);
+        assert_eq!(search(&conn, "bossa 1959").unwrap().albums.len(), 1, "genre and year of the album");
+
+        // From now on the triggers keep the indexes in step.
+        conn.execute("UPDATE songs SET search_name = 'outra', search_text = 'outra' WHERE id = 's'", [])
+            .unwrap();
+        conn.execute("DELETE FROM artists WHERE id = 'ar'", []).unwrap();
+        check_search_indexes(&conn);
+        assert_eq!(search(&conn, "outra").unwrap().song_ids, ["s"]);
+        assert!(search(&conn, "desafinado").unwrap().song_ids.is_empty());
+        assert!(search(&conn, "gilberto").unwrap().artists.is_empty());
     }
 
     #[test]

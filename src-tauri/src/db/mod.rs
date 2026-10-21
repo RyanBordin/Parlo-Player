@@ -11,6 +11,7 @@ pub mod library;
 pub mod related;
 mod migrations;
 pub mod saved_queue;
+pub mod search;
 pub mod settings;
 pub mod songs;
 pub mod tracks;

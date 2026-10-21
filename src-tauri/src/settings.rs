@@ -188,6 +188,9 @@ pub struct AppSettings {
     /// MB, one of `COVER_CACHE_SIZES`. The cache is shared by every account.
     #[serde(deserialize_with = "lenient")]
     pub cover_cache_mb: u16,
+    /// Now Playing: a soft glow of the cover behind it (spec 4.4, 6.10).
+    #[serde(deserialize_with = "lenient")]
+    pub now_playing_backdrop: bool,
 }
 
 impl Default for AppSettings {
@@ -207,6 +210,7 @@ impl Default for AppSettings {
             mix_size: DEFAULT_MIX_SIZE,
             stream: StreamQuality::default(),
             cover_cache_mb: DEFAULT_COVER_CACHE_MB,
+            now_playing_backdrop: true,
         }
     }
 }
@@ -390,6 +394,15 @@ mod tests {
         let value = serde_json::to_value(&settings).unwrap();
         assert_eq!(value["stream"], json!({ "mode": "original", "format": "opus", "maxBitRate": 192 }));
         assert_eq!(value["replayGain"], "auto");
+    }
+
+    #[test]
+    fn the_now_playing_backdrop_is_on_unless_turned_off() {
+        assert!(AppSettings::default().now_playing_backdrop);
+        let missing: AppSettings = serde_json::from_str(&json!({ "density": "compact" }).to_string()).unwrap();
+        assert!(missing.now_playing_backdrop, "a file from before the option");
+        let off: AppSettings = serde_json::from_str(&json!({ "nowPlayingBackdrop": false }).to_string()).unwrap();
+        assert!(!off.now_playing_backdrop);
     }
 
     #[test]

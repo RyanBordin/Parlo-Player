@@ -16,7 +16,8 @@ use rusqlite::{Connection, Statement, params};
 use serde::Serialize;
 
 use super::DbResult;
-use super::songs::{SearchColumns, SearchFields};
+use super::search::AlbumSearchColumns;
+use super::songs::{SearchColumns, SearchFields, normalize};
 use crate::player::audio::ReplayGainData;
 use crate::subsonic::{Album, Artist, Genre, LibraryItems, Playlist, Song};
 
@@ -30,7 +31,7 @@ const ARTISTS: Table = Table {
     name: "artists",
     columns: &[
         "id", "name", "sort_name", "album_count", "cover_art", "artist_image_url", "starred",
-        "music_brainz_id", "roles", "raw_json",
+        "music_brainz_id", "roles", "raw_json", "search_name",
     ],
 };
 
@@ -39,7 +40,7 @@ const ALBUMS: Table = Table {
     columns: &[
         "id", "name", "sort_name", "artist", "artist_id", "cover_art", "song_count", "duration",
         "year", "genre", "genres", "created", "starred", "play_count", "played", "is_compilation",
-        "music_brainz_id", "raw_json",
+        "music_brainz_id", "raw_json", "search_name", "search_text",
     ],
 };
 
@@ -50,7 +51,7 @@ const SONGS: Table = Table {
         "composer", "track", "disc_number", "year", "genre", "genres", "duration", "bit_rate",
         "sampling_rate", "bit_depth", "channel_count", "suffix", "content_type", "size", "path",
         "created", "starred", "play_count", "played", "cover_art", "bpm", "music_brainz_id",
-        "raw_json", "search_text", "sort_title", "sort_artist", "sort_album",
+        "raw_json", "search_text", "sort_title", "sort_artist", "sort_album", "search_name",
     ],
 };
 
@@ -463,6 +464,7 @@ impl Row for Artist {
             self.id, self.name, self.sort_name, self.album_count, self.cover_art,
             self.artist_image_url, self.starred, self.music_brainz_id,
             json_array(self.roles.iter().map(String::as_str)), self.raw_json,
+            normalize(&self.name),
         ])
     }
 }
@@ -470,11 +472,13 @@ impl Row for Artist {
 impl Row for Album {
     const TABLE: &'static Table = &ALBUMS;
     fn bind(&self, stmt: &mut Statement) -> rusqlite::Result<usize> {
+        let genres: Vec<String> = self.genres.iter().map(|g| g.name.clone()).collect();
+        let search = AlbumSearchColumns::new(&self.name, self.artist.as_deref(), self.year, self.genre.as_deref(), &genres);
         stmt.execute(params![
             self.id, self.name, self.sort_name, self.artist, self.artist_id, self.cover_art,
             self.song_count, self.duration, self.year, self.genre, genre_names(&self.genres),
             self.created, self.starred, self.play_count, self.played, self.is_compilation,
-            self.music_brainz_id, self.raw_json,
+            self.music_brainz_id, self.raw_json, search.search_name, search.search_text,
         ])
     }
 }
@@ -505,6 +509,7 @@ impl Row for Song {
             self.content_type, self.size, self.path, self.created, self.starred, self.play_count,
             self.played, self.cover_art, self.bpm, self.music_brainz_id, self.raw_json,
             search.search_text, search.sort_title, search.sort_artist, search.sort_album,
+            search.search_name,
         ])
     }
 }

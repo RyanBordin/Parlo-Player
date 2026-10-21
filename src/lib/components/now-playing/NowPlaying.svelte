@@ -1,15 +1,17 @@
 <script lang="ts">
   // Now Playing (spec 4.4): rises over the main area; the sidebar and the
-  // Player Bar stay visible. Big cover on the left, three tabs on the right.
+  // Player Bar stay visible. Big cover on the left, over a glow of its colors
+  // (Settings > Appearance can turn it off); three tabs on the right.
   import { cubicOut } from "svelte/easing";
   import Cover from "#lib/components/Cover.svelte";
+  import CoverGlow from "#lib/components/now-playing/CoverGlow.svelte";
   import Lyrics from "#lib/components/now-playing/Lyrics.svelte";
   import Related from "#lib/components/now-playing/Related.svelte";
   import UpNext from "#lib/components/now-playing/UpNext.svelte";
   import { NOW_PLAYING_TABS, nowPlaying, setNowPlayingTab, type NowPlayingTab } from "#lib/now-playing.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
-  import { reducedMotion } from "#lib/settings/app-settings.svelte.ts";
+  import { appSettings, reducedMotion } from "#lib/settings/app-settings.svelte.ts";
 
   /** Asked as 1024 px on any screen: the cover in high resolution. */
   const COVER_SIZE = 600;
@@ -19,6 +21,9 @@
     lyrics: m.now_playing_lyrics,
     related: m.now_playing_related,
   };
+
+  /** The cover's glow is behind the cover and the text. */
+  let glowing = $derived(appSettings.nowPlayingBackdrop && Boolean(player.track?.coverArt));
 
   /** Rises from the bottom (and goes back down); at once with reduced motion. */
   function rise(_node: Element) {
@@ -31,16 +36,21 @@
 </script>
 
 <section class="now-playing" transition:rise aria-label={m.now_playing_tabs()}>
-  <div class="art">
+  <div class="art" class:glowing={glowing}>
+    {#if glowing}
+      <CoverGlow coverId={player.track?.coverArt} />
+    {/if}
     <div class="frame">
       <Cover id={player.track?.coverArt} size={COVER_SIZE} radius="var(--radius-lg)" alt={player.track?.title ?? ""} />
     </div>
-    {#if player.track}
-      <p class="title">{player.track.title}</p>
-      {#if player.track.artist}<p class="artist">{player.track.artist}</p>{/if}
-    {:else}
-      <p class="artist">{m.player_nothing_playing()}</p>
-    {/if}
+    <div class="caption">
+      {#if player.track}
+        <p class="title">{player.track.title}</p>
+        {#if player.track.artist}<p class="artist">{player.track.artist}</p>{/if}
+      {:else}
+        <p class="artist">{m.player_nothing_playing()}</p>
+      {/if}
+    </div>
   </div>
 
   <div class="panel">
@@ -84,7 +94,10 @@
     background: var(--color-bg);
   }
 
+  /* `isolation`: the glow (z-index -1) stays behind the cover and the text, inside the column. */
   .art {
+    position: relative;
+    isolation: isolate;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -99,17 +112,45 @@
   .frame {
     width: min(100%, calc(100vh - var(--player-bar-height) - 300px));
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-dialog);
+    box-shadow: var(--shadow-cover);
+  }
+
+  .caption {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+
+  /*
+   * Over the glow, a soft dark patch right behind the title and the artist,
+   * wherever they are: with a white cover the glow is light gray, and the
+   * text still gets 9.6:1 (title) and 6.9:1 (artist). Behind the text, above
+   * the glow (same layer, later in the page).
+   */
+  .glowing .caption::before {
+    content: "";
+    position: absolute;
+    inset: -32px -30%;
+    z-index: -1;
+    background: radial-gradient(closest-side, rgb(0 0 0 / 55%) 65%, transparent 100%);
+    pointer-events: none;
   }
 
   .title {
-    margin-top: var(--space-4);
     font-size: var(--font-size-xl);
     font-weight: var(--font-weight-bold);
   }
 
   .artist {
     color: var(--color-text-muted);
+  }
+
+  /* Over the glow the muted gray is too faint on light covers (WCAG asks 4.5:1). */
+  .glowing .artist {
+    color: var(--color-text-on-image);
   }
 
   .panel {

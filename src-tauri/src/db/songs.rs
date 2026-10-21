@@ -18,7 +18,7 @@ use super::DbResult;
 use super::tracks::{TRACK_COLUMNS, TrackListSong, track_from_row};
 
 /// More words than this in the search box are ignored.
-const MAX_SEARCH_WORDS: usize = 16;
+pub(super) const MAX_SEARCH_WORDS: usize = 16;
 
 /// Lower case, without accents: "Beyoncé" and "beyonce" match. The same rule
 /// as `normalize` in src/lib/tracklist.ts.
@@ -47,10 +47,12 @@ pub struct SearchFields<'a> {
     pub path: Option<&'a str>,
 }
 
-/// Values of the `search_text`, `sort_title`, `sort_artist` and `sort_album`
-/// columns.
+/// Values of the `search_name`, `search_text`, `sort_title`, `sort_artist` and
+/// `sort_album` columns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchColumns {
+    /// The title, for the global search (see `db::search`).
+    pub search_name: String,
     pub search_text: String,
     pub sort_title: String,
     pub sort_artist: Option<String>,
@@ -71,6 +73,7 @@ impl SearchColumns {
             .collect();
         let key = |value: Option<&str>| value.filter(|v| !v.trim().is_empty()).map(normalize);
         Self {
+            search_name: normalize(fields.title),
             search_text: normalize(&text.join("\n")),
             sort_title: normalize(fields.sort_name.filter(|s| !s.trim().is_empty()).unwrap_or(fields.title)),
             sort_artist: key(fields.artist),

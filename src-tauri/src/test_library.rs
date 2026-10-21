@@ -287,6 +287,19 @@ mod tests {
         let start = Instant::now();
         let artists = crate::db::artists::artist_list(&conn).unwrap();
         println!("artists page: {} artists in {:?}", artists.len(), start.elapsed());
+
+        // Global search (spec 6.9): each letter typed, then longer searches.
+        for query in ["m", "ma", "mar", "ma lu", "lu re 320", "zé ma mor", "rock 1999"] {
+            let start = Instant::now();
+            let results = crate::db::search::search(&conn, query).unwrap();
+            println!(
+                "global search \"{query}\": {} songs, {} albums, {} artists in {:?}",
+                results.song_ids.len(),
+                results.albums.len(),
+                results.artists.len(),
+                start.elapsed()
+            );
+        }
     }
 
     #[test]

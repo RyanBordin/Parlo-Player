@@ -220,7 +220,13 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 Referência visual: tela "Tocando agora" do YouTube Music.
 
 * **Abrir e fechar:** seta ▲/▼ da Player Bar, clique numa área vazia da Player Bar, ou **Esc** para fechar. Navegar pela barra lateral também fecha. A barra lateral e a Player Bar continuam visíveis. A aba escolhida é lembrada.
-* **Capa:** acompanha a faixa atual, em alta resolução.
+* **Capa:** acompanha a faixa atual, em alta resolução, com cantos arredondados e sombra suave.
+* **Fundo da capa:** brilho ambiente só na coluna esquerda: a capa atual ampliada, com desfoque forte e opacidade ~60%, esmaecendo para o preto nas bordas antes da coluna das abas, sem borda visível. Uma sombra escura suave fica só atrás do título e do artista, para manter a leitura.
+  * Na troca de faixa, o fundo novo aparece sobre o antigo num esmaecimento de ~600 ms; com "Reduzir animações", troca direto.
+  * Sem capa: fundo preto.
+  * Desempenho: o desfoque nunca é animado nem recalculado a cada quadro (só a opacidade muda na troca).
+  * Contraste: título e artista continuam legíveis sobre capas bem claras (brancas ou amarelas), com pelo menos 4,5:1.
+  * Pode ser desligado em Configurações → Aparência (Seção 6.10).
 * **A SEGUIR:**
   * A lista mostra a fila inteira (inclusive as faixas já tocadas, acima da atual) e rola automaticamente até a faixa atual ao abrir. Lista virtualizada, porque a fila pode ter milhares de faixas.
   * Cada linha: capa pequena, título, artista e duração. A faixa atual fica destacada, com ícone de play/pause sobre a capa.
@@ -425,16 +431,28 @@ Referência: página de artista do YouTube Music.
 
 ### 6.9. Busca (Topbar)
 
-Referência: resultados do Swing Music + melhor resultado do YouTube Music.
+Referência visual: página de busca do Swing Music, com a ordem de Álbuns e Artistas invertida.
 
-* **Enquanto digita:** painel abaixo do campo com até 6 resultados misturados (artistas, álbuns, faixas), com rótulo do tipo. Resultados instantâneos do cache local, buscando em todos os metadados. Clicar numa faixa toca; num álbum ou artista, abre a página.
-* **Página de resultados (Enter):**
-  * Pílulas no topo: **Top**, **Músicas**, **Álbuns**, **Artistas**.
-  * Aba **Top:** **Melhor resultado** (card grande com imagem, nome, contagem e rótulo do tipo) à esquerda + **4 primeiras faixas** à direita; abaixo, carrossel de **Artistas** e depois de **Álbuns**.
-  * Demais pílulas: só aquele tipo, em lista ou grade completa.
-  * Clicar numa faixa toca a lista de músicas encontradas ("Tocando de: Busca").
-* Campo vazio e selecionado mostra **buscas recentes**, removíveis.
-* Em modo offline, busca só no conteúdo baixado.
+* **Enquanto digita:** a área principal vira a **página de resultados**, atualizada a cada tecla (com uma pausa curta de ~150 ms), como no Swing Music. Não há painel suspenso. Os resultados vêm do cache local, então são instantâneos.
+* **Pílulas no topo:** **Top** (padrão), **Músicas**, **Álbuns**, **Artistas**. Trocar de pílula mantém o termo buscado.
+* **Aba Top**, nesta ordem:
+  1. **Melhor resultado** à esquerda: card grande com imagem, rótulo do tipo (FAIXA, ÁLBUM, ARTISTA) na cor de destaque, nome e linha de detalhes (artista e duração para faixa; artista e ano para álbum; nº de álbuns para artista). Play no hover e menu `...`. Clicar abre a página do álbum ou artista; numa faixa, toca.
+  2. **Músicas** à direita: as **4 primeiras faixas**, com capa pequena, título e artista.
+  3. **Álbuns**: carrossel com até 20 cards, rolagem lateral igual à da Home.
+  4. **Artistas**: carrossel com até 20 cards redondos.
+  * Cada seção tem **"Ver todos"** no canto direito, que troca para a pílula correspondente. Seções sem resultado não aparecem.
+* **Abas Músicas, Álbuns e Artistas:** todos os resultados daquele tipo. Músicas usa a tracklist virtualizada com as Ferramentas de lista (Seção 7); Álbuns e Artistas usam as grades virtualizadas das páginas Álbuns e Artistas.
+* **Clicar numa faixa** (no Top ou na aba Músicas) toca **todas as faixas encontradas**, a partir dela, com "Tocando de: Busca".
+* **Como a busca encontra:**
+  * Sem diferenciar maiúsculas nem acentos ("goncalves" encontra "Gonçalves").
+  * Cada palavra precisa aparecer em algum campo, em qualquer ordem ("love foster" encontra "Love", de Foster the People). A última palavra vale como início de palavra, para funcionar enquanto se digita.
+  * Campos: título, artista, artistas participantes, artista do álbum, álbum, gênero, ano e compositor.
+  * Artistas vêm da lista de artistas do OpenSubsonic: participações aparecem como artistas separados, nunca como um artista combinado ("X feat. Y").
+* **Melhor resultado:** correspondência exata do nome vence; depois, nome que começa com o termo; depois, termo em qualquer parte. Em empate, vence o item mais tocado e, depois, o favorito. Vale para os três tipos, e a mesma regra ordena as listas.
+* **Campo vazio e selecionado:** mostra as **buscas recentes** (até 10), removíveis uma a uma ou todas. Uma busca entra nas recentes quando o usuário abre ou toca um resultado.
+* **Teclado:** Ctrl+K foca o campo e seleciona o texto; Esc limpa o campo e volta à página anterior; Voltar do navegador do app volta à busca com o mesmo termo, aba e posição.
+* **Sem resultados:** mensagem curta com o termo buscado.
+* `[v0.2]` Em modo offline, busca só no conteúdo baixado.
 
 ### 6.10. Configurações
 
@@ -466,6 +484,7 @@ Página dividida **por setores**, nunca com opções misturadas. Referência de 
 * **Densidade das listas:** confortável (padrão) ou compacta. Vale para a tracklist e as listas de faixas.
 * **Escala da interface:** 90%, 100% (padrão), 110%, 125%. Útil em monitores de alta resolução. A largura mínima da janela é recalculada com a escala.
 * **Reduzir animações** (padrão: seguir o sistema).
+* **Fundo com as cores da capa em Tocando Agora** (padrão: ligado). Ver "Fundo da capa" na Seção 4.4.
 * `[Depois]` **Temas:** temas prontos, **cor de destaque** escolhida pelo usuário e **cor tirada da capa** da música tocando, como no Symfonium. Toda cor da interface já deve vir de variáveis de tema, para essa etapa não exigir reescrever telas.
 
 **3. Reprodução e áudio**
@@ -677,7 +696,7 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 * Histórico local gravado desde o primeiro dia.
 * Tocando Agora (A Seguir, Letra, Relacionados).
 * Telas: Início, Músicas, Álbuns, Artistas, página do artista, página de álbum/playlist, Favoritos.
-* Busca (painel e resultados), busca rápida e ordenação nas listas.
+* Busca (página de resultados enquanto digita), busca rápida e ordenação nas listas.
 * Menus `...`, favoritar, criar/editar playlists, salvar mix.
 * MPRIS/SMTC, bandeja/segundo plano, atalhos.
 * Configurações (Seção 6.10): Geral, Aparência (organizar Home e barra lateral, densidade, escala), Reprodução e áudio, Streaming, Servidor e conta, Sincronização, Biblioteca (resumo, pastas, cache) e Sobre.
@@ -749,3 +768,5 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 19/10/2026 | Favoritos: Tocar tudo e Aleatório no cabeçalho, 10 músicas na tabela com Ver tudo, Ver mais em álbuns/artistas, item desfavoritado permanece até sair da página, sincronização leve ao abrir. |
 | 19/10/2026 | Artistas e página do artista: filtros avançados na v0.2; lista única do artista ordenada por reproduções (Tocar, Top 5 e Ver todas); biografia como texto limpo; Álbuns × Singles e EPs; info do artista em cache por 7 dias. |
 | 20/10/2026 | Configurações por setores (Geral, Aparência, Reprodução e áudio, Streaming, Servidor e conta, Sincronização, Biblioteca, Playlists automáticas, Downloads, Sobre), com busca e "Restaurar padrões". Ordem da Home e da barra lateral configurável já na v0.1. Setores futuros ocultos até existirem. Temas e cor tirada da capa ficam para depois. |
+| 20/10/2026 | Busca: página de resultados atualizada enquanto digita (sem painel suspenso), Álbuns antes de Artistas na aba Top, busca sem acentos e por palavras em qualquer ordem, regra do melhor resultado, "Ver todos" por seção. |
+| 20/10/2026 | Tocando Agora: brilho ambiente com as cores da capa atrás dela (só na coluna esquerda, esmaecido nas bordas, troca em ~600 ms), desligável em Aparência. |

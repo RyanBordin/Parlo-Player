@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mixSize: 100,
   stream: { mode: "original", format: "opus", maxBitRate: 192 },
   coverCacheMb: 500,
+  nowPlayingBackdrop: true,
 };
 
 export const appSettings = $state<AppSettings>(structuredClone(DEFAULT_SETTINGS));

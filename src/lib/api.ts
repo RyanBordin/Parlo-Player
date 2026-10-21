@@ -212,6 +212,26 @@ export type SongSort = { key: SongSortKey; direction: "asc" | "desc"; seed?: num
 /** The Songs page: IDs in the order shown, and the size of the library. */
 export type SongList = { ids: string[]; total: number };
 
+/** Mirrors `AlbumResult`: an album found by the global search. */
+export type AlbumResult = AlbumCard & { starred: boolean; songCount: number | null; year: number | null };
+
+/** Mirrors `ArtistResult`: an artist found by the global search. */
+export type ArtistResult = ArtistCard & { starred: boolean; albumCount: number };
+
+export type ResultKind = "song" | "album" | "artist";
+
+/** Mirrors `SearchResults` (spec 6.9): every list best first. */
+export type SearchResults = {
+  /** Every song found: the queue of a click. */
+  songIds: string[];
+  /** The first 4 of them, for the "Top" tab. */
+  topSongs: TrackListSong[];
+  albums: AlbumResult[];
+  artists: ArtistResult[];
+  /** The list whose first item is the best result. */
+  best: ResultKind | null;
+};
+
 export type AlbumHeader = {
   id: string;
   name: string;
@@ -331,6 +351,8 @@ export type AppSettings = {
   stream: StreamQuality;
   /** Cover cache limit, MB: 250, 500, 1024 or 2048. */
   coverCacheMb: number;
+  /** Now Playing: a soft glow of the cover behind it (spec 4.4). */
+  nowPlayingBackdrop: boolean;
 };
 
 /** Streaming quality (spec 6.10). Mirrors `StreamQuality` in src-tauri/src/settings.rs. */
@@ -590,6 +612,26 @@ export function listSongIds(query: string, sort: SongSort): Promise<SongList> {
 /** The lines of these songs, in the same order. */
 export function getSongRows(ids: string[]): Promise<TrackListSong[]> {
   return invoke("get_song_rows", { ids });
+}
+
+/** Global search of the Topbar (spec 6.9). */
+export function search(query: string): Promise<SearchResults> {
+  return invoke("search", { query });
+}
+
+/** The last searches, newest first. */
+export function getRecentSearches(): Promise<string[]> {
+  return invoke("get_recent_searches");
+}
+
+/** Puts a search first in the recent list; resolves to the new list. */
+export function addRecentSearch(query: string): Promise<string[]> {
+  return invoke("add_recent_search", { query });
+}
+
+/** Removes a search from the recent list; resolves to the new list. */
+export function removeRecentSearch(query: string): Promise<string[]> {
+  return invoke("remove_recent_search", { query });
 }
 
 /** At most 100 of these songs, in a random order (spec 9). */

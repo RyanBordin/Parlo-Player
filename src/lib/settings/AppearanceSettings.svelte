@@ -1,6 +1,7 @@
 <script lang="ts">
   // Settings > Appearance (spec 6.10): arrange the Home and the sidebar,
-  // list density, interface scale and reduce motion. Themes come later.
+  // list density, interface scale, reduce motion and the cover's glow in Now
+  // Playing. Themes come later.
   import type { AppSettings } from "#lib/api.ts";
   import { homeLayout } from "#lib/home.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
@@ -9,6 +10,7 @@
   import SettingRow from "#lib/settings/SettingRow.svelte";
   import SettingsGroup from "#lib/settings/SettingsGroup.svelte";
   import SortableListSetting from "#lib/settings/SortableListSetting.svelte";
+  import SwitchSetting from "#lib/settings/SwitchSetting.svelte";
   import { SETTINGS_ITEM, sidebarLayout } from "#lib/shell/nav-items.ts";
 
   const SCALES = [90, 100, 110, 125];
@@ -45,7 +47,7 @@
   </SettingRow>
 </SettingsGroup>
 
-<SettingsGroup title={m.settings_group_display()} options={["density", "scale", "reduce-motion"]}>
+<SettingsGroup title={m.settings_group_display()} options={["density", "scale", "reduce-motion", "now-playing-backdrop"]}>
   <SettingRow option="density">
     <ChoiceSetting value={appSettings.density} choices={densities} onchange={(density) => updateSettings({ density })} />
   </SettingRow>
@@ -57,6 +59,12 @@
       value={appSettings.reduceMotion}
       choices={motions}
       onchange={(reduceMotion) => updateSettings({ reduceMotion })}
+    />
+  </SettingRow>
+  <SettingRow option="now-playing-backdrop">
+    <SwitchSetting
+      checked={appSettings.nowPlayingBackdrop}
+      onchange={(nowPlayingBackdrop) => updateSettings({ nowPlayingBackdrop })}
     />
   </SettingRow>
 </SettingsGroup>

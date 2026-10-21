@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -19,6 +20,7 @@ use crate::home::{self, HomeActivity, HomeLibrary, HomeSection, ROW_SIZE, Sectio
 use crate::now_playing::{self, Lyrics, Related};
 use crate::db::albums::{self, AlbumListItem};
 use crate::db::artists::{self, ArtistListItem};
+use crate::db::search::{self, SearchResults};
 use crate::db::songs::{self, SongSort};
 use crate::db::settings::LibrarySettings;
 use crate::db::history;
@@ -615,6 +617,46 @@ pub async fn list_song_ids(
 pub async fn get_song_rows(state: State<'_, Arc<AppState>>, ids: Vec<String>) -> Result<Vec<TrackListSong>, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     run_blocking(move || songs::song_rows(&db::open(&active.db_path)?, &ids)).await
+}
+
+/// Global search of the Topbar (spec 6.9): songs, albums and artists, best
+/// first, and which one is the best result.
+#[tauri::command]
+pub async fn search(state: State<'_, Arc<AppState>>, query: String) -> Result<SearchResults, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || search::search(&db::open(&active.db_path)?, &query)).await
+}
+
+/// The last searches, newest first (spec 6.9).
+#[tauri::command]
+pub async fn get_recent_searches(state: State<'_, Arc<AppState>>) -> Result<Vec<String>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || search::recent_searches(&db::open(&active.db_path)?)).await
+}
+
+/// Puts a search first in the recent list; gives the list back.
+#[tauri::command]
+pub async fn add_recent_search(state: State<'_, Arc<AppState>>, query: String) -> Result<Vec<String>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        search::add_recent_search(&conn, &query, now)?;
+        search::recent_searches(&conn)
+    })
+    .await
+}
+
+/// Removes a search from the recent list; gives the list back.
+#[tauri::command]
+pub async fn remove_recent_search(state: State<'_, Arc<AppState>>, query: String) -> Result<Vec<String>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || {
+        let conn = db::open(&active.db_path)?;
+        search::remove_recent_search(&conn, &query)?;
+        search::recent_searches(&conn)
+    })
+    .await
 }
 
 /// "Shuffle" of the Songs page: at most 100 songs of the list (spec 9).

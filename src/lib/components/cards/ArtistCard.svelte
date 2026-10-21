@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Artist card (square, spec 6.6): photo, or the latest album's cover when
-  // the server has no photo. A click opens the artist.
+  // Artist card (spec 6.6): round photo, the size of an album card, or the
+  // latest album's cover when the server has no photo; the name centered
+  // under it. A click opens the artist.
   import Heart from "@lucide/svelte/icons/heart";
   import type { ArtistCard } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
@@ -24,7 +25,7 @@
 
 <a class="card" href={`/artists/${encodeURIComponent(artist.id)}`} style:width={fluid ? "100%" : `${size}px`} title={artist.name}>
   <span class="cover">
-    <Cover id={artist.coverArt} fallback={artist.fallbackCoverArt} {size} />
+    <Cover id={artist.coverArt} fallback={artist.fallbackCoverArt} {size} radius="50%" />
     {#if artist.starred}
       <span class="badge" role="img" aria-label={m.card_starred()} title={m.card_starred()}>
         <Heart size={12} fill="currentColor" />
@@ -55,11 +56,11 @@
     display: block;
   }
 
-  /* Discreet favorite badge, as on album cards (spec 6.4). */
+  /* Discreet favorite badge, as on album cards (spec 6.4), inside the circle. */
   .badge {
     position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
+    top: 8%;
+    right: 8%;
     width: 22px;
     height: 22px;
     display: grid;
@@ -73,7 +74,9 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 2px;
+    text-align: center;
   }
 
   .label {
@@ -85,6 +88,7 @@
   }
 
   .name {
+    max-width: 100%;
     overflow: hidden;
     font-size: 14px;
     font-weight: var(--font-weight-semibold);

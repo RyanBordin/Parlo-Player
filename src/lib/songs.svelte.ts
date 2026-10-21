@@ -1,19 +1,16 @@
 // State of the Songs page (spec 6.3). Search and sorting run in SQLite: the
 // page holds the IDs in the order shown and loads the lines in blocks as they
-// come into view, so a library of 50 000 songs stays light (spec 12.3).
-// The search, the sort and the optional columns are kept between sessions
-// (this computer only); a random order lasts until it is drawn again or the
-// app closes, as on the Albums page. The list stays in memory, so going back to the page
-// draws it at once at the same scroll position.
-import { getSongRows, listSongIds, type SongSort, type SongSortKey, type TrackListSong } from "#lib/api.ts";
+// come into view (SongRowLoader), so a library of 50 000 songs stays light
+// (spec 12.3). The search, the sort and the optional columns are kept between
+// sessions (this computer only); a random order lasts until it is drawn again
+// or the app closes, as on the Albums page. The list stays in memory, so going
+// back to the page draws it at once at the same scroll position.
+import { listSongIds, type SongSort, type SongSortKey, type TrackListSong } from "#lib/api.ts";
 import { describeError, type ErrorMessage } from "#lib/errors.ts";
+import { SongRowLoader } from "#lib/song-rows.svelte.ts";
 import { OPTIONAL_COLUMNS, type OptionalColumn } from "#lib/track-columns.ts";
 
 const STORAGE_KEY = "parlo.songs";
-/** Lines asked together. */
-const BLOCK_SIZE = 100;
-/** Lines kept in memory; the oldest are dropped first. */
-const ROWS_KEPT = 5000;
 
 const SORT_KEYS: SongSortKey[] = [
   "added",
@@ -90,13 +87,6 @@ class SongList {
 }
 export const songList = new SongList();
 
-/** Lines already loaded, by song ID. */
-export const songRows = $state<Record<string, TrackListSong>>({});
-/** Load order of `songRows`, oldest first. */
-const loadedOrder: string[] = [];
-const pendingBlocks = new Set<number>();
-const loadingBlocks = new Set<string>();
-let blocksScheduled = false;
 /** Grows with every new list: answers for an older one are dropped. */
 let generation = 0;
 
@@ -111,6 +101,20 @@ type Timing = { queryMs: number; shownMs: number | null };
 export const songsTiming = $state<Record<ListChange, Timing | null>>({ open: null, search: null, sort: null });
 /** The change being timed, until its first lines are drawn. */
 let timing: { kind: ListChange; start: number } | null = null;
+
+const rows = new SongRowLoader(() => songList.ids, {
+  loaded(fresh) {
+    if (!fresh || !timing) return;
+    // The lines are drawn by the next frame.
+    const { kind, start } = timing;
+    timing = null;
+    requestAnimationFrame(() => {
+      const last = songsTiming[kind];
+      if (last) last.shownMs = Math.round(performance.now() - start);
+    });
+  },
+  error: (e) => (songsView.error = describeError(e)),
+});
 
 function save(): void {
   try {
@@ -133,6 +137,7 @@ export async function refreshSongs(kind: ListChange = "open", start = performanc
     const list = await listSongIds(songsView.query, { ...songsView.sort, seed });
     if (mine !== generation) return;
     songsView.error = null;
+    rows.newList();
     songList.ids = list.ids;
     songsView.total = list.total;
     songsTiming[kind] = { queryMs: Math.round(performance.now() - start), shownMs: null };
@@ -181,67 +186,14 @@ export function setSongColumns(columns: OptionalColumn[]): void {
   save();
 }
 
-/**
- * The line at `index` of the list shown, or `undefined` while it loads (its
- * block is then asked for). Called while drawing: the request goes out right
- * after, together with the other blocks in view.
- */
+/** The line at `index` of the list shown, or `undefined` while it loads. */
 export function songAt(index: number): TrackListSong | undefined {
-  const id = songList.ids?.[index];
-  if (id === undefined) return undefined;
-  const row = songRows[id];
-  if (row === undefined) {
-    pendingBlocks.add(Math.floor(index / BLOCK_SIZE));
-    if (!blocksScheduled) {
-      blocksScheduled = true;
-      queueMicrotask(loadBlocks);
-    }
-  }
-  return row;
-}
-
-function loadBlocks(): void {
-  blocksScheduled = false;
-  const ids = songList.ids;
-  if (!ids) return;
-  const mine = generation;
-  for (const block of pendingBlocks) {
-    const wanted = ids.slice(block * BLOCK_SIZE, (block + 1) * BLOCK_SIZE).filter((id) => !(id in songRows));
-    const tag = `${mine}:${block}`;
-    if (wanted.length === 0 || loadingBlocks.has(tag)) continue;
-    loadingBlocks.add(tag);
-    getSongRows(wanted)
-      .then((rows) => {
-        for (const row of rows) keep(row);
-        if (mine === generation && timing) {
-          // The lines are drawn by the next frame.
-          const { kind, start } = timing;
-          timing = null;
-          requestAnimationFrame(() => {
-            const last = songsTiming[kind];
-            if (last) last.shownMs = Math.round(performance.now() - start);
-          });
-        }
-      })
-      .catch((e) => (songsView.error = describeError(e)))
-      .finally(() => loadingBlocks.delete(tag));
-  }
-  pendingBlocks.clear();
-}
-
-function keep(row: TrackListSong): void {
-  if (!(row.id in songRows)) loadedOrder.push(row.id);
-  songRows[row.id] = row;
-  while (loadedOrder.length > ROWS_KEPT) delete songRows[loadedOrder.shift()!];
-}
-
-function clearRows(): void {
-  for (const id of loadedOrder.splice(0)) delete songRows[id];
+  return rows.at(index);
 }
 
 /** After a sync: the lines may have changed. */
 export function reloadSongs(): Promise<void> {
-  clearRows();
+  rows.clear();
   return refreshSongs("open");
 }
 
@@ -250,5 +202,5 @@ export function clearSongs(): void {
   generation++;
   songList.ids = null;
   songsView.total = 0;
-  clearRows();
+  rows.clear();
 }

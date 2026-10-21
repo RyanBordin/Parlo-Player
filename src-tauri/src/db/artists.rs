@@ -70,6 +70,19 @@ pub(super) const FALLBACK_COVER: &str = "COALESCE(
       ORDER BY s.year DESC NULLS LAST, julianday(s.created) DESC LIMIT 1)
 )";
 
+/// SQL: whether artist `ar` is an album artist. Each test looks up only this
+/// artist (indexes on `artist_id`), so a search that finds a few artists
+/// does not read every link.
+pub(super) const IS_ALBUM_ARTIST: &str = "(EXISTS (SELECT 1 FROM json_each(ar.roles) WHERE value = 'albumartist')
+    OR EXISTS (SELECT 1 FROM song_artists sa WHERE sa.artist_id = ar.id AND sa.role = 'albumartist')
+    OR EXISTS (SELECT 1 FROM albums al WHERE al.artist_id = ar.id))";
+
+/// SQL: whether artist `ar` is in the list of all artists (album artists
+/// and featured artists, not people only in the credits). The query selects
+/// `IS_ALBUM_ARTIST AS album_artist`.
+pub(super) const IS_LISTED_ARTIST: &str =
+    "(album_artist OR EXISTS (SELECT 1 FROM song_artists sa WHERE sa.artist_id = ar.id AND sa.role = 'artist'))";
+
 /// Album artists and featured artists, by name.
 pub fn artist_list(conn: &Connection) -> DbResult<Vec<ArtistListItem>> {
     let mut stmt = conn.prepare(&format!(
@@ -84,11 +97,9 @@ pub fn artist_list(conn: &Connection) -> DbResult<Vec<ArtistListItem>> {
                 COALESCE(ar.album_count, (SELECT COUNT(*) FROM albums al WHERE al.artist_id = ar.id)),
                 COALESCE(st.plays, 0),
                 strftime('%Y-%m-%dT%H:%M:%SZ', st.added),
-                EXISTS (SELECT 1 FROM json_each(ar.roles) WHERE value = 'albumartist')
-                    OR ar.id IN (SELECT artist_id FROM song_artists WHERE role = 'albumartist')
-                    OR ar.id IN (SELECT artist_id FROM albums WHERE artist_id IS NOT NULL) AS album_artist
+                {IS_ALBUM_ARTIST} AS album_artist
            FROM artists ar LEFT JOIN stats st ON st.artist_id = ar.id
-          WHERE album_artist OR ar.id IN (SELECT artist_id FROM song_artists WHERE role = 'artist')
+          WHERE {IS_LISTED_ARTIST}
           ORDER BY COALESCE(ar.sort_name, ar.name) COLLATE NOCASE"
     ))?;
     let artists = stmt
