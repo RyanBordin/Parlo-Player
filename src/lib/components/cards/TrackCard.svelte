@@ -1,9 +1,12 @@
 <script lang="ts">
   // Song card: a click plays it in its row's list (spec 5.1); the artist's
   // name opens the artist. The current song is in the accent color (spec 5.5).
+  // "..." and a right click open its menu (spec 8.1).
   import Play from "@lucide/svelte/icons/play";
   import type { SongSummary } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
+  import MoreButton from "#lib/components/cards/MoreButton.svelte";
+  import { openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
 
@@ -13,6 +16,7 @@
     large = false,
     label,
     fluid = false,
+    contextLabel,
     onplay,
   }: {
     song: SongSummary;
@@ -23,18 +27,26 @@
     label?: string;
     /** Fills its grid column instead of `size` pixels. */
     fluid?: boolean;
+    /** "Playing from" if its menu starts a new queue: the row's title. */
+    contextLabel: string;
     onplay: () => void;
   } = $props();
 
   let current = $derived(player.track?.id === song.id);
+
+  function onmenu(event: MouseEvent) {
+    openSongsMenu(event, [song], { label: contextLabel });
+  }
 </script>
 
-<div class="card" class:current style:width={fluid ? "100%" : `${size}px`}>
+<!-- svelte-ignore a11y_no_static_element_interactions (the right click repeats the "..." button) -->
+<div class="card" class:current style:width={fluid ? "100%" : `${size}px`} oncontextmenu={onmenu}>
   <span class="cover">
     <Cover id={song.coverArt} {size} />
     <span class="play" class:large aria-hidden="true">
       <Play size={large ? 24 : 18} fill="currentColor" />
     </span>
+    <MoreButton {onmenu} />
   </span>
   {#if label}
     <span class="label">{label}</span>

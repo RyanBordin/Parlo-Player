@@ -7,13 +7,20 @@
   import NowPlaying from "#lib/components/now-playing/NowPlaying.svelte";
   import PerfMeter from "#lib/components/PerfMeter.svelte";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
+  import SaveProgress from "#lib/components/SaveProgress.svelte";
   import Toasts from "#lib/components/Toasts.svelte";
+  import Menu from "#lib/menu/Menu.svelte";
+  import { closeMenu } from "#lib/menu/menu.svelte.ts";
+  import MenuDialogs from "#lib/menu/MenuDialogs.svelte";
   import { closeNowPlaying, nowPlaying } from "#lib/now-playing.svelte.ts";
   import { listenToPlayer } from "#lib/player.svelte.ts";
+  import { listenToSaves } from "#lib/saves.svelte.ts";
+  import { checkServer } from "#lib/server-info.svelte.ts";
   import { handleShortcut } from "#lib/shortcuts.ts";
   import { navHistory, trackNavigation } from "#lib/shell/history.svelte.ts";
   import Sidebar from "#lib/shell/Sidebar.svelte";
   import Topbar from "#lib/shell/Topbar.svelte";
+  import { syncState } from "#lib/sync.svelte.ts";
   import { checkTestLibrary, testLibrary } from "#lib/test-library.svelte.ts";
 
   let { session, children }: { session: SavedSession; children: Snippet } = $props();
@@ -32,6 +39,7 @@
     if (content) scrollPositions[navHistory.index] = content.scrollTop;
     // Spec 4.4: going to another page closes Now Playing.
     closeNowPlaying();
+    closeMenu();
   });
 
   afterNavigate(async (navigation) => {
@@ -57,6 +65,13 @@
   }
 
   checkTestLibrary();
+  listenToSaves();
+
+  // "Open in Navidrome" (spec 8.2): asked again after a sync if the server was unreachable.
+  $effect(() => {
+    void syncState.finishedCount;
+    checkServer();
+  });
 
   // Listen first, so the resumed queue (spec 5.6) reaches the player bar.
   $effect(() => {
@@ -94,6 +109,9 @@
 </div>
 
 <Toasts />
+<SaveProgress />
+<Menu />
+<MenuDialogs />
 
 <style>
   .shell {

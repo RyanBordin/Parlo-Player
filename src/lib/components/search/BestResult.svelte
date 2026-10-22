@@ -11,13 +11,15 @@
   // "Best result" of the search (spec 6.9), after Swing Music's "Top Result":
   // large card with the image, the type, the name and a count. A click opens
   // the album or artist, or plays the song; Play shows on hover. "..." opens
-  // the item's menu (menus come in step 8).
+  // the item's menu, as does a right click (spec 8.1).
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import { getArtistPage, playAlbum, playContext } from "#lib/api.ts";
   import { artistSongs } from "#lib/artist-page.svelte.ts";
   import Cover from "#lib/components/Cover.svelte";
   import PlayButton from "#lib/components/cards/PlayButton.svelte";
   import { formatDuration, formatNumber, formatSongCount } from "#lib/format.ts";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { albumMenu, artistMenu, openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
 
@@ -87,6 +89,17 @@
     if (ids.length) await playContext(ids, 0, artist.name);
   }
 
+  function onmenu(event: MouseEvent) {
+    if (item.kind === "song") openSongsMenu(event, [item.song], { label: m.search_context() });
+    else if (item.kind === "album") {
+      const { album } = item;
+      openMenu(event, () => albumMenu(album));
+    } else {
+      const { artist } = item;
+      openMenu(event, () => artistMenu(artist));
+    }
+  }
+
   function play() {
     if (item.kind === "song") onplaysong();
     else if (item.kind === "album") playAlbum(item.album.id).catch((e) => onerror?.(e));
@@ -94,7 +107,7 @@
   }
 </script>
 
-<article class="card" class:current>
+<article class="card" class:current oncontextmenu={onmenu}>
   <div class="cover" style:width={`${COVER}px`}>
     <Cover id={view.cover} fallback={view.fallback} size={COVER} radius={view.round ? "50%" : undefined} />
   </div>
@@ -110,7 +123,7 @@
   {#if details}
     <span class="details" title={details}>{details}</span>
   {/if}
-  <button type="button" class="more" aria-label={m.player_more()} title={m.player_more()}>
+  <button type="button" class="more" onclick={onmenu} aria-label={m.player_more()} title={m.player_more()} aria-haspopup="menu">
     <Ellipsis size={20} />
   </button>
   <PlayButton label={m.card_play({ name: view.name })} onplay={play} />

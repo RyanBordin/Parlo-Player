@@ -52,7 +52,7 @@
   {#each pages as page, p (p)}
     <ul class="page" style:--columns={columns}>
       {#each page as { song, index } (song.id)}
-        <li><TrackRow {song} onplay={() => play(index)} /></li>
+        <li><TrackRow {song} contextLabel={title} onplay={() => play(index)} /></li>
       {/each}
     </ul>
   {/each}

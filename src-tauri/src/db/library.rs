@@ -354,12 +354,19 @@ pub struct PlaylistSummary {
     pub name: String,
     pub owner: Option<String>,
     pub song_count: Option<i64>,
+    /// Description.
+    pub comment: Option<String>,
+    pub public: Option<bool>,
+    /// Last change on the server (ISO 8601): "Add to playlist" lists the
+    /// last used first (spec 8.2).
+    pub changed: Option<String>,
 }
 
 /// Every playlist, by name (case-insensitive).
 pub fn playlists(conn: &Connection) -> DbResult<Vec<PlaylistSummary>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, owner, song_count FROM playlists ORDER BY name COLLATE NOCASE, id",
+        "SELECT id, name, owner, song_count, comment, public, changed
+         FROM playlists ORDER BY name COLLATE NOCASE, id",
     )?;
     let playlists = stmt
         .query_map([], |row| {
@@ -368,6 +375,9 @@ pub fn playlists(conn: &Connection) -> DbResult<Vec<PlaylistSummary>> {
                 name: row.get(1)?,
                 owner: row.get(2)?,
                 song_count: row.get(3)?,
+                comment: row.get(4)?,
+                public: row.get(5)?,
+                changed: row.get(6)?,
             })
         })?
         .collect::<Result<_, _>>()?;

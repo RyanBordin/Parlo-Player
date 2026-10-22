@@ -33,6 +33,7 @@ icu_properties = { version = "2.3.0", default-features = false, features = ["com
 tauri-plugin-log = "2.10.1"
 tauri-plugin-opener = "2.7.2"
 log = "0.4.34"
+tauri-plugin-dialog = "2.8.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

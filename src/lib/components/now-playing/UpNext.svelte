@@ -1,18 +1,24 @@
 <script lang="ts">
   // "Up next" tab (spec 4.4): the whole queue, songs already played included,
   // scrolled to the current song when it opens. A click only jumps to the
-  // song; the handle drags it to another place; X removes it.
+  // song; the handle drags it to another place; X removes it. Ctrl / Shift +
+  // click select (spec 5.3); "..." and a right click open the menus, with
+  // "Remove from queue" (spec 8.1).
+  import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import ListPlus from "@lucide/svelte/icons/list-plus";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
   import X from "@lucide/svelte/icons/x";
+  import { untrack } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
   import { moveInQueue, playQueueIndex, removeFromQueue, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import SavePlaylistDialog from "#lib/components/now-playing/SavePlaylistDialog.svelte";
   import VirtualList from "#lib/components/VirtualList.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
+  import { openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { getLocale } from "#lib/paraglide/runtime.js";
   import { player, queue } from "#lib/player.svelte.ts";
@@ -33,6 +39,9 @@
   let drag = $state<{ from: number; to: number } | null>(null);
   let pointerY = 0;
   let autoScroll = 0;
+  /** Positions selected with Ctrl / Shift + click. */
+  const selected = new SvelteSet<number>();
+  let anchor: number | null = null;
 
   let origin = $derived(
     queue.continuingFrom === null
@@ -65,7 +74,29 @@
     action().catch((e) => (error = describeError(e)));
   }
 
-  function onRowClick(index: number) {
+  // Positions change with the queue: a new queue clears the selection.
+  $effect(() => {
+    void queue.tracks;
+    untrack(() => selected.clear());
+  });
+
+  function onRowClick(event: MouseEvent | KeyboardEvent, index: number) {
+    if (event.ctrlKey || event.metaKey) {
+      if (selected.has(index)) selected.delete(index);
+      else selected.add(index);
+      anchor = index;
+      return;
+    }
+    if (event.shiftKey) {
+      const from = Math.min(anchor ?? index, index);
+      const to = Math.max(anchor ?? index, index);
+      selected.clear();
+      for (let i = from; i <= to; i++) selected.add(i);
+      anchor ??= index;
+      return;
+    }
+    selected.clear();
+    anchor = index;
     // The song already playing pauses / resumes instead of starting over.
     if (index === queue.currentIndex) run(togglePause);
     else run(() => playQueueIndex(index));
@@ -74,7 +105,37 @@
   function onRowKeydown(event: KeyboardEvent, index: number) {
     if (event.key === "Enter") {
       event.preventDefault();
-      onRowClick(index);
+      onRowClick(event, index);
+    }
+  }
+
+  function openRowsMenu(event: MouseEvent, positions: number[]) {
+    openSongsMenu(
+      event,
+      positions.map((position) => queue.tracks[position]),
+      { label: queue.label, queue: positions },
+    );
+  }
+
+  // On a selection, its menu; elsewhere, that song's alone (spec 8.1).
+  function onRowContextMenu(event: MouseEvent, index: number) {
+    if (selected.has(index) && selected.size > 1) {
+      openRowsMenu(
+        event,
+        [...selected].sort((a, b) => a - b),
+      );
+      return;
+    }
+    selected.clear();
+    anchor = index;
+    openRowsMenu(event, [index]);
+  }
+
+  // Esc clears the selection before it would close Now Playing.
+  function onListKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && !event.defaultPrevented && selected.size > 0) {
+      event.preventDefault();
+      selected.clear();
     }
   }
 
@@ -143,7 +204,8 @@
 
 <svelte:window onkeydown={onWindowKeydown} />
 
-<div class="up-next" bind:this={scroller}>
+<!-- svelte-ignore a11y_no_static_element_interactions (Esc for the rows inside) -->
+<div class="up-next" bind:this={scroller} onkeydown={onListKeydown}>
   {#if queue.tracks.length === 0}
     <p class="empty">{m.up_next_empty()}</p>
   {:else}
@@ -166,9 +228,12 @@
             class="row"
             class:current
             class:lifted={drag?.from === index}
+            class:selected={selected.has(index)}
             role="button"
             tabindex="0"
-            onclick={() => onRowClick(index)}
+            aria-pressed={selected.has(index)}
+            onclick={(event) => onRowClick(event, index)}
+            oncontextmenu={(event) => onRowContextMenu(event, index)}
             onkeydown={(event) => onRowKeydown(event, index)}
           >
             <span class="cover">
@@ -190,9 +255,19 @@
             <button
               type="button"
               class="tool"
+              onclick={(event) => openRowsMenu(event, [index])}
+              aria-label={m.player_more()}
+              title={m.player_more()}
+              aria-haspopup="menu"
+            >
+              <Ellipsis size={16} />
+            </button>
+            <button
+              type="button"
+              class="tool"
               onclick={(event) => {
                 event.stopPropagation();
-                run(() => removeFromQueue(index));
+                run(() => removeFromQueue([index]));
               }}
               aria-label={m.up_next_remove()}
               title={m.up_next_remove()}
@@ -288,7 +363,7 @@
   .row {
     height: 100%;
     display: grid;
-    grid-template-columns: var(--cover) minmax(0, 1fr) auto 28px 28px;
+    grid-template-columns: var(--cover) minmax(0, 1fr) auto 28px 28px 28px;
     align-items: center;
     gap: var(--space-3);
     padding: 0 var(--space-2);
@@ -298,6 +373,10 @@
 
   .row:hover {
     background: var(--color-surface);
+  }
+
+  .row.selected {
+    background: var(--color-surface-active);
   }
 
   .row.lifted {
@@ -378,7 +457,7 @@
     touch-action: none;
   }
 
-  /* Remove and drag show on hover (spec 4.4). */
+  /* "...", remove and drag show on hover (spec 4.4). */
   .row:hover .tool,
   .tool:focus-visible,
   .lifted .tool {

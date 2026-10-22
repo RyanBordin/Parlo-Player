@@ -4,13 +4,17 @@
   // indicator (spec 5.5) and the heart. A click plays (spec 5.1); Ctrl /
   // Shift + click select without playing (spec 5.3). Where the songs come
   // from, and how they are searched and sorted, is up to the page: a line
-  // whose song is not loaded yet shows a placeholder.
+  // whose song is not loaded yet shows a placeholder. "..." and a right click
+  // open the song's menu; a right click on a selection, the selection's
+  // (spec 8.1); the page builds the menu.
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Clock3 from "@lucide/svelte/icons/clock-3";
+  import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
+  import { untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { setSongStarred, togglePause, type TrackListSong } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
@@ -36,6 +40,8 @@
     artistBelow,
     selectKey,
     onplay,
+    onmenu,
+    resetOn,
     onerror,
   }: {
     rows: TableRow[];
@@ -58,6 +64,10 @@
     selectKey: (index: number) => string | number;
     /** A click on a song that is not the current one. */
     onplay: (index: number) => void;
+    /** "..." or a right click: the menu of these songs (positions of the list shown). */
+    onmenu?: (event: MouseEvent, indexes: number[]) => void;
+    /** When it changes (e.g. the songs were read again), the selection is cleared. */
+    resetOn?: unknown;
     onerror?: (error: unknown) => void;
   } = $props();
 
@@ -66,7 +76,8 @@
   let anchor: number | null = null;
 
   let songCount = $derived(rows.reduce((count, row) => count + (row.kind === "song" ? 1 : 0), 0));
-  let template = $derived(gridColumns(columns));
+  // The "..." column comes last, when the page has menus.
+  let template = $derived(onmenu ? `${gridColumns(columns)} 40px` : gridColumns(columns));
   // List density (spec 6.10).
   let songHeight = $derived(songRowHeight());
   let coverSize = $derived(songCoverSize());
@@ -104,6 +115,37 @@
       return;
     }
     onplay(index);
+  }
+
+  $effect(() => {
+    void resetOn;
+    untrack(() => selected.clear());
+  });
+
+  /** Positions of the selected songs shown, in the list's order. */
+  function selectedIndexes(): number[] {
+    const indexes: number[] = [];
+    for (const row of rows) {
+      if (row.kind === "song" && selected.has(selectKey(row.index))) indexes.push(row.index);
+    }
+    return indexes;
+  }
+
+  // Spec 5.3, 8.1: on a selection, its menu; elsewhere, that song's alone.
+  function onRowContextMenu(event: MouseEvent, index: number) {
+    if (!onmenu) return;
+    if (selected.has(selectKey(index)) && selected.size > 1) {
+      onmenu(event, selectedIndexes());
+      return;
+    }
+    selected.clear();
+    anchor = index;
+    onmenu(event, [index]);
+  }
+
+  function onMoreClick(event: MouseEvent, index: number) {
+    event.stopPropagation();
+    onmenu?.(event, [index]);
   }
 
   function onRowKeydown(event: KeyboardEvent, song: TrackListSong, index: number) {
@@ -144,7 +186,7 @@
   }
 
   function onWindowKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && selected.size > 0) selected.clear();
+    if (event.key === "Escape" && !event.defaultPrevented && selected.size > 0) selected.clear();
   }
 
   function genreOf(song: TrackListSong) {
@@ -277,6 +319,7 @@
     {#each columns as column (column)}
       {@render header(column)}
     {/each}
+    {#if onmenu}<div role="columnheader"><span class="visually-hidden">{m.player_more()}</span></div>{/if}
   </div>
 
   <VirtualList
@@ -301,11 +344,25 @@
             aria-rowindex={index + 1}
             aria-selected={selected.has(key)}
             onclick={(event) => onRowClick(event, song, index)}
+            oncontextmenu={(event) => onRowContextMenu(event, index)}
             onkeydown={(event) => onRowKeydown(event, song, index)}
           >
             {#each columns as column (column)}
               {@render cell(column, song, index)}
             {/each}
+            {#if onmenu}
+              <div class="more" role="cell">
+                <button
+                  type="button"
+                  onclick={(event) => onMoreClick(event, index)}
+                  aria-label={m.player_more()}
+                  title={m.player_more()}
+                  aria-haspopup="menu"
+                >
+                  <Ellipsis size={18} />
+                </button>
+              </div>
+            {/if}
           </div>
         {:else}
           <div class="song grid loading" role="row" aria-rowindex={index + 1} aria-busy="true">
@@ -515,12 +572,14 @@
     text-align: right;
   }
 
-  .favorite {
+  .favorite,
+  .more {
     display: grid;
     place-items: center;
   }
 
-  .favorite button {
+  .favorite button,
+  .more button {
     display: grid;
     place-items: center;
     padding: var(--space-1);
@@ -535,12 +594,15 @@
   /* The heart shows on hover, and always when the song is a favorite. */
   .song:hover .favorite button,
   .favorite button:focus-visible,
-  .favorite button.active {
+  .favorite button.active,
+  .song:hover .more button,
+  .more button:focus-visible {
     opacity: 1;
   }
 
   .favorite button.active,
-  .favorite button:hover {
+  .favorite button:hover,
+  .more button:hover {
     color: var(--color-text);
   }
 

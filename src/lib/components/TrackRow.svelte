@@ -1,16 +1,32 @@
 <script lang="ts">
   // Compact song line: small cover, title, "artist • album". A click plays
   // (spec 5.1); the artist's name opens the artist. The current song is in
-  // the accent color (spec 5.5).
+  // the accent color (spec 5.5). "..." (on hover) and a right click open its
+  // menu (spec 8.1).
+  import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Play from "@lucide/svelte/icons/play";
   import type { SongSummary } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
+  import { openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
 
   const COVER = 48;
 
-  let { song, onplay }: { song: SongSummary; onplay: () => void } = $props();
+  let {
+    song,
+    contextLabel,
+    onplay,
+  }: {
+    song: SongSummary;
+    /** "Playing from" if its menu starts a new queue. */
+    contextLabel: string;
+    onplay: () => void;
+  } = $props();
+
+  function onmenu(event: MouseEvent) {
+    openSongsMenu(event, [song], { label: contextLabel });
+  }
 
   let current = $derived(player.track?.id === song.id);
   let subtitle = $derived([song.artist, song.album].filter(Boolean).join(" • "));
@@ -18,7 +34,8 @@
   let albumPart = $derived(song.album ? ` • ${song.album}` : "");
 </script>
 
-<div class="row" class:current>
+<!-- svelte-ignore a11y_no_static_element_interactions (the right click repeats the "..." button) -->
+<div class="row" class:current oncontextmenu={onmenu}>
   <span class="cover">
     <Cover id={song.coverArt} size={COVER} radius="var(--radius-sm)" />
     <span class="play" aria-hidden="true"><Play size={18} fill="currentColor" /></span>
@@ -38,6 +55,9 @@
       </span>
     {/if}
   </span>
+  <button type="button" class="more" onclick={onmenu} aria-label={m.player_more()} title={m.player_more()} aria-haspopup="menu">
+    <Ellipsis size={18} />
+  </button>
 </div>
 
 <style>
@@ -87,6 +107,32 @@
   .row:hover .play,
   .row:has(.title:focus-visible) .play {
     opacity: 1;
+  }
+
+  /* Above the title's ::after; shown on hover, like the Play cue. */
+  .more {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    padding: var(--space-1);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text-muted);
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .row:hover .more,
+  .more:focus-visible {
+    opacity: 1;
+  }
+
+  .more:hover {
+    color: var(--color-text);
   }
 
   .text {

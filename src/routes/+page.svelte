@@ -81,6 +81,7 @@
         {song}
         size={LARGE_CARD}
         large
+        contextLabel={m.home_listen_again()}
         onplay={() => playRow(home.library?.listenAgain, index, m.home_listen_again())}
       />
     {/each}

@@ -7,7 +7,7 @@ mod response;
 mod secret_url;
 mod types;
 
-pub use client::{AlbumListType, SearchPage, ServerInfo, StarItem, SubsonicClient};
+pub use client::{AlbumListType, PlaylistUpdate, SearchPage, ServerInfo, StarItem, SubsonicClient};
 pub use error::SubsonicError;
 pub use secret_url::SecretUrl;
 pub use types::{

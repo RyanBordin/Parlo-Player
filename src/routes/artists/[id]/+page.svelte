@@ -15,8 +15,12 @@
   import Carousel from "#lib/components/cards/Carousel.svelte";
   import CollectionActions from "#lib/components/collection/CollectionActions.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
+  import { artistSection } from "#lib/menu/actions.svelte.ts";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { artistMenu, openSongsMenu } from "#lib/menu/menus.ts";
   import { artistAbouts, artistPages, keepArtistAbout } from "#lib/page-cache.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
+  import { scrollBehavior } from "#lib/settings/app-settings.svelte.ts";
   import { syncState } from "#lib/sync.svelte.ts";
   import type { ColumnId, TableRow } from "#lib/track-columns.ts";
 
@@ -38,6 +42,7 @@
   let songIds = $derived(songs.map((s) => s.id));
   let topRows = $derived(songs.slice(0, TOP_SIZE).map((_, index): TableRow => ({ kind: "song", index })));
   let similar = $derived(about?.similar ?? []);
+  let similarSection = $state<HTMLElement>();
 
   // On open (the last copy shows meanwhile) and after every sync.
   $effect(() => {
@@ -55,6 +60,15 @@
       console.error("artist page: could not read the artist info", e);
       if (artistAbouts[artistId] === undefined) keepArtistAbout(artistId, null);
     });
+  });
+
+  // "Go to similar artists" (spec 8.2): scrolls there once the section shows.
+  $effect(() => {
+    if (artistSection.similarOf !== id || about === undefined) return;
+    const target = similarSection;
+    if (similar.length > 0 && !target) return;
+    artistSection.similarOf = null;
+    if (target) requestAnimationFrame(() => target.scrollIntoView({ behavior: scrollBehavior(), block: "start" }));
   });
 
   function showError(e: unknown) {
@@ -108,6 +122,7 @@
         onplay={() => play(0)}
         onshuffle={shuffle}
         onstar={star}
+        onmore={(event) => openMenu(event, () => artistMenu(artist))}
       />
     </ArtistHeader>
   {/key}
@@ -136,6 +151,12 @@
           artistBelow={() => false}
           selectKey={(index) => songs[index]?.id ?? index}
           onplay={play}
+          onmenu={(event, indexes) =>
+            openSongsMenu(
+              event,
+              indexes.map((index) => songs[index]),
+              { label: artist.name },
+            )}
           onerror={showError}
         />
       </section>
@@ -146,11 +167,13 @@
     {@render albumSection(m.artist_appears_on(), data.appearsOn)}
 
     {#if similar.length > 0}
-      <Carousel title={m.artist_similar()} count={similar.length} empty="">
-        {#each similar as similarArtist (similarArtist.id)}
-          <ArtistCard artist={similarArtist} size={160} />
-        {/each}
-      </Carousel>
+      <div class="similar" bind:this={similarSection}>
+        <Carousel title={m.artist_similar()} count={similar.length} empty="">
+          {#each similar as similarArtist (similarArtist.id)}
+            <ArtistCard artist={similarArtist} size={160} />
+          {/each}
+        </Carousel>
+      </div>
     {/if}
   </div>
 {:else if error}
@@ -160,6 +183,11 @@
 {/if}
 
 <style>
+  /* Below the Topbar when "Go to similar artists" scrolls here. */
+  .similar {
+    scroll-margin-top: var(--space-5);
+  }
+
   .sections {
     display: flex;
     flex-direction: column;

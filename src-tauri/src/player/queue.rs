@@ -358,6 +358,60 @@ impl Queue {
         }
     }
 
+    /// Removes the songs at these positions of the playback order (a
+    /// selection in Up Next). Says what happened to the current song, the
+    /// most important change first.
+    pub fn remove_songs(&mut self, positions: &[usize]) -> Removed {
+        let mut positions: Vec<usize> = positions.iter().copied().filter(|&p| p < self.order.len()).collect();
+        positions.sort_unstable_by(|a, b| b.cmp(a));
+        positions.dedup();
+        // From the last one, so the positions still to remove do not move.
+        positions.into_iter().map(|position| self.remove_song(position)).fold(Removed::Nothing, |most, removed| {
+            let rank = |r: Removed| match r {
+                Removed::Nothing => 0,
+                Removed::Other => 1,
+                Removed::Current => 2,
+                Removed::CurrentAtEnd => 3,
+                Removed::Emptied => 4,
+            };
+            if rank(removed) > rank(most) { removed } else { most }
+        })
+    }
+
+    /// "Play next" (spec 8.1): the songs go right after the current one, in
+    /// both orders, so turning shuffle off keeps them there.
+    pub fn insert_next(&mut self, ids: Vec<String>) {
+        if self.is_empty() {
+            return self.fill(ids);
+        }
+        let at = self.order[self.current] + 1;
+        let count = ids.len();
+        for index in &mut self.order {
+            if *index >= at {
+                *index += count;
+            }
+        }
+        self.songs.splice(at..at, ids);
+        self.order.splice(self.current + 1..self.current + 1, at..at + count);
+    }
+
+    /// "Add to queue" (spec 8.1): the songs go at the end, in both orders.
+    pub fn append(&mut self, ids: Vec<String>) {
+        if self.is_empty() {
+            return self.fill(ids);
+        }
+        let start = self.songs.len();
+        self.songs.extend(ids);
+        self.order.extend(start..self.songs.len());
+    }
+
+    /// An empty queue takes the songs as they are, from the first one.
+    fn fill(&mut self, ids: Vec<String>) {
+        self.order = (0..ids.len()).collect();
+        self.songs = ids;
+        self.current = 0;
+    }
+
     pub fn set_repeat(&mut self, repeat: RepeatMode) {
         self.repeat = repeat;
     }
@@ -670,6 +724,71 @@ mod tests {
         queue.set_shuffle(false, &mut rng());
         let expected: Vec<String> = ids(6).into_iter().filter(|id| *id != removed).collect();
         assert_eq!(queue.ids_in_order(), expected.iter().map(String::as_str).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn removing_several_songs_reports_the_current_one() {
+        let mut queue = queue(6, 2); // current s3
+        assert_eq!(queue.remove_songs(&[0, 4, 4, 9]), Removed::Other);
+        assert_eq!(queue.ids_in_order(), ["s2", "s3", "s4", "s6"]);
+        assert_eq!(queue.current_id(), Some("s3"));
+
+        assert_eq!(queue.remove_songs(&[1, 2]), Removed::Current);
+        assert_eq!(queue.current_id(), Some("s6"), "the first song kept after it");
+
+        assert_eq!(queue.remove_songs(&[1]), Removed::CurrentAtEnd);
+        assert_eq!(queue.current_id(), Some("s2"));
+        assert_eq!(queue.remove_songs(&[]), Removed::Nothing);
+        assert_eq!(queue.remove_songs(&[0]), Removed::Emptied);
+    }
+
+    #[test]
+    fn insert_next_goes_right_after_the_current_song() {
+        let mut queue = queue(4, 1); // current s2
+        queue.insert_next(vec!["a".into(), "b".into()]);
+        assert_eq!(queue.ids_in_order(), ["s1", "s2", "a", "b", "s3", "s4"]);
+        assert_eq!(queue.current_id(), Some("s2"));
+        assert_eq!(queue.upcoming(), Some(2));
+    }
+
+    #[test]
+    fn insert_next_with_shuffle_keeps_both_orders() {
+        let mut queue = queue(6, 2); // current s3
+        queue.set_shuffle(true, &mut rng());
+        queue.next();
+        let playing = queue.current_id().unwrap().to_string();
+        queue.insert_next(vec!["a".into()]);
+        let order = queue.ids_in_order();
+        assert_eq!(order[queue.current_position().unwrap() + 1], "a");
+        assert_eq!(queue.current_id(), Some(playing.as_str()));
+
+        // Shuffle off: "a" stays right after the song it was added after.
+        queue.set_shuffle(false, &mut rng());
+        let order = queue.ids_in_order();
+        let at = order.iter().position(|id| *id == playing).unwrap();
+        assert_eq!(order[at + 1], "a");
+        assert_eq!(order.len(), 7);
+    }
+
+    #[test]
+    fn append_goes_at_the_end_in_both_orders() {
+        let mut queue = queue(3, 0);
+        queue.set_shuffle(true, &mut rng());
+        queue.append(vec!["a".into(), "b".into()]);
+        assert_eq!(queue.ids_in_order()[3..], ["a", "b"]);
+        queue.set_shuffle(false, &mut rng());
+        assert_eq!(queue.ids_in_order(), ["s1", "s2", "s3", "a", "b"]);
+    }
+
+    #[test]
+    fn adding_to_an_empty_queue_fills_it() {
+        let mut queue = Queue::default();
+        queue.insert_next(vec!["a".into(), "b".into()]);
+        assert_eq!(queue.ids_in_order(), ["a", "b"]);
+        assert_eq!(queue.current_id(), Some("a"));
+        let mut queue = Queue::default();
+        queue.append(vec!["a".into()]);
+        assert_eq!(queue.current_id(), Some("a"));
     }
 
     #[test]

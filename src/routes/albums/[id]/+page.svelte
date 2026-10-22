@@ -7,6 +7,8 @@
   import TrackList from "#lib/components/TrackList.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDate, formatSongCount, formatTotalDuration } from "#lib/format.ts";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { albumMenu } from "#lib/menu/menus.ts";
   import { albumPages, keepAlbum } from "#lib/page-cache.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { syncState } from "#lib/sync.svelte.ts";
@@ -94,6 +96,7 @@
       onplay={() => playContext(shownIds, 0, album.name).catch(showError)}
       onshuffle={() => playShuffled(shownIds, album.name).catch(showError)}
       onstar={toggleStar}
+      onmore={(event) => openMenu(event, () => albumMenu(album))}
     />
   </CollectionHeader>
 

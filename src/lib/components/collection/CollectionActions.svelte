@@ -1,6 +1,6 @@
 <script lang="ts">
   // Action bar of album and playlist pages (spec 6.5): Play (bigger circle),
-  // Shuffle, Favorite (albums) and "..." (menus come in step 8).
+  // Shuffle, Favorite (albums) and "..." (the item's menu, spec 8).
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
   import Play from "@lucide/svelte/icons/play";
@@ -13,6 +13,7 @@
     onplay,
     onshuffle,
     onstar,
+    onmore,
   }: {
     /** No songs to play. */
     disabled?: boolean;
@@ -21,6 +22,8 @@
     onplay: () => void;
     onshuffle: () => void;
     onstar?: () => void;
+    /** Opens the item's "..." menu. */
+    onmore?: (event: MouseEvent) => void;
   } = $props();
 </script>
 
@@ -44,7 +47,7 @@
       <Heart size={22} fill={starred ? "currentColor" : "none"} />
     </button>
   {/if}
-  <button type="button" class="icon" aria-label={m.player_more()} title={m.player_more()}>
+  <button type="button" class="icon" onclick={onmore} aria-label={m.player_more()} title={m.player_more()} aria-haspopup="menu">
     <Ellipsis size={22} />
   </button>
 </div>

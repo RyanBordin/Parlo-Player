@@ -1,10 +1,14 @@
 <script lang="ts">
   // Album card (spec 5.2): click opens the album, Play on the cover plays it,
-  // the artist's name opens the artist.
+  // the artist's name opens the artist. "..." and a right click open its
+  // menu (spec 8.1).
   import Heart from "@lucide/svelte/icons/heart";
   import { playAlbum, type AlbumCard } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
+  import MoreButton from "#lib/components/cards/MoreButton.svelte";
   import PlayButton from "#lib/components/cards/PlayButton.svelte";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { albumMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
 
   let {
@@ -29,9 +33,13 @@
   } = $props();
 
   let href = $derived(`/albums/${encodeURIComponent(album.id)}`);
+
+  function onmenu(event: MouseEvent) {
+    openMenu(event, () => albumMenu(album));
+  }
 </script>
 
-<article class="card" style:width={fluid ? "100%" : `${size}px`}>
+<article class="card" style:width={fluid ? "100%" : `${size}px`} oncontextmenu={onmenu}>
   <div class="cover">
     <!-- The title link is the one announced; this one is only for the mouse. -->
     <a {href} tabindex="-1" aria-hidden="true">
@@ -47,6 +55,7 @@
       centered={large}
       onplay={() => playAlbum(album.id).catch((e) => onerror?.(e))}
     />
+    <MoreButton {onmenu} />
   </div>
   {#if label}
     <span class="label">{label}</span>

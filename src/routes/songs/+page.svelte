@@ -10,6 +10,7 @@
   import SortSelect from "#lib/components/SortSelect.svelte";
   import TrackTable from "#lib/components/TrackTable.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
+  import { openSongsMenu, songById } from "#lib/menu/menus.ts";
   import { formatNumber, formatSongCount } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
   import {
@@ -99,6 +100,12 @@
     playContext(ids, index, m.nav_songs()).catch(showError);
   }
 
+  // A selection can reach songs not loaded yet: their ID is enough.
+  function onmenu(event: MouseEvent, indexes: number[]) {
+    const songs = indexes.map((index) => songAt(index) ?? songById(ids[index]));
+    openSongsMenu(event, songs, { label: m.nav_songs() });
+  }
+
   function shuffle() {
     error = null;
     playMix(ids, m.nav_songs()).catch(showError);
@@ -159,6 +166,7 @@
       artistBelow={() => false}
       selectKey={(index) => ids[index]}
       onplay={play}
+      {onmenu}
       onerror={showError}
     />
   {/if}

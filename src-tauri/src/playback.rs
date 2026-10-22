@@ -60,6 +60,16 @@ pub enum AlbumsPlayMode {
     Mix,
 }
 
+/// Where songs added to the queue go (spec 8.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Placement {
+    /// "Play next": right after the current song.
+    Next,
+    /// "Add to queue": at the end.
+    End,
+}
+
 /// What a new queue does with the shuffle mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShuffleMode {
@@ -324,13 +334,42 @@ impl Playback {
         result
     }
 
-    /// Up Next: removes the song at `position`. Removing the current song
-    /// goes on with the one that takes its place, playing or paused as before.
-    pub fn remove_from_queue(&self, position: usize) -> Result<(), PlaybackError> {
+    /// "Play next" / "Add to queue" (spec 8.1). IDs missing from the local
+    /// cache are left out. With nothing queued, the songs become the queue
+    /// and start playing, "Playing from" `label`.
+    pub fn enqueue(&self, song_ids: Vec<String>, placement: Placement, label: String) -> Result<(), PlaybackError> {
+        if self.lock().queue.is_empty() {
+            return self.play_list(song_ids, 0, label, ShuffleMode::Keep);
+        }
+        let library = self.library()?;
+        let (found, gains) = read_db(&library.db_path, |conn| {
+            Ok((library::song_summaries(conn, &song_ids)?, library::replay_gains(conn, &song_ids)?))
+        })?;
+        let ids: Vec<String> = song_ids.into_iter().filter(|id| found.contains_key(id)).collect();
+        if ids.is_empty() {
+            return Err(PlaybackError::NoSongs);
+        }
+
+        let mut inner = self.lock();
+        inner.tracks.extend(tracks_of(found, gains));
+        match placement {
+            Placement::Next => inner.queue.insert_next(ids),
+            Placement::End => inner.queue.append(ids),
+        }
+        // The song after the current one may be another now.
+        let result = self.preload_next(&inner, &library);
+        self.changed(&mut inner, &library);
+        result
+    }
+
+    /// Up Next: removes the songs at these positions. Removing the current
+    /// song goes on with the one that takes its place, playing or paused as
+    /// before.
+    pub fn remove_from_queue(&self, positions: &[usize]) -> Result<(), PlaybackError> {
         let library = self.library()?;
         let mut inner = self.lock();
         let paused = self.player.state().status == PlaybackStatus::Paused;
-        let result = match inner.queue.remove_song(position) {
+        let result = match inner.queue.remove_songs(positions) {
             Removed::Nothing => return Ok(()),
             Removed::Other => self.preload_next(&inner, &library),
             Removed::Current => self.play_current(&mut inner, &library, 0.0, paused),

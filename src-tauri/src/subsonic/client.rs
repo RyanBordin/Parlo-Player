@@ -20,6 +20,8 @@ const CLIENT_NAME: &str = "ParloPlayer";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Library pages (e.g. 500 songs) are much larger than a ping.
 const LIBRARY_TIMEOUT: Duration = Duration::from_secs(60);
+/// One file of "Save to computer" (spec 8.2): a long FLAC on a slow link.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 /// Largest page of `getAlbumList2` (the API maximum).
 const ALBUM_LIST_PAGE: u32 = 500;
 /// OpenSubsonic extension: every endpoint accepts its parameters as a POST form.
@@ -85,6 +87,17 @@ impl AlbumListType {
     }
 }
 
+/// One `updatePlaylist` call: the fields to change (`None`: kept), the songs
+/// to append and the positions (0-based, before the change) to remove.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlaylistUpdate {
+    pub name: Option<String>,
+    pub comment: Option<String>,
+    pub public: Option<bool>,
+    pub add: Vec<String>,
+    pub remove: Vec<usize>,
+}
+
 /// Server details returned by `ping`, sent to the UI.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,6 +116,8 @@ pub struct SubsonicClient {
     /// Names of the OpenSubsonic extensions the server announces, asked
     /// once per client.
     extensions: OnceLock<Vec<String>>,
+    /// `type` of the first successful `ping` (e.g. "navidrome").
+    server_type: OnceLock<Option<String>>,
 }
 
 /// How a request sends its parameters.
@@ -131,6 +146,7 @@ impl SubsonicClient {
             password: password.into(),
             http,
             extensions: OnceLock::new(),
+            server_type: OnceLock::new(),
         })
     }
 
@@ -143,12 +159,22 @@ impl SubsonicClient {
     /// credentials are valid.
     pub async fn ping(&self) -> Result<ServerInfo, SubsonicError> {
         let body = self.get("ping", &[], REQUEST_TIMEOUT).await?;
+        let _ = self.server_type.set(body.server_type.clone());
         Ok(ServerInfo {
             api_version: body.version,
             server_type: body.server_type,
             server_version: body.server_version,
             open_subsonic: body.open_subsonic.unwrap_or(false),
         })
+    }
+
+    /// The server's `type` (OpenSubsonic), from the first `ping`; asked now
+    /// if there was none yet.
+    pub async fn server_type(&self) -> Result<Option<String>, SubsonicError> {
+        if let Some(kind) = self.server_type.get() {
+            return Ok(kind.clone());
+        }
+        Ok(self.ping().await?.server_type)
     }
 
     /// `GET /rest/getScanStatus`.
@@ -283,6 +309,21 @@ impl SubsonicClient {
         Ok(with_raw_json::<Playlist>(vec![playlist])?.pop())
     }
 
+    /// `updatePlaylist` (spec 8.1, 8.2): rename, describe, make public or
+    /// private, append songs and remove positions, in one call. Sent by POST
+    /// when the server allows it, as the songs can be many.
+    pub async fn update_playlist(&self, playlist_id: &str, update: &PlaylistUpdate) -> Result<(), SubsonicError> {
+        let params = update_playlist_params(playlist_id, update);
+        self.request_large("updatePlaylist", &params, LIBRARY_TIMEOUT).await?;
+        Ok(())
+    }
+
+    /// `deletePlaylist`.
+    pub async fn delete_playlist(&self, playlist_id: &str) -> Result<(), SubsonicError> {
+        self.get("deletePlaylist", &[("id", playlist_id.to_string())], REQUEST_TIMEOUT).await?;
+        Ok(())
+    }
+
     /// `GET /rest/getPlaylist` — a playlist and its songs in the saved order.
     pub async fn get_playlist(&self, playlist_id: &str) -> Result<(Playlist, Vec<Song>), SubsonicError> {
         let mut body = self.get("getPlaylist", &[("id", playlist_id.to_string())], LIBRARY_TIMEOUT).await?;
@@ -300,15 +341,44 @@ impl SubsonicClient {
     /// `GET /rest/getCoverArt` — the image bytes, resized by the server to
     /// `size` pixels. On failure the server answers JSON instead of an image.
     pub async fn get_cover_art(&self, cover_id: &str, size: u32) -> Result<Vec<u8>, SubsonicError> {
-        let url = format!("{}/rest/getCoverArt", self.base_url);
+        self.cover_art(cover_id, Some(size)).await
+    }
+
+    /// The cover at its original size ("Save to computer" of an album, spec 8.2).
+    pub async fn get_full_cover_art(&self, cover_id: &str) -> Result<Vec<u8>, SubsonicError> {
+        self.cover_art(cover_id, None).await
+    }
+
+    async fn cover_art(&self, cover_id: &str, size: Option<u32>) -> Result<Vec<u8>, SubsonicError> {
+        let mut params = vec![("id", cover_id.to_string())];
+        params.extend(size.map(|size| ("size", size.to_string())));
+        let response = self.binary("getCoverArt", &params, LIBRARY_TIMEOUT).await?;
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    /// `GET /rest/download` — the original file, never converted (spec 8.2).
+    /// The caller reads the body chunk by chunk. A refused download (no
+    /// permission) is `Api { code: 50 }` or an HTTP 401 / 403 status.
+    pub async fn download(&self, song_id: &str) -> Result<reqwest::Response, SubsonicError> {
+        self.binary("download", &[("id", song_id.to_string())], DOWNLOAD_TIMEOUT).await
+    }
+
+    /// An endpoint that answers a file. On failure the server answers JSON
+    /// (or XML) instead: that becomes the error.
+    async fn binary(
+        &self,
+        endpoint: &str,
+        params: &[(&str, String)],
+        timeout: Duration,
+    ) -> Result<reqwest::Response, SubsonicError> {
+        let url = format!("{}/rest/{endpoint}", self.base_url);
         let auth = self.auth_params(&generate_salt());
-        let params = [("id", cover_id.to_string()), ("size", size.to_string())];
         let response = self
             .http
             .get(url)
             .query(&auth)
-            .query(&params)
-            .timeout(LIBRARY_TIMEOUT)
+            .query(params)
+            .timeout(timeout)
             .send()
             .await?
             .error_for_status()?;
@@ -320,9 +390,9 @@ impl SubsonicClient {
             .is_some_and(|v| v.contains("json") || v.contains("xml"));
         if is_json {
             parse_response(&response.text().await?)?;
-            return Err(SubsonicError::InvalidResponse("getCoverArt: no image".into()));
+            return Err(SubsonicError::InvalidResponse(format!("{endpoint}: no file")));
         }
-        Ok(response.bytes().await?.to_vec())
+        Ok(response)
     }
 
     /// `GET /rest/getOpenSubsonicExtensions`.
@@ -371,8 +441,9 @@ impl SubsonicClient {
     }
 
     /// `getSimilarSongs2` — songs like this artist's (Last.fm on Navidrome).
-    pub async fn get_similar_songs2(&self, artist_id: &str, count: u32) -> Result<Vec<Song>, SubsonicError> {
-        let params = [("id", artist_id.to_string()), ("count", count.to_string())];
+    /// Navidrome also takes a song or album ID.
+    pub async fn get_similar_songs2(&self, id: &str, count: u32) -> Result<Vec<Song>, SubsonicError> {
+        let params = [("id", id.to_string()), ("count", count.to_string())];
         let mut body = self.get("getSimilarSongs2", &params, LIBRARY_TIMEOUT).await?;
         with_raw_json(body.take::<RawSongList>("similarSongs2")?.song)
     }
@@ -519,6 +590,17 @@ fn create_playlist_params(name: &str, song_ids: &[String]) -> Vec<(&'static str,
     params
 }
 
+/// `songIdToAdd` and `songIndexToRemove` repeat once per item.
+fn update_playlist_params(playlist_id: &str, update: &PlaylistUpdate) -> Vec<(&'static str, String)> {
+    let mut params = vec![("playlistId", playlist_id.to_string())];
+    params.extend(update.name.as_ref().map(|name| ("name", name.clone())));
+    params.extend(update.comment.as_ref().map(|comment| ("comment", comment.clone())));
+    params.extend(update.public.map(|public| ("public", public.to_string())));
+    params.extend(update.add.iter().map(|id| ("songIdToAdd", id.clone())));
+    params.extend(update.remove.iter().map(|index| ("songIndexToRemove", index.to_string())));
+    params
+}
+
 /// `id` repeats once per song, in playback order.
 fn save_play_queue_params(song_ids: &[String], current: &str, position_ms: i64) -> Vec<(&'static str, String)> {
     let mut params: Vec<(&str, String)> = song_ids.iter().map(|id| ("id", id.clone())).collect();
@@ -634,6 +716,31 @@ mod tests {
                 ("songId", "s2".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn update_playlist_params_send_only_what_changes() {
+        let update = PlaylistUpdate {
+            name: Some("Road trip".into()),
+            public: Some(false),
+            add: vec!["s1".into(), "s2".into()],
+            remove: vec![3, 0],
+            ..PlaylistUpdate::default()
+        };
+        assert_eq!(
+            update_playlist_params("p1", &update),
+            [
+                ("playlistId", "p1".to_string()),
+                ("name", "Road trip".to_string()),
+                ("public", "false".to_string()),
+                ("songIdToAdd", "s1".to_string()),
+                ("songIdToAdd", "s2".to_string()),
+                ("songIndexToRemove", "3".to_string()),
+                ("songIndexToRemove", "0".to_string()),
+            ]
+        );
+        let empty_comment = PlaylistUpdate { comment: Some(String::new()), ..PlaylistUpdate::default() };
+        assert_eq!(update_playlist_params("p1", &empty_comment)[1], ("comment", String::new()));
     }
 
     #[test]

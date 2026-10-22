@@ -555,5 +555,168 @@
   "settings_licenses_description": "As bibliotecas usadas pelo app e suas licenças. A libmpv que acompanha o app no Windows é uma build GPL.",
   "settings_licenses_native": "Componentes nativos",
   "settings_licenses_web": "Interface",
-  "settings_licenses_rust": "Bibliotecas Rust"
+  "settings_licenses_rust": "Bibliotecas Rust",
+  "menu_play": "Tocar",
+  "menu_play_shuffled": "Tocar em ordem aleatória",
+  "menu_play_next": "Tocar a seguir",
+  "menu_add_to_queue": "Adicionar ao fim da fila",
+  "menu_play_similar": "Tocar músicas parecidas",
+  "menu_similar_context": "Parecidas com {title}",
+  "menu_artist_mix": "Mix aleatório (até {count})",
+  "menu_artist_radio": "Rádio do artista",
+  "menu_radio_context": "Rádio: {artist}",
+  "menu_favorite": "Favoritar",
+  "menu_unfavorite": "Remover dos favoritos",
+  "menu_favorite_all": "Favoritar todas",
+  "menu_add_to_playlist": "Adicionar à playlist",
+  "menu_new_playlist": "Nova playlist",
+  "menu_search_playlists": "Buscar playlists",
+  "menu_no_playlists": "Nenhuma playlist encontrada",
+  "menu_go_to_album": "Ir para o álbum",
+  "menu_go_to_artist": "Ir para o artista",
+  "menu_go_to_similar_artists": "Ir para artistas parecidos",
+  "menu_copy_title": "Copiar “Título – Artista”",
+  "menu_file_info": "Informações do arquivo",
+  "menu_info": "Informações",
+  "menu_remove_from_playlist": "Remover desta playlist",
+  "menu_remove_from_queue": "Remover da fila",
+  "menu_rename_playlist": "Renomear / editar descrição",
+  "menu_make_public": "Tornar pública",
+  "menu_make_private": "Tornar privada",
+  "menu_delete_playlist": "Excluir playlist",
+  "menu_selected": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} faixa selecionada",
+        "countPlural=other": "{countText} faixas selecionadas"
+      }
+    }
+  ],
+  "toast_copied": "Copiado",
+  "toast_playing_next": "Vai tocar a seguir",
+  "toast_added_to_queue": "Adicionada ao fim da fila",
+  "toast_added_to_playlist": "Adicionada a “{name}”",
+  "toast_added_many_to_playlist": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} faixa adicionada a “{name}”",
+        "countPlural=other": "{countText} faixas adicionadas a “{name}”"
+      }
+    }
+  ],
+  "toast_nothing_added": "Nenhuma faixa nova para “{name}”",
+  "toast_removed_from_playlist": "Removida de “{name}”",
+  "toast_playlist_deleted": "Playlist “{name}” excluída",
+  "toast_playlist_public": "“{name}” agora é pública",
+  "toast_playlist_private": "“{name}” agora é privada",
+  "toast_playlist_updated": "Playlist atualizada",
+  "playlist_dialog_new_title": "Nova playlist",
+  "playlist_dialog_edit_title": "Editar playlist",
+  "playlist_dialog_name": "Nome",
+  "playlist_dialog_description": "Descrição",
+  "playlist_dialog_create": "Criar",
+  "playlist_dialog_save": "Salvar",
+  "delete_playlist_title": "Excluir playlist?",
+  "delete_playlist_message": "“{name}” será excluída do servidor. Isso não pode ser desfeito.",
+  "delete_playlist_confirm": "Excluir",
+  "duplicates_title": "Já está na playlist",
+  "duplicates_one": "Esta faixa já está em “{name}”.",
+  "duplicates_many": "{count} de {total} faixas já estão em “{name}”.",
+  "duplicates_add_anyway": "Adicionar mesmo assim",
+  "duplicates_skip": "Pular",
+  "duplicates_only_new": "Adicionar só as novas",
+  "duplicates_add_all": "Adicionar todas",
+  "info_title_album": "Informações do álbum",
+  "info_title_artist": "Informações do artista",
+  "info_format": "Formato",
+  "info_bit_rate": "Bitrate",
+  "info_sampling_rate": "Taxa de amostragem",
+  "info_khz": "{value} kHz",
+  "info_bit_depth": "Profundidade",
+  "info_bits": "{value} bits",
+  "info_channels": "Canais",
+  "info_size": "Tamanho",
+  "info_path": "Caminho",
+  "info_duration": "Duração",
+  "info_year": "Ano",
+  "info_label": "Gravadora",
+  "info_genre": "Gênero",
+  "info_songs": "Faixas",
+  "info_albums": "Álbuns",
+  "info_biography": "Biografia",
+  "info_close": "Fechar",
+  "info_not_found": "Este item não está mais na biblioteca.",
+  "menu_save_to_computer": "Salvar no computador...",
+  "menu_open_in_navidrome": "Abrir no Navidrome",
+  "save_progress": "Salvando {done} de {total}",
+  "save_cancel": "Cancelar",
+  "save_saved": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} arquivo salvo",
+        "countPlural=other": "{countText} arquivos salvos"
+      }
+    }
+  ],
+  "save_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} já estava na pasta",
+        "countPlural=other": "{countText} já estavam na pasta"
+      }
+    }
+  ],
+  "save_cancelled": "Salvamento cancelado",
+  "save_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} arquivo não pôde ser salvo:",
+        "countPlural=other": "{countText} arquivos não puderam ser salvos:"
+      }
+    }
+  ],
+  "save_forbidden": "O servidor recusou o download: este usuário não tem permissão para baixar arquivos. Peça ao administrador do Navidrome para liberar os downloads.",
+  "save_open_folder": "Abrir pasta",
+  "save_close": "Fechar",
+  "save_label": "Salvar no computador"
 }

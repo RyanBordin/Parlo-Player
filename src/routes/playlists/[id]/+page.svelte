@@ -8,6 +8,8 @@
   import TrackList from "#lib/components/TrackList.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatSongCount, formatTotalDuration } from "#lib/format.ts";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { playlistMenuById } from "#lib/menu/menus.ts";
   import { keepPlaylist, playlistPages } from "#lib/page-cache.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { playlists } from "#lib/playlists.svelte.ts";
@@ -65,6 +67,7 @@
       disabled={shownIds.length === 0}
       onplay={() => playContext(shownIds, 0, playlist.name).catch(showError)}
       onshuffle={() => playShuffled(shownIds, playlist.name).catch(showError)}
+      onmore={(event) => openMenu(event, () => playlistMenuById(playlist))}
     />
   </CollectionHeader>
 
@@ -72,7 +75,14 @@
     {#if error}
       <p class="error">{error.message}</p>
     {/if}
-    <TrackList songs={data.songs} kind="playlist" contextLabel={playlist.name} bind:shownIds onerror={showError} />
+    <TrackList
+      songs={data.songs}
+      kind="playlist"
+      contextLabel={playlist.name}
+      {playlist}
+      bind:shownIds
+      onerror={showError}
+    />
   </div>
 {:else}
   <div class="page">

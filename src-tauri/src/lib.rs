@@ -4,6 +4,7 @@ use tauri::{Manager, RunEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 use covers::{CoverCache, Covers};
+use downloads::Saves;
 use playback::Playback;
 use state::{AppState, PlaybackSlot};
 
@@ -12,11 +13,14 @@ mod auto_sync;
 mod commands;
 mod covers;
 mod db;
+mod downloads;
 mod home;
 mod locale;
+mod navidrome;
 mod now_playing;
 mod playback;
 mod player;
+mod playlists;
 mod session;
 mod settings;
 mod state;
@@ -49,6 +53,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        // "Save to computer" (spec 8.2): the system's file dialogs, opened by the backend.
+        .plugin(tauri_plugin_dialog::init())
         .plugin(locale::plugin())
         .manage(Arc::new(AppState::default()));
     covers::register(builder)
@@ -70,6 +76,7 @@ pub fn run() {
                 }
             }
 
+            app.manage(Saves::new(app.handle().clone()));
             let playback = Playback::start(app.handle().clone()).map_err(|e| e.to_string());
             app.manage(PlaybackSlot(playback));
             auto_sync::start(app.handle().clone());
@@ -99,6 +106,7 @@ pub fn run() {
             commands::cycle_repeat,
             commands::get_queue,
             commands::set_song_starred,
+            commands::set_songs_starred,
             commands::set_album_starred,
             commands::get_album_page,
             commands::get_playlist_page,
@@ -121,6 +129,22 @@ pub fn run() {
             commands::move_in_queue,
             commands::remove_from_queue,
             commands::create_playlist,
+            commands::play_item,
+            commands::enqueue,
+            commands::play_similar_songs,
+            commands::play_artist_radio,
+            commands::add_to_playlist,
+            commands::update_playlist,
+            commands::remove_from_playlist,
+            commands::delete_playlist,
+            commands::get_song_info,
+            commands::get_album_info,
+            commands::get_artist_info,
+            commands::save_to_computer,
+            commands::cancel_saves,
+            commands::open_save_folder,
+            commands::is_navidrome,
+            commands::open_in_navidrome,
             commands::get_lyrics,
             commands::get_related,
             commands::toggle_pause,

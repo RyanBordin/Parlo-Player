@@ -45,7 +45,7 @@ pub struct ArtistPage {
 const ALBUM_ORDER: &str = "ORDER BY year DESC NULLS LAST, julianday(created) DESC, name";
 
 /// Songs where `?1` is one of the song's artists.
-const ARTIST_SONGS: &str = "SELECT song_id FROM song_artists WHERE artist_id = ?1 AND role = 'artist'";
+pub(super) const ARTIST_SONGS: &str = "SELECT song_id FROM song_artists WHERE artist_id = ?1 AND role = 'artist'";
 
 /// The page of an artist, `None` if the artist is not in the library.
 pub fn artist_page(conn: &Connection, artist_id: &str) -> DbResult<Option<ArtistPage>> {

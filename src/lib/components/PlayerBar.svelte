@@ -28,6 +28,8 @@
   } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import { coverMode, setCoverExpanded } from "#lib/cover-mode.svelte.ts";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { addToPlaylistMenu, openSongsMenu } from "#lib/menu/menus.ts";
   import { nowPlaying, toggleNowPlaying } from "#lib/now-playing.svelte.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
@@ -85,6 +87,16 @@
 
   let canOpenNowPlaying = $derived(track !== null || hasQueue);
 
+  // Spec 4.3, 8: the current song's menu, and the quick "Add to playlist".
+  function openTrackMenu(event: MouseEvent) {
+    if (track) openSongsMenu(event, [track], { label: queue.label });
+  }
+
+  function openAddToPlaylist(event: MouseEvent) {
+    const current = track;
+    if (current) openMenu(event, () => addToPlaylistMenu({ kind: "songs", ids: [current.id] }));
+  }
+
   // Spec 4.3: a click on an empty part of the bar opens / closes Now Playing.
   function onBarClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
@@ -114,7 +126,8 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 <footer class="bar" onclick={onBarClick}>
   <!-- Zone 1: the song -->
-  <div class="zone track">
+  <!-- svelte-ignore a11y_no_static_element_interactions (the right click repeats the "..." button) -->
+  <div class="zone track" oncontextmenu={openTrackMenu}>
     {#if track && !coverMode.expanded}
       <div class="thumb">
         <Cover id={track.coverArt} size={56} radius="var(--radius-sm)" />
@@ -204,7 +217,7 @@
   </div>
 
   <div class="zone right">
-    <!-- Zone 3: actions on the current song (menus come in step 8) -->
+    <!-- Zone 3: actions on the current song -->
     <div class="actions">
       <button
         class="icon favorite"
@@ -217,10 +230,26 @@
       >
         <Heart fill={track?.starred ? "currentColor" : "none"} />
       </button>
-      <button class="icon add" type="button" disabled={!track} aria-label={m.player_add_to_playlist()} title={m.player_add_to_playlist()}>
+      <button
+        class="icon add"
+        type="button"
+        onclick={openAddToPlaylist}
+        disabled={!track}
+        aria-label={m.player_add_to_playlist()}
+        title={m.player_add_to_playlist()}
+        aria-haspopup="menu"
+      >
         <ListPlus />
       </button>
-      <button class="icon" type="button" disabled={!track} aria-label={m.player_more()} title={m.player_more()}>
+      <button
+        class="icon"
+        type="button"
+        onclick={openTrackMenu}
+        disabled={!track}
+        aria-label={m.player_more()}
+        title={m.player_more()}
+        aria-haspopup="menu"
+      >
         <Ellipsis />
       </button>
     </div>
@@ -551,7 +580,7 @@
   }
 
   /* Spec 4.3, narrow window: first the volume slider goes, then the song
-     actions (they will be in the "..." menu, step 8). */
+     actions (Favorite and Add to playlist are also in the "..." menu). */
   @media (max-width: 1199px) {
     .volume-slider {
       display: none;

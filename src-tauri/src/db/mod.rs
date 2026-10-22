@@ -7,6 +7,7 @@ pub mod artists;
 pub mod favorites;
 pub mod history;
 pub mod home;
+pub mod items;
 pub mod library;
 pub mod related;
 mod migrations;

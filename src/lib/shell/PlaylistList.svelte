@@ -1,7 +1,11 @@
 <script lang="ts">
   // Lower zone of the sidebar (spec 4.2): "+ New playlist" and every playlist.
+  // A right click on a playlist opens its menu (spec 8.1).
   import Plus from "@lucide/svelte/icons/plus";
   import { page } from "$app/state";
+  import { showDialog } from "#lib/menu/dialogs.svelte.ts";
+  import { openMenu } from "#lib/menu/menu.svelte.ts";
+  import { playlistMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { loadPlaylists, playlistSubtitle, playlists } from "#lib/playlists.svelte.ts";
   import { syncState } from "#lib/sync.svelte.ts";
@@ -14,8 +18,7 @@
 </script>
 
 <section class="playlists" aria-label={m.playlists_label()}>
-  <!-- Creating playlists comes in a later step. -->
-  <button class="new" type="button">
+  <button class="new" type="button" onclick={() => showDialog({ kind: "newPlaylist", target: null })}>
     <Plus />
     <span>{m.playlists_new()}</span>
   </button>
@@ -27,7 +30,12 @@
       {#each playlists.items as playlist (playlist.id)}
         {@const href = `/playlists/${encodeURIComponent(playlist.id)}`}
         <li>
-          <a {href} class:active={page.url.pathname === href} aria-current={page.url.pathname === href ? "page" : undefined}>
+          <a
+            {href}
+            class:active={page.url.pathname === href}
+            aria-current={page.url.pathname === href ? "page" : undefined}
+            oncontextmenu={(event) => openMenu(event, () => playlistMenu(playlist))}
+          >
             <span class="name">{playlist.name}</span>
             <span class="subtitle">{playlistSubtitle(playlist)}</span>
           </a>

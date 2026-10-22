@@ -13,6 +13,7 @@
   import SearchTop from "#lib/components/search/SearchTop.svelte";
   import type { ColumnId, TableRow } from "#lib/track-columns.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
+  import { openSongsMenu, songById } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import {
     forgetSearch,
@@ -76,6 +77,12 @@
     if (!results) return;
     error = null;
     playContext(results.songIds, index, m.search_context()).catch(showError);
+  }
+
+  function onmenu(event: MouseEvent, indexes: number[]) {
+    const ids = results?.songIds ?? [];
+    const songs = indexes.map((index) => foundSongAt(index) ?? songById(ids[index]));
+    openSongsMenu(event, songs, { label: m.search_context() });
   }
 
   /** Opening or playing a result makes the search a recent one. */
@@ -151,6 +158,7 @@
               artistBelow={() => false}
               selectKey={(index) => results?.songIds[index] ?? index}
               onplay={play}
+              {onmenu}
               onerror={showError}
             />
           {/if}

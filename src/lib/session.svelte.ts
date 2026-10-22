@@ -7,6 +7,7 @@ import { clearFavorites } from "#lib/favorites.svelte.ts";
 import { clearHome } from "#lib/home.svelte.ts";
 import { clearPages } from "#lib/page-cache.svelte.ts";
 import { clearSearch } from "#lib/search.svelte.ts";
+import { clearServer } from "#lib/server-info.svelte.ts";
 import { clearLibrarySettings, loadLibrarySettings } from "#lib/settings/library-settings.svelte.ts";
 import { clearSongCache } from "#lib/song-cache.svelte.ts";
 import { clearSongs } from "#lib/songs.svelte.ts";
@@ -62,6 +63,7 @@ export async function signOut(): Promise<void> {
   clearSongs();
   clearSearch();
   clearLibrarySettings();
+  clearServer();
   app.view = { name: "login" };
   await goto("/", { replaceState: true });
 }

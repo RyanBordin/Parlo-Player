@@ -445,6 +445,11 @@ export type PlaylistSummary = {
   name: string;
   owner: string | null;
   songCount: number | null;
+  /** Description. */
+  comment: string | null;
+  public: boolean | null;
+  /** Last change on the server (ISO 8601). */
+  changed: string | null;
 };
 
 /** Mirrors `Track` in src-tauri/src/player/events.rs. */
@@ -723,17 +728,153 @@ export function moveInQueue(from: number, to: number): Promise<void> {
   return invoke("move_in_queue", { from, to });
 }
 
-/** Up Next: removes a song from the queue. */
-export function removeFromQueue(position: number): Promise<void> {
-  return invoke("remove_from_queue", { position });
+/** Up Next: removes songs (one, or a selection) from the queue. */
+export function removeFromQueue(positions: number[]): Promise<void> {
+  return invoke("remove_from_queue", { positions });
 }
 
 /**
- * Saves songs as a new playlist on the server. Resolves to `false` when the
- * server did not send it back: it shows in the sidebar after a sync.
+ * Saves the item's songs as a new playlist on the server. Resolves to its ID,
+ * or `null` when the server did not send it back: it shows in the sidebar
+ * after a sync.
  */
-export function createPlaylist(name: string, songIds: string[]): Promise<boolean> {
-  return invoke("create_playlist", { name, songIds });
+export function createPlaylist(name: string, target: ItemTarget): Promise<string | null> {
+  return invoke("create_playlist", { name, target });
+}
+
+/** What a "..." menu acts on. Mirrors `ItemTarget` in src-tauri/src/commands.rs. */
+export type ItemTarget =
+  | { kind: "songs"; ids: string[] }
+  | { kind: "album"; id: string }
+  | { kind: "artist"; id: string }
+  | { kind: "playlist"; id: string };
+
+/** "Play", "Play shuffled" and "Random mix" of a menu. */
+export type ItemPlayMode = "inOrder" | "shuffled" | "mix";
+
+/** "Play next" or "Add to queue". */
+export type Placement = "next" | "end";
+
+/** A playlist song as shown: its ID and which of its occurrences it is (0 = first). */
+export type PlaylistEntry = { id: string; occurrence: number };
+
+/** The choice when some songs are already in the playlist (spec 8.2). */
+export type Duplicates = "addAll" | "onlyNew";
+
+/** Answer of `addToPlaylist`. */
+export type AddOutcome = { kind: "duplicates"; count: number; total: number } | { kind: "added"; count: number };
+
+export type ArtistRef = { id: string; name: string };
+
+/** "File information" of a song. Mirrors `SongInfo` in src-tauri/src/db/items.rs. */
+export type SongInfo = {
+  title: string;
+  artist: string | null;
+  album: string | null;
+  suffix: string | null;
+  contentType: string | null;
+  /** kbps. */
+  bitRate: number | null;
+  /** Hz. */
+  samplingRate: number | null;
+  bitDepth: number | null;
+  channelCount: number | null;
+  /** Bytes. */
+  size: number | null;
+  /** Seconds. */
+  duration: number | null;
+  path: string | null;
+  albumId: string | null;
+  starred: boolean;
+  /** Artists in the library, in the song's order. */
+  artists: ArtistRef[];
+};
+
+/** Mirrors `AlbumInfo` in src-tauri/src/db/items.rs. */
+export type AlbumInfo = {
+  name: string;
+  artist: string | null;
+  year: number | null;
+  labels: string[];
+  genres: string[];
+  formats: string[];
+  songCount: number;
+  /** Seconds. */
+  duration: number | null;
+  starred: boolean;
+};
+
+/** Mirrors `ArtistInfo` in src-tauri/src/db/items.rs. */
+export type ArtistInfo = {
+  name: string;
+  biography: string | null;
+  albumCount: number;
+  songCount: number;
+  starred: boolean;
+};
+
+/** Plays an album, artist or playlist from a menu. */
+export function playItem(target: ItemTarget, mode: ItemPlayMode, contextLabel: string): Promise<void> {
+  return invoke("play_item", { target, mode, contextLabel });
+}
+
+/** "Play next" / "Add to queue"; with nothing queued, the songs start playing. */
+export function enqueue(target: ItemTarget, placement: Placement, contextLabel: string): Promise<void> {
+  return invoke("enqueue", { target, placement, contextLabel });
+}
+
+/** "Play similar songs" of a song, with a local fallback. */
+export function playSimilarSongs(songId: string, contextLabel: string): Promise<void> {
+  return invoke("play_similar_songs", { songId, contextLabel });
+}
+
+/** "Artist radio", with a local fallback. */
+export function playArtistRadio(artistId: string, contextLabel: string): Promise<void> {
+  return invoke("play_artist_radio", { artistId, contextLabel });
+}
+
+/** Without `duplicates`, nothing is added when some songs are already there: the answer says how many. */
+export function addToPlaylist(playlistId: string, target: ItemTarget, duplicates: Duplicates | null): Promise<AddOutcome> {
+  return invoke("add_to_playlist", { playlistId, target, duplicates });
+}
+
+/** Changes a playlist's name, description or visibility; `null` keeps a field. */
+export function updatePlaylist(
+  playlistId: string,
+  changes: { name?: string; comment?: string; public?: boolean },
+): Promise<void> {
+  return invoke("update_playlist", {
+    playlistId,
+    name: changes.name ?? null,
+    comment: changes.comment ?? null,
+    public: changes.public ?? null,
+  });
+}
+
+export function removeFromPlaylist(playlistId: string, entries: PlaylistEntry[]): Promise<void> {
+  return invoke("remove_from_playlist", { playlistId, entries });
+}
+
+export function deletePlaylist(playlistId: string): Promise<void> {
+  return invoke("delete_playlist", { playlistId });
+}
+
+/** `null` if the song is not in the library. */
+export function getSongInfo(songId: string): Promise<SongInfo | null> {
+  return invoke("get_song_info", { songId });
+}
+
+export function getAlbumInfo(albumId: string): Promise<AlbumInfo | null> {
+  return invoke("get_album_info", { albumId });
+}
+
+export function getArtistInfo(artistId: string): Promise<ArtistInfo | null> {
+  return invoke("get_artist_info", { artistId });
+}
+
+/** "Favorite all" of a selection: one request. */
+export function setSongsStarred(songIds: string[], starred: boolean): Promise<void> {
+  return invoke("set_songs_starred", { songIds, starred });
 }
 
 /** Click on a song of the queue list: only jumps to it. */
@@ -784,4 +925,52 @@ export function setVolume(volume: number): Promise<number> {
 
 export function getPlayerState(): Promise<PlayerState> {
   return invoke("get_player_state");
+}
+
+/** What "Save to computer..." saves. Mirrors `SaveTarget` in src-tauri/src/commands.rs. */
+export type SaveTarget = { kind: "songs"; ids: string[] } | { kind: "album"; id: string } | { kind: "playlist"; id: string };
+
+/** Payload of `save-progress`: songs done (saved, skipped or failed) of all. */
+export type SaveProgress = { done: number; total: number };
+
+/** Payload of `save-finished`. Mirrors `SaveFinished` in src-tauri/src/downloads/mod.rs. */
+export type SaveFinished = {
+  saved: number;
+  /** Already in the folder with the same size. */
+  skipped: number;
+  /** File names that could not be saved. */
+  failed: string[];
+  cancelled: boolean;
+  /** The server refused: no download permission. */
+  forbidden: boolean;
+};
+
+export const SAVE_PROGRESS_EVENT = "save-progress";
+export const SAVE_FINISHED_EVENT = "save-finished";
+
+/**
+ * Asks where with the system's dialog, then saves the original files in the
+ * background. Resolves to the number of songs, or `null` if the dialog was closed.
+ */
+export function saveToComputer(target: SaveTarget): Promise<number | null> {
+  return invoke("save_to_computer", { target });
+}
+
+export function cancelSaves(): Promise<void> {
+  return invoke("cancel_saves");
+}
+
+/** Opens the folder of the last save that finished. */
+export function openSaveFolder(): Promise<void> {
+  return invoke("open_save_folder");
+}
+
+/** Whether the server is a Navidrome (`false` while it cannot be reached). */
+export function isNavidrome(): Promise<boolean> {
+  return invoke("is_navidrome");
+}
+
+/** The item's page in Navidrome's web interface, in the default browser. A song opens its album. */
+export function openInNavidrome(kind: "song" | "album" | "artist", id: string): Promise<void> {
+  return invoke("open_in_navidrome", { kind, id });
 }

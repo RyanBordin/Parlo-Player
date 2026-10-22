@@ -2,10 +2,11 @@
   // Tracklist of album and playlist pages (spec 6.5) and of the favorite
   // songs (spec 6.2): the page has all its songs, so the quick search and the
   // column sorting (spec 7) run here, in memory. A click plays the list as
-  // shown (spec 5.1).
+  // shown (spec 5.1). "..." and a right click open the menus (spec 8.1).
   import { playContext, type TrackListSong } from "#lib/api.ts";
   import ListSearch from "#lib/components/ListSearch.svelte";
   import TrackTable from "#lib/components/TrackTable.svelte";
+  import { isOwnPlaylist, openSongsMenu, playlistEntries, type SongPlace } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import type { ColumnId, TableRow } from "#lib/track-columns.ts";
   import { filterEntries, nextSort, sortEntries, type Sort, type SortKey } from "#lib/tracklist.ts";
@@ -15,6 +16,7 @@
     kind,
     contextLabel,
     albumArtist = null,
+    playlist = null,
     shownIds = $bindable([]),
     onerror,
   }: {
@@ -25,6 +27,8 @@
     contextLabel: string;
     /** Album pages: a song by someone else (compilations) shows its artist. */
     albumArtist?: string | null;
+    /** Playlist pages: the playlist, for "Remove from this playlist" when it is the user's. */
+    playlist?: { id: string; name: string; owner: string | null } | null;
     /** The list as shown (filtered and sorted), for Play / Shuffle. */
     shownIds?: string[];
     onerror?: (error: unknown) => void;
@@ -92,6 +96,23 @@
     sort = key ? nextSort(sort, key as SortKey) : null;
   }
 
+  function onmenu(event: MouseEvent, indexes: number[]) {
+    const picked = indexes.map((index) => shown[index]);
+    const place: SongPlace = { label: contextLabel };
+    if (playlist && isOwnPlaylist(playlist)) {
+      const entries = playlistEntries(
+        songs,
+        picked.map((entry) => entry.position),
+      );
+      place.playlist = { id: playlist.id, name: playlist.name, entries };
+    }
+    openSongsMenu(
+      event,
+      picked.map((entry) => entry.song),
+      place,
+    );
+  }
+
   function onplay(index: number) {
     playContext(
       shown.map((e) => e.song.id),
@@ -127,6 +148,8 @@
       {artistBelow}
       selectKey={(index) => shown[index].position}
       {onplay}
+      {onmenu}
+      resetOn={songs}
       {onerror}
     />
   {/if}

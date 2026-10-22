@@ -14,6 +14,7 @@
   import TrackCard from "#lib/components/cards/TrackCard.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { dropUnstarred, favorites, favoritesCount, isStarredNow, refreshFavorites } from "#lib/favorites.svelte.ts";
+  import { openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { startLightSync, syncState } from "#lib/sync.svelte.ts";
   import type { ColumnId, TableRow } from "#lib/track-columns.ts";
@@ -113,7 +114,13 @@
           {:else if item.kind === "artist"}
             <ArtistCard artist={item} size={CARD} label={m.card_type_artist()} />
           {:else}
-            <TrackCard song={item} size={CARD} label={m.card_type_song()} onplay={() => playSongId(item.id)} />
+            <TrackCard
+              song={item}
+              size={CARD}
+              label={m.card_type_song()}
+              contextLabel={m.nav_favorites()}
+              onplay={() => playSongId(item.id)}
+            />
           {/if}
         {/each}
       </Carousel>
@@ -146,6 +153,12 @@
             artistBelow={() => false}
             selectKey={(index) => songs[index]?.id ?? index}
             onplay={playSong}
+            onmenu={(event, indexes) =>
+              openSongsMenu(
+                event,
+                indexes.map((index) => songs[index]),
+                { label: m.nav_favorites() },
+              )}
             onerror={showError}
           />
         {:else if data}

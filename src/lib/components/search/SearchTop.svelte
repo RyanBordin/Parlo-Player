@@ -60,7 +60,7 @@
           </header>
           <div class="rows">
             {#each results.topSongs as song, index (song.id)}
-              <TrackRow {song} onplay={() => onplay(index)} />
+              <TrackRow {song} contextLabel={m.search_context()} onplay={() => onplay(index)} />
             {/each}
           </div>
         </section>

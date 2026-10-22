@@ -6,7 +6,7 @@
 >
 > Sempre que este documento for fornecido como contexto, todas as decisões de interface (UI), experiência do usuário (UX), fluxos de navegação, regras de reprodução, integrações de API e tecnologias abaixo devem ser estritamente respeitadas.
 
-**Última atualização:** 20/10/2026
+**Última atualização:** 22/10/2026
 
 ---
 
@@ -113,7 +113,7 @@ A Barra Lateral Esquerda e a Barra de Reprodução Inferior estão **sempre vis�
 |    (Scroll)      |                                                                |
 | [ Capa expandida ]| <- só no modo expandido (Seção 4.3)                            |
 +------------------+----------------------------------------------------------------+
-| [Capa] Título / Artista      [ |<  ( PLAY )  >| ]     [❤️][+][...]  [🔊][🔁][🔀][▲] | <- Player Bar
+| [Capa] Título   [+≡][🔁][🔀]  [ |<  ( PLAY )  >| ]  [❤️][🔊][...]     Título [Capa] | <- Player Bar
 |        Álbum             0:25 [======o-----------] 4:00                           |
 +-----------------------------------------------------------------------------------+
 ```
@@ -152,42 +152,64 @@ Sem itens de Pastas, Gêneros ou Rádios.
 
 ### 4.3. Barra de Reprodução Inferior (Player Bar Híbrida)
 
-Fixa na base da janela (`height` ~80–90px). Funde a distribuição espacial do Sonixd com os ícones de ação do YouTube Music, no visual do Swing Music.
+Fixa na base da janela (`height` ~80–90px), no visual do Swing Music. Layout **simétrico**, desenhado pelo autor (referência: `docs/referencias/player-bar-desenho.png`, com duas mudanças: textos da próxima faixa alinhados à direita e Volume trocado de lugar com Adicionar à playlist).
 
-#### Zona 1: Esquerda — Identificação da Faixa
+```
+[capa] Título            [+≡] [⟳] [⤮]   |◁   (▶)   ▷|   [♥] [🔊] [...]                     Título [capa]
+       Artista                         0:38 ━━━━━━━━━━ 2:49                          Artista
+       Álbum                                                                          Álbum
+```
+
+Da esquerda para a direita, cinco zonas:
+
+#### Zona 1: Esquerda — Faixa atual
 
 * **Capa do Álbum** com dois modos, alternados pelo usuário:
   * **Modo compacto (padrão):** miniatura quadrada (~56–64px), cantos arredondados, ancorada na extremidade esquerda. Ao passar o mouse, aparece uma seta **˄**; clicar nela leva ao modo expandido.
   * **Modo expandido:** a capa aparece grande na base da barra lateral, abaixo da lista de playlists, ocupando a largura da sidebar, com cantos arredondados e alinhada às margens (como no Swing Music). Ao passar o mouse, aparece uma seta **˅**; clicar nela devolve a capa à Player Bar.
   * O modo escolhido fica salvo entre sessões.
-  * **Nunca** exibir capa flutuante no canto direito.
-* **Metadados empilhados** (permanecem na Player Bar nos dois modos):
+* **Metadados empilhados**, alinhados à esquerda:
   1. Título (negrito, cor primária, *text-ellipsis*).
   2. Artista (cinza claro, clicável → página do artista).
   3. Álbum (cinza escuro, clicável → página do álbum).
 
-#### Zona 2: Centro — Transporte e Progresso
+#### Zona 2: Centro-esquerda — Fila
+
+* **Adicionar à playlist** (popover rápido, o mesmo submenu da Seção 8.2).
+* **Repetir:** Desativado → Repetir fila/álbum → Repetir uma (ícones distintos; ativo na cor de destaque, com ponto embaixo).
+* **Aleatório:** liga/desliga o embaralhamento da fila (Seção 5.4).
+
+#### Zona 3: Centro — Transporte e Progresso
 
 * **Linha superior:** Anterior, **Play/Pause** circular em destaque, Próxima.
 * **Linha inferior:** tempo decorrido (`tabular-nums`), barra de progresso interativa (clicar e arrastar), tempo total.
 
-#### Zona 3: Direita-Centro — Ações da Música Atual
+#### Zona 4: Centro-direita — Ações
 
 * **Favoritar** (coração, `star` / `unstar`). Sem 5 estrelas.
-* **Adicionar à playlist** (popover rápido).
+* **Volume:** só o ícone na barra (muda conforme o nível: mudo, baixo, alto). Clique = mudo. Passar o mouse sobre o ícone abre um **slider vertical** num popover acima dele, com o valor em %.
 * **Menu `...`** (Seção 8).
 
-#### Zona 4: Extrema Direita — Áudio, Fila e Expansão
+#### Zona 5: Direita — Próxima faixa
 
-* **Volume:** ícone (clique = mudo) + slider horizontal.
-* **Repetir:** Desativado → Repetir fila/álbum → Repetir uma.
-* **Aleatório:** liga/desliga o embaralhamento da fila (Seção 5.4).
-* **Seta `▲` / `▼`:** abre/recolhe a tela "Tocando Agora" (também ao clicar numa área vazia da barra).
+* Espelho da Zona 1: **metadados alinhados à direita** (Título, Artista, Álbum) e a **capa** na extremidade direita, do mesmo tamanho da capa da Zona 1.
+* **Sem rótulo.** A direção da barra (da esquerda para a direita, como o progresso) já indica que é a próxima.
+* Mostra sempre a **próxima faixa imediata**, a mesma que o botão **Próxima** tocaria (respeitando shuffle e repeat). No fim da fila sem repeat, a zona fica vazia.
+* Atualiza junto com a fila (reordenar, remover, tocar a seguir).
+* **Clicar na zona toca a próxima faixa** (o mesmo que o botão Próxima). Ao passar o mouse, aparece um ícone de play sobre a capa para indicar isso. Artista e álbum não são clicáveis aqui, para a zona inteira ser um alvo só.
+
+#### Abrir a tela Tocando Agora
+
+* Não há mais seta ▲/▼ na barra. A tela abre e fecha pelo clique numa **área vazia** da barra; fecha também por **Esc** ou ao navegar pela barra lateral (Seção 4.4).
+
+#### Volume pela roda do mouse
+
+* Com o mouse **em qualquer ponto da Player Bar**, a roda do mouse sobe e desce o volume de 5 em 5%. Ao girar, o popover do volume aparece por um instante mostrando o novo valor.
 
 #### Janela estreita
 
 * Largura mínima da janela: **1000px**.
-* Em larguras menores, a Player Bar esconde primeiro o slider de volume (fica só o ícone) e depois os botões da Zona 3, que passam para o menu `...`.
+* Conforme a janela estreita, nesta ordem: a Zona 5 esconde os textos e fica só a capa; depois a Zona 5 some; por fim, Adicionar à playlist passa para o menu `...`.
 
 ### 4.4. Tela "Tocando Agora" (Gaveta Expansível)
 
@@ -219,7 +241,7 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 
 Referência visual: tela "Tocando agora" do YouTube Music.
 
-* **Abrir e fechar:** seta ▲/▼ da Player Bar, clique numa área vazia da Player Bar, ou **Esc** para fechar. Navegar pela barra lateral também fecha. A barra lateral e a Player Bar continuam visíveis. A aba escolhida é lembrada.
+* **Abrir e fechar:** clique numa área vazia da Player Bar (Seção 4.3), ou **Esc** para fechar. Navegar pela barra lateral também fecha. A barra lateral e a Player Bar continuam visíveis. A aba escolhida é lembrada.
 * **Capa:** acompanha a faixa atual, em alta resolução, com cantos arredondados e sombra suave.
 * **Fundo da capa:** brilho ambiente só na coluna esquerda: a capa atual ampliada, com desfoque forte e opacidade ~60%, esmaecendo para o preto nas bordas antes da coluna das abas, sem borda visível. Uma sombra escura suave fica só atrás do título e do artista, para manter a leitura.
   * Na troca de faixa, o fundo novo aparece sobre o antigo num esmaecimento de ~600 ms; com "Reduzir animações", troca direto.
@@ -267,7 +289,7 @@ Referência visual: tela "Tocando agora" do YouTube Music.
 
 ### 5.3. Seleção múltipla
 
-* Como o clique simples toca, a seleção usa **Ctrl+clique** (faixas avulsas) e **Shift+clique** (intervalo), sem iniciar reprodução.
+* Como o clique simples toca, a seleção usa **Ctrl+clique** (faixas avulsas) e **Shift+clique** (intervalo), sem iniciar reprodução. Ações sobre a seleção: clique direito (Seção 8.1). Esc limpa a seleção.
 
 ### 5.4. Shuffle
 
@@ -560,13 +582,40 @@ Toda lista de faixas (Músicas, página de Álbum, página de Playlist, "Ver tud
 
 ## 8. Menus de Opções (`...`)
 
-Cada menu abre pelo botão `...` e pelo **clique direito** no item, com o mesmo conteúdo.
+Cada menu abre pelo botão `...` e pelo **clique direito** no item, com o mesmo conteúdo. A Player Bar usa o menu da faixa atual.
 
-* **Faixa:** Tocar a seguir • Adicionar ao fim da fila • Adicionar à playlist › • Favoritar / Remover dos favoritos • Tocar músicas parecidas (`getSimilarSongs2`) • Ir para o álbum • Ir para o artista • Baixar • Informações do arquivo (formato, bitrate, tamanho, caminho) • *Só em playlist:* Remover desta playlist • *Só em A Seguir:* Remover da fila.
-* **Álbum:** Tocar a seguir • Adicionar ao fim da fila • Adicionar à playlist › • Favoritar / Remover • Ir para o artista • Baixar álbum • Informações (ano, gravadora, gênero, formato).
-* **Artista:** Tocar a seguir • Adicionar ao fim da fila • Mix aleatório (até 100) • Favoritar / Remover • Baixar todas as faixas • Informações (biografia, nº de álbuns e faixas).
-* **Playlist manual:** Tocar a seguir • Adicionar ao fim da fila • Renomear / editar descrição • Tornar pública ou privada • Baixar playlist • Excluir playlist (com confirmação).
-* **Playlist automática:** Tocar a seguir • Adicionar ao fim da fila • Salvar como playlist normal (cópia fixa) • Configurar regras (→ Configurações). Não pode ser renomeada nem excluída.
+* **Agrupamento:** os itens ficam em grupos separados por uma linha fina, sempre nesta ordem: **tocar**, **fila**, **biblioteca** (favoritar, playlist), **navegar** (ir para), **arquivo** (salvar, baixar, informações, abrir no Navidrome). Itens que não se aplicam não aparecem (nada de itens desabilitados).
+* Itens de versões futuras (ex.: **Baixar** `[v0.2]`) ficam ocultos até existirem.
+* Ao lado de cada item com atalho de teclado, o atalho aparece em tom secundário.
+
+### 8.1. Itens por tipo
+
+* **Faixa:** Tocar a seguir • Adicionar ao fim da fila • Tocar músicas parecidas (`getSimilarSongs2`) | Favoritar / Remover dos favoritos • Adicionar à playlist › | Ir para o álbum • Ir para o artista (vira submenu **›** quando a faixa tem mais de um artista, Seção 6.6) | **Salvar no computador...** • Baixar `[v0.2]` • Copiar "Título – Artista" • Informações do arquivo (formato, bitrate, taxa de amostragem, tamanho, caminho) • **Abrir no Navidrome** | *Só em playlist manual:* Remover desta playlist • *Só em A Seguir:* Remover da fila.
+* **Álbum:** Tocar • Tocar em ordem aleatória • Tocar a seguir • Adicionar ao fim da fila | Favoritar / Remover • Adicionar à playlist › | Ir para o artista | **Salvar no computador...** • Baixar álbum `[v0.2]` • Informações (ano, gravadora, gênero, formato, nº de faixas, duração) • **Abrir no Navidrome**.
+* **Artista:** Tocar • Mix aleatório (até 100) • **Rádio do artista** • Tocar a seguir • Adicionar ao fim da fila | Favoritar / Remover | Ir para artistas parecidos | Baixar todas as faixas `[v0.2]` • Informações (biografia, nº de álbuns e faixas) • **Abrir no Navidrome**.
+* **Playlist manual:** Tocar • Tocar em ordem aleatória • Tocar a seguir • Adicionar ao fim da fila | Renomear / editar descrição • Tornar pública ou privada | **Salvar no computador...** • Baixar playlist `[v0.2]` | Excluir playlist (com confirmação).
+* **Playlist automática** `[v0.2]`: Tocar a seguir • Adicionar ao fim da fila • Salvar como playlist normal (cópia fixa) • **Salvar no computador...** • Configurar regras (→ Configurações). Não pode ser renomeada nem excluída.
+* **Seleção múltipla** (Ctrl/Shift + clique, Seção 5.3): o clique direito sobre a seleção abre um menu que vale para **todas as faixas selecionadas**: Tocar a seguir • Adicionar ao fim da fila | Favoritar todas • Adicionar à playlist › | **Salvar no computador...** • Baixar `[v0.2]` | *Em playlist manual:* Remover desta playlist • *Em A Seguir:* Remover da fila. O topo do menu mostra "N faixas selecionadas".
+
+### 8.2. Detalhes
+
+* **Rádio do artista:** fila com músicas parecidas com o artista (`getSimilarSongs2` com o ID do artista). Sem Last.fm no servidor, mistura as faixas mais tocadas do artista com faixas do mesmo gênero. Até 100 faixas, contexto "Rádio: [Artista]".
+* **Ir para artistas parecidos:** abre a página do artista rolada até a seção Artistas parecidos.
+* **Adicionar à playlist ›:**
+  * "+ Nova playlist" no topo (cria e já adiciona).
+  * Playlists usadas por último primeiro; campo de busca no submenu quando houver mais de 10.
+  * Se a faixa já estiver na playlist: aviso com **Adicionar mesmo assim** ou **Pular** (com várias faixas: **Adicionar só as novas** ou **Adicionar todas**).
+  * Confirmação discreta ao final ("Adicionada a [Playlist]").
+* **Salvar no computador...** (v0.1): grava o **arquivo original** (endpoint `download` do Subsonic, sem conversão) numa pasta escolhida pelo usuário. Diferente de **Baixar** (Seção 10), que guarda a cópia dentro do app para ouvir offline.
+  * **Faixa:** janela "Salvar como" com o nome `Artista - Título.ext`.
+  * **Álbum:** escolhe a pasta e cria `Artista do álbum - Álbum (Ano)/` com `NN - Título.ext` (com mais de um disco: `D-NN - Título.ext`) e a capa como `cover.jpg`.
+  * **Playlist:** cria `Nome da playlist/` com `NNN - Artista - Título.ext` na ordem da playlist e um arquivo `Nome da playlist.m3u8`, que outros players abrem.
+  * **Seleção:** escolhe a pasta e grava `Artista - Título.ext`.
+  * A janela abre na última pasta usada (padrão: pasta Música do sistema).
+  * Caracteres inválidos em nomes de arquivo são trocados. Arquivo já existente com o mesmo tamanho é pulado; com tamanho diferente, ganha sufixo " (1)".
+  * **Progresso** num indicador discreto (ex.: "Salvando 3 de 12"), com **Cancelar**. A reprodução não é afetada. No máximo 2 arquivos ao mesmo tempo. Ao final, confirmação com **Abrir pasta**; se algum arquivo falhar, a lista dos que falharam.
+  * Se o servidor recusar o download (usuário sem permissão de download no Navidrome), mensagem clara explicando isso.
+* **Abrir no Navidrome:** abre a página do item na interface web do servidor, no navegador padrão (ex.: `<servidor>/app/#/album/<id>/show`, `<servidor>/app/#/artist/<id>/show`). A faixa abre a página do álbum dela, se o Navidrome não tiver página própria para faixas. Só aparece quando o servidor é um Navidrome (campo `type` do `ping` OpenSubsonic). As credenciais nunca vão na URL.
 
 ---
 
@@ -580,7 +629,7 @@ Cada menu abre pelo botão `...` e pelo **clique direito** no item, com o mesmo 
 
 ## 10. Downloads e Modo Offline `[v0.2]`
 
-* **"Baixar"** guarda uma cópia do arquivo **dentro do app** (pasta de dados do app: `%APPDATA%` no Windows, `~/.local/share` no Linux). O usuário pode encontrar os arquivos, mas não escolhe o destino a cada download.
+* **"Baixar"** (não confundir com **"Salvar no computador..."**, Seção 8.2, que já existe na v0.1) guarda uma cópia do arquivo **dentro do app** (pasta de dados do app: `%APPDATA%` no Windows, `~/.local/share` no Linux). O usuário pode encontrar os arquivos, mas não escolhe o destino a cada download.
 * Ao tocar uma faixa baixada, o app usa a cópia local.
 * **Modo offline automático:** sem conexão com o servidor, o app entra em modo offline, mostra um aviso discreto no topo e exibe **apenas o conteúdo baixado** (nada de itens acinzentados). Ao reconectar, sai do modo offline sozinho.
 * A página **Baixados** (Seção 6.8) fica sempre disponível.
@@ -770,3 +819,5 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 20/10/2026 | Configurações por setores (Geral, Aparência, Reprodução e áudio, Streaming, Servidor e conta, Sincronização, Biblioteca, Playlists automáticas, Downloads, Sobre), com busca e "Restaurar padrões". Ordem da Home e da barra lateral configurável já na v0.1. Setores futuros ocultos até existirem. Temas e cor tirada da capa ficam para depois. |
 | 20/10/2026 | Busca: página de resultados atualizada enquanto digita (sem painel suspenso), Álbuns antes de Artistas na aba Top, busca sem acentos e por palavras em qualquer ordem, regra do melhor resultado, "Ver todos" por seção. |
 | 20/10/2026 | Tocando Agora: brilho ambiente com as cores da capa atrás dela (só na coluna esquerda, esmaecido nas bordas, troca em ~600 ms), desligável em Aparência. |
+| 21/10/2026 | Menus `...` revisados: itens agrupados; "Salvar no computador..." (arquivo original, v0.1) em faixa, álbum, playlist e seleção; "Abrir no Navidrome" em faixa, álbum e artista; Rádio do artista; menu para seleção múltipla; submenu Adicionar à playlist com aviso de duplicadas. |
+| 22/10/2026 | Player Bar redesenhada pelo autor, simétrica em 5 zonas: faixa atual; Adicionar à playlist, Repetir e Aleatório; transporte; Favoritar, Volume (slider em popover) e `...`; próxima faixa espelhada à direita com rótulo A SEGUIR, que abre o Tocando Agora. Seta ▲/▼ removida. Revisão do autor: sem rótulo na próxima faixa; clicar nela toca a próxima; área vazia abre/fecha o Tocando Agora; roda do mouse sobre a barra ajusta o volume. |

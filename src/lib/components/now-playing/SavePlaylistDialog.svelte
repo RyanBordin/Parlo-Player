@@ -39,7 +39,7 @@
     saving = true;
     error = null;
     try {
-      const shownNow = await createPlaylist(trimmed, songIds);
+      const shownNow = (await createPlaylist(trimmed, { kind: "songs", ids: songIds })) !== null;
       if (shownNow) {
         await loadPlaylists();
         showToast(m.playlist_created({ name: trimmed }));

@@ -555,5 +555,168 @@
   "settings_licenses_description": "The libraries the app uses and their licenses. The libmpv shipped with the app on Windows is a GPL build.",
   "settings_licenses_native": "Native components",
   "settings_licenses_web": "Interface",
-  "settings_licenses_rust": "Rust libraries"
+  "settings_licenses_rust": "Rust libraries",
+  "menu_play": "Play",
+  "menu_play_shuffled": "Play shuffled",
+  "menu_play_next": "Play next",
+  "menu_add_to_queue": "Add to queue",
+  "menu_play_similar": "Play similar songs",
+  "menu_similar_context": "Similar to {title}",
+  "menu_artist_mix": "Random mix (up to {count})",
+  "menu_artist_radio": "Artist radio",
+  "menu_radio_context": "Radio: {artist}",
+  "menu_favorite": "Favorite",
+  "menu_unfavorite": "Remove from favorites",
+  "menu_favorite_all": "Favorite all",
+  "menu_add_to_playlist": "Add to playlist",
+  "menu_new_playlist": "New playlist",
+  "menu_search_playlists": "Search playlists",
+  "menu_no_playlists": "No playlists found",
+  "menu_go_to_album": "Go to album",
+  "menu_go_to_artist": "Go to artist",
+  "menu_go_to_similar_artists": "Go to similar artists",
+  "menu_copy_title": "Copy “Title – Artist”",
+  "menu_file_info": "File information",
+  "menu_info": "Information",
+  "menu_remove_from_playlist": "Remove from this playlist",
+  "menu_remove_from_queue": "Remove from queue",
+  "menu_rename_playlist": "Rename / edit description",
+  "menu_make_public": "Make public",
+  "menu_make_private": "Make private",
+  "menu_delete_playlist": "Delete playlist",
+  "menu_selected": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} song selected",
+        "countPlural=other": "{countText} songs selected"
+      }
+    }
+  ],
+  "toast_copied": "Copied",
+  "toast_playing_next": "Playing next",
+  "toast_added_to_queue": "Added to queue",
+  "toast_added_to_playlist": "Added to “{name}”",
+  "toast_added_many_to_playlist": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} song added to “{name}”",
+        "countPlural=other": "{countText} songs added to “{name}”"
+      }
+    }
+  ],
+  "toast_nothing_added": "No new songs for “{name}”",
+  "toast_removed_from_playlist": "Removed from “{name}”",
+  "toast_playlist_deleted": "Playlist “{name}” deleted",
+  "toast_playlist_public": "“{name}” is now public",
+  "toast_playlist_private": "“{name}” is now private",
+  "toast_playlist_updated": "Playlist updated",
+  "playlist_dialog_new_title": "New playlist",
+  "playlist_dialog_edit_title": "Edit playlist",
+  "playlist_dialog_name": "Name",
+  "playlist_dialog_description": "Description",
+  "playlist_dialog_create": "Create",
+  "playlist_dialog_save": "Save",
+  "delete_playlist_title": "Delete playlist?",
+  "delete_playlist_message": "“{name}” will be deleted from the server. This cannot be undone.",
+  "delete_playlist_confirm": "Delete",
+  "duplicates_title": "Already in the playlist",
+  "duplicates_one": "This song is already in “{name}”.",
+  "duplicates_many": "{count} of {total} songs are already in “{name}”.",
+  "duplicates_add_anyway": "Add anyway",
+  "duplicates_skip": "Skip",
+  "duplicates_only_new": "Add only the new ones",
+  "duplicates_add_all": "Add all",
+  "info_title_album": "Album information",
+  "info_title_artist": "Artist information",
+  "info_format": "Format",
+  "info_bit_rate": "Bitrate",
+  "info_sampling_rate": "Sample rate",
+  "info_khz": "{value} kHz",
+  "info_bit_depth": "Bit depth",
+  "info_bits": "{value} bits",
+  "info_channels": "Channels",
+  "info_size": "Size",
+  "info_path": "Path",
+  "info_duration": "Duration",
+  "info_year": "Year",
+  "info_label": "Label",
+  "info_genre": "Genre",
+  "info_songs": "Songs",
+  "info_albums": "Albums",
+  "info_biography": "Biography",
+  "info_close": "Close",
+  "info_not_found": "This item is no longer in the library.",
+  "menu_save_to_computer": "Save to computer...",
+  "menu_open_in_navidrome": "Open in Navidrome",
+  "save_progress": "Saving {done} of {total}",
+  "save_cancel": "Cancel",
+  "save_saved": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} file saved",
+        "countPlural=other": "{countText} files saved"
+      }
+    }
+  ],
+  "save_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} was already in the folder",
+        "countPlural=other": "{countText} were already in the folder"
+      }
+    }
+  ],
+  "save_cancelled": "Saving cancelled",
+  "save_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input countText",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{countText} file could not be saved:",
+        "countPlural=other": "{countText} files could not be saved:"
+      }
+    }
+  ],
+  "save_forbidden": "The server refused the download: this user is not allowed to download files. Ask the Navidrome administrator to allow downloads.",
+  "save_open_folder": "Open folder",
+  "save_close": "Close",
+  "save_label": "Save to computer"
 }

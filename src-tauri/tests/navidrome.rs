@@ -119,3 +119,33 @@ async fn artists_without_a_photo_get_the_server_placeholder() {
     println!("placeholder: {} bytes; artists with it: {same}, with a photo: {different}", placeholder.len());
     assert!(same + different > 0);
 }
+
+#[tokio::test]
+#[ignore = "requires a Navidrome server configured in .env"]
+async fn server_type_says_navidrome() {
+    let server = test_server();
+    let client = SubsonicClient::new(server.url, server.user, server.password).unwrap();
+
+    let kind = client.server_type().await.expect("ping should succeed");
+    assert_eq!(kind.as_deref(), Some("navidrome"));
+}
+
+#[tokio::test]
+#[ignore = "requires a Navidrome server configured in .env"]
+async fn download_sends_the_original_file() {
+    let server = test_server();
+    let client = SubsonicClient::new(server.url, server.user, server.password).unwrap();
+    let items = client.search3(SearchPage::songs(1, 0)).await.unwrap();
+    let song = items.songs.first().expect("the library has a song");
+
+    // A refused download (no permission) is error 50: say so clearly.
+    let mut response = match client.download(&song.id).await {
+        Err(SubsonicError::Api { code: 50, .. }) => panic!("this user may not download (error 50)"),
+        other => other.expect("download should succeed"),
+    };
+    let first = response.chunk().await.unwrap().expect("some bytes");
+    assert!(!first.is_empty());
+    if let (Some(size), Some(length)) = (song.size, response.content_length()) {
+        assert_eq!(length, size as u64, "the original file, not a conversion");
+    }
+}

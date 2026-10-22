@@ -1,11 +1,12 @@
 //! Tauri commands exposed to the UI.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::artist_page::{self, ArtistAbout};
@@ -24,14 +25,20 @@ use crate::db::search::{self, SearchResults};
 use crate::db::songs::{self, SongSort};
 use crate::db::settings::LibrarySettings;
 use crate::db::history;
-use crate::playback::{self, AlbumsPlayMode, Playback, PlaybackError, QueueState};
+use crate::downloads::{self, SaveItem, Saves, naming};
+use crate::navidrome;
+use crate::db::items::{AlbumInfo, ArtistInfo, SongInfo};
+use crate::playback::{self, AlbumsPlayMode, Placement, Playback, PlaybackError, QueueState};
+use crate::playlists::{self, AddOutcome, Duplicates, PlaylistEntry};
 use crate::player::AudioDevice;
 use crate::player::queue::RepeatMode;
 use crate::player::{PlayerError, PlayerState};
 use crate::session::{self, SavedSession, SessionError};
 use crate::settings::{self, AppSettings, SettingsError};
 use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
-use crate::subsonic::{Album, AlbumListType, Extension, MusicFolder, ServerInfo, StarItem, SubsonicClient, SubsonicError};
+use crate::subsonic::{
+    Album, AlbumListType, Extension, MusicFolder, PlaylistUpdate, ServerInfo, StarItem, SubsonicClient, SubsonicError,
+};
 use crate::sync::{self, FullSync, SyncError, SyncProgress};
 use crate::test_library;
 
@@ -501,6 +508,34 @@ pub async fn set_song_starred(
     Ok(())
 }
 
+/// "Favorite all" of a selection (spec 8.1): one request for every song.
+#[tauri::command]
+pub async fn set_songs_starred(
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    song_ids: Vec<String>,
+    starred: bool,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    active.client.set_starred(StarItem::Song, &song_ids, starred).await?;
+
+    let (db_path, ids) = (active.db_path.clone(), song_ids.clone());
+    let saved = run_blocking(move || {
+        let conn = db::open(&db_path)?;
+        ids.iter().try_for_each(|id| library::set_song_starred(&conn, id, starred))
+    })
+    .await;
+    if let Err(error) = saved {
+        log::warn!("commands: stars saved on the server but not locally: {error:?}");
+    }
+    if let Ok(playback) = &playback.0 {
+        for id in &song_ids {
+            playback.song_starred(id, starred);
+        }
+    }
+    Ok(())
+}
+
 /// Stars or unstars an album (heart of the album page, spec 6.5).
 #[tauri::command]
 pub async fn set_album_starred(
@@ -834,32 +869,485 @@ pub fn move_in_queue(playback: State<'_, PlaybackSlot>, from: usize, to: usize) 
     Ok(playback_of(&playback)?.move_in_queue(from, to)?)
 }
 
-/// Up Next: removes a song from the queue.
+/// Up Next: removes songs (one, or a selection) from the queue.
 #[tauri::command]
-pub fn remove_from_queue(playback: State<'_, PlaybackSlot>, position: usize) -> Result<(), CommandError> {
-    Ok(playback_of(&playback)?.remove_from_queue(position)?)
+pub fn remove_from_queue(playback: State<'_, PlaybackSlot>, positions: Vec<usize>) -> Result<(), CommandError> {
+    Ok(playback_of(&playback)?.remove_from_queue(&positions)?)
 }
 
-/// "Save" of Up Next (spec 4.4, 9): a new playlist on the server with these
-/// songs, also kept locally so the sidebar shows it at once. Returns `false`
+/// What a "..." menu acts on (spec 8.1): songs (one, a selection or a
+/// list), or a whole album, artist or playlist.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ItemTarget {
+    Songs { ids: Vec<String> },
+    Album { id: String },
+    Artist { id: String },
+    Playlist { id: String },
+}
+
+/// The songs of an item, in its order: an album by disc and track, an artist
+/// as on its page, a playlist as saved (from the server, or the local cache
+/// without connection).
+async fn songs_of(active: &ActiveLibrary, target: ItemTarget) -> Result<Vec<String>, CommandError> {
+    let db_path = active.db_path.clone();
+    match target {
+        ItemTarget::Songs { ids } => Ok(ids),
+        ItemTarget::Album { id } => {
+            run_blocking(move || db::home::album_songs(&db::open(&db_path)?, &id).map(|(_, ids)| ids)).await
+        }
+        ItemTarget::Artist { id } => run_blocking(move || artist_page_db::song_ids(&db::open(&db_path)?, &id)).await,
+        ItemTarget::Playlist { id } => match active.client.get_playlist(&id).await {
+            Ok((_, songs)) => Ok(songs.into_iter().map(|song| song.id).collect()),
+            Err(_) => run_blocking(move || {
+                let page = tracks::cached_playlist_page(&db::open(&db_path)?, &id)?;
+                Ok::<_, DbError>(page.map(|page| page.songs.into_iter().map(|song| song.id).collect()).unwrap_or_default())
+            })
+            .await,
+        },
+    }
+}
+
+/// How the "Play" items of a menu start (spec 8.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ItemPlayMode {
+    /// "Play": in the item's order.
+    InOrder,
+    /// "Play shuffled": shuffle on, from a random song.
+    Shuffled,
+    /// "Random mix (up to 100)" of an artist: at most the mix size.
+    Mix,
+}
+
+/// "Play", "Play shuffled" and "Random mix" of an album, artist or playlist.
+#[tauri::command]
+pub async fn play_item(
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    target: ItemTarget,
+    mode: ItemPlayMode,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let playback = playback_of(&playback)?;
+    let ids = songs_of(&active, target).await?;
+    tauri::async_runtime::spawn_blocking(move || match mode {
+        ItemPlayMode::InOrder => playback.play_context(ids, 0, context_label),
+        ItemPlayMode::Shuffled => playback.play_shuffled(ids, context_label),
+        ItemPlayMode::Mix => playback.play_mix(ids, context_label),
+    })
+    .await
+    .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
+/// "Play next" / "Add to queue" (spec 8.1). With nothing queued, the songs
+/// start playing, "Playing from" `context_label`.
+#[tauri::command]
+pub async fn enqueue(
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    target: ItemTarget,
+    placement: Placement,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let playback = playback_of(&playback)?;
+    let ids = songs_of(&active, target).await?;
+    tauri::async_runtime::spawn_blocking(move || playback.enqueue(ids, placement, context_label))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
+/// "Play similar songs" of a song (spec 8.1): `getSimilarSongs2` with the
+/// song's ID; without Last.fm on the server, the local mix of the artist
+/// radio around the song's artist and genre.
+#[tauri::command]
+pub async fn play_similar_songs(
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    song_id: String,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let size = usize::from(state.settings().mix_size);
+    let similar = active.client.get_similar_songs2(&song_id, size as u32).await.unwrap_or_default();
+    let mut ids: Vec<String> = similar.into_iter().map(|song| song.id).filter(|id| *id != song_id).collect();
+    if ids.is_empty() {
+        ids = run_blocking(move || {
+            let conn = db::open(&active.db_path)?;
+            let Some(context) = db::related::song_context(&conn, &song_id)? else {
+                return Ok::<_, DbError>(Vec::new());
+            };
+            let Some(artist_id) = context.artist_id else { return Ok(Vec::new()) };
+            let mut ids = db::items::radio_fallback(&conn, &artist_id, context.genre.as_deref(), size + 1)?;
+            ids.retain(|id| *id != song_id);
+            ids.truncate(size);
+            Ok(shuffled(ids))
+        })
+        .await?;
+    }
+    play_radio(&playback, ids, context_label).await
+}
+
+/// "Artist radio" (spec 8.2): songs like the artist's (`getSimilarSongs2`
+/// with the artist's ID); without Last.fm, the artist's most played songs
+/// mixed with songs of the same genre. At most the mix size (spec 9).
+#[tauri::command]
+pub async fn play_artist_radio(
+    state: State<'_, Arc<AppState>>,
+    playback: State<'_, PlaybackSlot>,
+    artist_id: String,
+    context_label: String,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let size = usize::from(state.settings().mix_size);
+    let similar = active.client.get_similar_songs2(&artist_id, size as u32).await.unwrap_or_default();
+    let mut ids: Vec<String> = similar.into_iter().map(|song| song.id).collect();
+    if ids.is_empty() {
+        ids = run_blocking(move || {
+            db::items::radio_fallback(&db::open(&active.db_path)?, &artist_id, None, size).map(shuffled)
+        })
+        .await?;
+    }
+    play_radio(&playback, ids, context_label).await
+}
+
+fn shuffled(mut ids: Vec<String>) -> Vec<String> {
+    use rand::seq::SliceRandom;
+    ids.shuffle(&mut rand::rng());
+    ids
+}
+
+/// A radio plays in the order built, from its first song.
+async fn play_radio(playback: &State<'_, PlaybackSlot>, ids: Vec<String>, label: String) -> Result<(), CommandError> {
+    if ids.is_empty() {
+        return Err(CommandError::SongNotFound);
+    }
+    let playback = playback_of(playback)?;
+    tauri::async_runtime::spawn_blocking(move || playback.play_context(ids, 0, label))
+        .await
+        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
+    Ok(())
+}
+
+/// A playlist changed on the server: reads it again into the local cache, so
+/// the sidebar and the "last used" order follow. A failure is only logged:
+/// the next light sync fixes it.
+async fn refresh_playlist(active: &ActiveLibrary, playlist_id: &str) {
+    let result = match active.client.get_playlist(playlist_id).await {
+        Ok((playlist, songs)) => {
+            let db_path = active.db_path.clone();
+            run_blocking(move || {
+                let mut conn = db::open(&db_path)?;
+                library::save_playlist(&conn, &playlist)?;
+                let ids: Vec<String> = songs.into_iter().map(|song| song.id).collect();
+                tracks::save_playlist_songs(&mut conn, &playlist.id, &ids)
+            })
+            .await
+        }
+        Err(error) => Err(error.into()),
+    };
+    if let Err(error) = result {
+        log::warn!("commands: could not read the changed playlist again: {error:?}");
+    }
+}
+
+/// "+ New playlist" (sidebar, "Add to playlist" › and the Save of Up Next,
+/// spec 4.4, 8.2, 9): a new playlist on the server with the item's songs,
+/// also kept locally so the sidebar shows it at once. Returns its ID, `None`
 /// when the server did not send it back (a light sync will bring it).
 #[tauri::command]
 pub async fn create_playlist(
     state: State<'_, Arc<AppState>>,
     name: String,
-    song_ids: Vec<String>,
-) -> Result<bool, CommandError> {
+    target: ItemTarget,
+) -> Result<Option<String>, CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let song_ids = songs_of(&active, target).await?;
     let Some(playlist) = active.client.create_playlist(&name, &song_ids).await? else {
-        return Ok(false);
+        return Ok(None);
     };
+    let id = playlist.id.clone();
     run_blocking(move || {
         let mut conn = db::open(&active.db_path)?;
         library::save_playlist(&conn, &playlist)?;
         tracks::save_playlist_songs(&mut conn, &playlist.id, &song_ids)
     })
     .await?;
-    Ok(true)
+    Ok(Some(id))
+}
+
+/// "Add to playlist ›" (spec 8.2). Without `duplicates`, nothing is added
+/// when some songs are already there: the answer says how many, and the UI
+/// asks again with the user's choice.
+#[tauri::command]
+pub async fn add_to_playlist(
+    state: State<'_, Arc<AppState>>,
+    playlist_id: String,
+    target: ItemTarget,
+    duplicates: Option<Duplicates>,
+) -> Result<AddOutcome, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let adding = songs_of(&active, target).await?;
+    let (_, existing) = active.client.get_playlist(&playlist_id).await?;
+    let existing: Vec<String> = existing.into_iter().map(|song| song.id).collect();
+
+    let choice = match duplicates {
+        Some(choice) => choice,
+        None => match playlists::duplicate_count(&existing, &adding) {
+            0 => Duplicates::AddAll,
+            count => return Ok(AddOutcome::Duplicates { count, total: adding.len() }),
+        },
+    };
+    let add = playlists::songs_to_add(&existing, adding, choice);
+    if !add.is_empty() {
+        let update = PlaylistUpdate { add, ..PlaylistUpdate::default() };
+        active.client.update_playlist(&playlist_id, &update).await?;
+        refresh_playlist(&active, &playlist_id).await;
+        return Ok(AddOutcome::Added { count: update.add.len() });
+    }
+    Ok(AddOutcome::Added { count: 0 })
+}
+
+/// "Rename / edit description" and "Make public / private" (spec 8.1).
+/// `None` keeps a field as it is.
+#[tauri::command]
+pub async fn update_playlist(
+    state: State<'_, Arc<AppState>>,
+    playlist_id: String,
+    name: Option<String>,
+    comment: Option<String>,
+    public: Option<bool>,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let update = PlaylistUpdate { name, comment, public, ..PlaylistUpdate::default() };
+    active.client.update_playlist(&playlist_id, &update).await?;
+    refresh_playlist(&active, &playlist_id).await;
+    Ok(())
+}
+
+/// "Remove from this playlist" (spec 8.1), one song or a selection.
+#[tauri::command]
+pub async fn remove_from_playlist(
+    state: State<'_, Arc<AppState>>,
+    playlist_id: String,
+    entries: Vec<PlaylistEntry>,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let (_, songs) = active.client.get_playlist(&playlist_id).await?;
+    let ids: Vec<String> = songs.into_iter().map(|song| song.id).collect();
+    let remove = playlists::server_positions(&ids, &entries);
+    if remove.is_empty() {
+        return Ok(());
+    }
+    let update = PlaylistUpdate { remove, ..PlaylistUpdate::default() };
+    active.client.update_playlist(&playlist_id, &update).await?;
+    refresh_playlist(&active, &playlist_id).await;
+    Ok(())
+}
+
+/// "Delete playlist" (spec 8.1), after the UI asked.
+#[tauri::command]
+pub async fn delete_playlist(state: State<'_, Arc<AppState>>, playlist_id: String) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    active.client.delete_playlist(&playlist_id).await?;
+    run_blocking(move || db::items::delete_playlist(&db::open(&active.db_path)?, &playlist_id)).await
+}
+
+/// "File information" of a song (spec 8.1), from the local cache.
+#[tauri::command]
+pub async fn get_song_info(state: State<'_, Arc<AppState>>, song_id: String) -> Result<Option<SongInfo>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || db::items::song_info(&db::open(&active.db_path)?, &song_id)).await
+}
+
+/// "Information" of an album (spec 8.1), from the local cache.
+#[tauri::command]
+pub async fn get_album_info(state: State<'_, Arc<AppState>>, album_id: String) -> Result<Option<AlbumInfo>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || db::items::album_info(&db::open(&active.db_path)?, &album_id)).await
+}
+
+/// What "Save to computer..." saves (spec 8.2): one song or a selection, an
+/// album, a playlist.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SaveTarget {
+    Songs { ids: Vec<String> },
+    Album { id: String },
+    Playlist { id: String },
+}
+
+/// How the songs of a save are laid out, before the user chose where.
+enum SaveLayout {
+    Songs,
+    Album { folder_name: String, cover_art: Option<String> },
+    Playlist { name: String },
+}
+
+/// "Save to computer..." (spec 8.2): asks where with the system's dialog
+/// ("Save as" for one song, a folder otherwise, opening on the folder chosen
+/// last, else the system's Music folder), then queues the original files.
+/// Returns how many songs, `None` if the dialog was closed.
+#[tauri::command]
+pub async fn save_to_computer(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    saves: State<'_, Arc<Saves>>,
+    target: SaveTarget,
+) -> Result<Option<usize>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let db_path = active.db_path.clone();
+    let (layout, ids) = match target {
+        SaveTarget::Songs { ids } => (SaveLayout::Songs, ids),
+        SaveTarget::Album { id } => {
+            let page = run_blocking(move || tracks::album_page(&db::open(&db_path)?, &id))
+                .await?
+                .ok_or(CommandError::SongNotFound)?;
+            let album = page.album;
+            let folder_name = naming::album_folder(album.artist.as_deref(), &album.name, album.year);
+            let ids = page.songs.into_iter().map(|song| song.id).collect();
+            (SaveLayout::Album { folder_name, cover_art: album.cover_art }, ids)
+        }
+        SaveTarget::Playlist { id } => match active.client.get_playlist(&id).await {
+            Ok((playlist, songs)) => {
+                (SaveLayout::Playlist { name: playlist.name }, songs.into_iter().map(|song| song.id).collect())
+            }
+            Err(_) => {
+                let page = run_blocking(move || tracks::cached_playlist_page(&db::open(&db_path)?, &id))
+                    .await?
+                    .ok_or(CommandError::SongNotFound)?;
+                let ids = page.songs.into_iter().map(|song| song.id).collect();
+                (SaveLayout::Playlist { name: page.playlist.name }, ids)
+            }
+        },
+    };
+    let db_path = active.db_path.clone();
+    let mut songs = run_blocking(move || db::items::save_songs(&db::open(&db_path)?, &ids)).await?;
+    if songs.is_empty() {
+        return Err(CommandError::SongNotFound);
+    }
+
+    let config = config_dir(&app)?;
+    let start_dir = downloads::last_used_folder(&config)
+        .or_else(|| app.path().audio_dir().ok())
+        .or_else(|| app.path().home_dir().ok());
+    let single = matches!(layout, SaveLayout::Songs) && songs.len() == 1;
+    let suggested = single.then(|| (naming::song_file(&songs[0]), naming::extension(&songs[0])));
+    let dialog_app = app.clone();
+    // The system's dialog waits for the user: not on the async threads.
+    let chosen = tauri::async_runtime::spawn_blocking(move || {
+        let mut dialog = dialog_app.dialog().file();
+        if let Some(dir) = &start_dir {
+            dialog = dialog.set_directory(dir);
+        }
+        if let Some(window) = dialog_app.get_webview_window("main") {
+            dialog = dialog.set_parent(&window);
+        }
+        let picked = match suggested {
+            Some((name, ext)) => dialog.set_file_name(name).add_filter(ext.to_uppercase(), &[ext.as_str()]).blocking_save_file(),
+            None => dialog.blocking_pick_folder(),
+        };
+        picked.and_then(|path| path.into_path().ok())
+    })
+    .await
+    .map_err(|e| CommandError::Storage { detail: e.to_string() })?;
+    let Some(mut chosen) = chosen else { return Ok(None) };
+
+    let item = match layout {
+        SaveLayout::Songs if single => {
+            let song = songs.remove(0);
+            if chosen.extension().is_none() {
+                chosen.set_extension(naming::extension(&song));
+            }
+            SaveItem::Song { song, path: chosen.clone() }
+        }
+        SaveLayout::Songs => SaveItem::Selection { songs },
+        SaveLayout::Album { folder_name, cover_art } => SaveItem::Album { folder_name, cover_art, songs },
+        SaveLayout::Playlist { name } => SaveItem::Playlist { name, songs },
+    };
+    let folder = if single { chosen.parent().map(Path::to_path_buf).unwrap_or_default() } else { chosen.clone() };
+    if let Err(error) = downloads::remember_folder(&config, &folder) {
+        log::warn!("commands: could not remember the save folder: {error}");
+    }
+
+    let plan = run_blocking(move || {
+        downloads::plan(item, &folder).map_err(|e| CommandError::Storage { detail: e.to_string() })
+    })
+    .await?;
+    let count = plan.song_count();
+    saves.start(Arc::clone(&active.client), plan);
+    Ok(Some(count))
+}
+
+/// "Cancel" of the save progress (spec 8.2).
+#[tauri::command]
+pub fn cancel_saves(saves: State<'_, Arc<Saves>>) {
+    saves.cancel();
+}
+
+/// "Open folder" once a save finished (spec 8.2).
+#[tauri::command]
+pub fn open_save_folder(app: AppHandle, saves: State<'_, Arc<Saves>>) -> Result<(), CommandError> {
+    let Some(folder) = saves.last_folder() else { return Ok(()) };
+    app.opener()
+        .open_path(folder.to_string_lossy(), None::<&str>)
+        .map_err(|e| CommandError::Storage { detail: e.to_string() })
+}
+
+/// Whether the server is a Navidrome ("Open in Navidrome", spec 8.2). `false`
+/// when it cannot be reached; asked again later.
+#[tauri::command]
+pub async fn is_navidrome(state: State<'_, Arc<AppState>>) -> Result<bool, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    Ok(active.client.server_type().await.is_ok_and(|kind| navidrome::is_navidrome(kind.as_deref())))
+}
+
+/// What "Open in Navidrome" opens.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NavidromeItem {
+    /// Navidrome has no song page: its album's opens.
+    Song,
+    Album,
+    Artist,
+}
+
+/// "Open in Navidrome" (spec 8.2): the item's page in the default browser.
+/// The address is the server's, without credentials.
+#[tauri::command]
+pub async fn open_in_navidrome(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    kind: NavidromeItem,
+    id: String,
+) -> Result<(), CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    let (page, id) = match kind {
+        NavidromeItem::Album => (navidrome::Page::Album, id),
+        NavidromeItem::Artist => (navidrome::Page::Artist, id),
+        NavidromeItem::Song => {
+            let db_path = active.db_path.clone();
+            let info = run_blocking(move || db::items::song_info(&db::open(&db_path)?, &id)).await?;
+            let album_id = info.and_then(|song| song.album_id).ok_or(CommandError::SongNotFound)?;
+            (navidrome::Page::Album, album_id)
+        }
+    };
+    let url = navidrome::page_url(active.client.base_url(), page, &id);
+    app.opener().open_url(url, None::<&str>).map_err(|e| CommandError::Storage { detail: e.to_string() })
+}
+
+/// "Information" of an artist (spec 8.1), from the local cache.
+#[tauri::command]
+pub async fn get_artist_info(
+    state: State<'_, Arc<AppState>>,
+    artist_id: String,
+) -> Result<Option<ArtistInfo>, CommandError> {
+    let active = state.active().ok_or(CommandError::NotLoggedIn)?;
+    run_blocking(move || db::items::artist_info(&db::open(&active.db_path)?, &artist_id)).await
 }
 
 /// "Shuffle" button of a list: shuffle on, from a random song.
