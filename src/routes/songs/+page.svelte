@@ -2,8 +2,8 @@
   // Songs (spec 6.3): every song of the library in one virtualized table.
   // Search and sorting run in SQLite (spec 7); the lines load as they come
   // into view. A click plays the list as shown ("Playing from: Songs").
-  import Dices from "@lucide/svelte/icons/dices";
   import Play from "@lucide/svelte/icons/play";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import { playContext, playMix, type SongSortKey } from "#lib/api.ts";
   import ColumnPicker from "#lib/components/ColumnPicker.svelte";
   import ListSearch from "#lib/components/ListSearch.svelte";
@@ -108,7 +108,7 @@
 
   function shuffle() {
     error = null;
-    playMix(ids, m.nav_songs()).catch(showError);
+    playMix(ids, m.mix_context({ origin: m.nav_songs() })).catch(showError);
   }
 </script>
 
@@ -126,8 +126,8 @@
         {m.albums_play_all()}
       </button>
       <button type="button" class="button button-secondary" onclick={shuffle} disabled={ids.length === 0}>
-        <Dices size={16} />
-        {m.songs_shuffle()}
+        <MixIcon size={16} />
+        {m.awesome_mix()}
       </button>
     </div>
   </header>

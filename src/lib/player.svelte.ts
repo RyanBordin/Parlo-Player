@@ -38,6 +38,18 @@ export const queue = $state<QueueState>({
   repeat: "off",
 });
 
+/**
+ * The song the Next button would play (spec 4.3, 5.1.1), in playback order
+ * (shuffle included): the following one; past the last, the first with
+ * "repeat queue", otherwise none. "Repeat one" does not apply to Next.
+ */
+export function nextTrack(state: QueueState): Track | null {
+  const current = state.currentIndex;
+  if (current === null || state.tracks.length === 0) return null;
+  if (current + 1 < state.tracks.length) return state.tracks[current + 1];
+  return state.repeat === "all" ? state.tracks[0] : null;
+}
+
 let listening: Promise<void> | null = null;
 
 /** Subscribes to the player events once, then reads the current state. */

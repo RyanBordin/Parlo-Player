@@ -1,10 +1,10 @@
 <script lang="ts">
   // Albums (spec 6.4): every album of the library in a grid, with quick
   // search, "Sort by" and three ways to play the albums shown.
-  import Dices from "@lucide/svelte/icons/dices";
   import Play from "@lucide/svelte/icons/play";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import Shuffle from "@lucide/svelte/icons/shuffle";
-  import { playAlbums, type AlbumsPlayMode } from "#lib/api.ts";
+  import { playAlbums, type GroupsPlayMode } from "#lib/api.ts";
   import { ALBUM_SORTS, filterAlbums, sortAlbums, type AlbumSort } from "#lib/album-list.ts";
   import {
     albumsView,
@@ -57,12 +57,13 @@
     refreshAlbums();
   });
 
-  function play(mode: AlbumsPlayMode) {
+  // Spec 6.4, 9: "Albums", or "Awesome Mix: Albums".
+  function play(mode: GroupsPlayMode) {
     error = null;
     playAlbums(
       shown.map((a) => a.id),
       mode,
-      m.nav_albums(),
+      mode === "mix" ? m.mix_context({ origin: m.nav_albums() }) : m.nav_albums(),
     ).catch((e) => (error = describeError(e)));
   }
 </script>
@@ -80,13 +81,13 @@
         <Play size={16} fill="currentColor" />
         {m.albums_play_all()}
       </button>
-      <button type="button" class="button button-secondary" onclick={() => play("shuffledAlbums")} disabled={shown.length === 0}>
+      <button type="button" class="button button-secondary" onclick={() => play("shuffled")} disabled={shown.length === 0}>
         <Shuffle size={16} />
-        {m.albums_shuffled_albums()}
+        {m.play_random_order()}
       </button>
       <button type="button" class="button button-secondary" onclick={() => play("mix")} disabled={shown.length === 0}>
-        <Dices size={16} />
-        {m.albums_mix()}
+        <MixIcon size={16} />
+        {m.awesome_mix()}
       </button>
     </div>
   </header>

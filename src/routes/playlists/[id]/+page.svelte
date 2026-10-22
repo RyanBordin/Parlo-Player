@@ -2,7 +2,7 @@
   // Playlist page (spec 6.5): asked from the server on open, with the last
   // copy saved on this computer when it cannot be reached.
   import { page } from "$app/state";
-  import { getPlaylistPage, playContext, playShuffled } from "#lib/api.ts";
+  import { getPlaylistPage, playContext, playMix } from "#lib/api.ts";
   import CollectionActions from "#lib/components/collection/CollectionActions.svelte";
   import CollectionHeader from "#lib/components/collection/CollectionHeader.svelte";
   import TrackList from "#lib/components/TrackList.svelte";
@@ -19,7 +19,7 @@
   /** `undefined` while loading the first time, `null` if it was deleted. */
   let data = $derived(playlistPages[id]);
   let error = $state<ErrorMessage | null>(null);
-  /** The tracklist as shown (filtered and sorted): what Play and Shuffle play. */
+  /** The tracklist as shown (filtered and sorted): what Play and the Awesome Mix play. */
   let shownIds = $state<string[]>([]);
 
   // Before the server answers, the sidebar already knows the name.
@@ -66,7 +66,7 @@
     <CollectionActions
       disabled={shownIds.length === 0}
       onplay={() => playContext(shownIds, 0, playlist.name).catch(showError)}
-      onshuffle={() => playShuffled(shownIds, playlist.name).catch(showError)}
+      onmix={() => playMix(shownIds, m.mix_context({ origin: playlist.name })).catch(showError)}
       onmore={(event) => openMenu(event, () => playlistMenuById(playlist))}
     />
   </CollectionHeader>

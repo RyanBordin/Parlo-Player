@@ -2,8 +2,8 @@
   // "See all" of the favorite songs (spec 6.2): the whole list, last starred
   // first, in the virtualized tracklist with the list tools (spec 7). A click
   // plays the list as shown ("Playing from: Favorites", spec 5.1).
-  import Dices from "@lucide/svelte/icons/dices";
   import Play from "@lucide/svelte/icons/play";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import { onDestroy } from "svelte";
   import { playContext, playMix } from "#lib/api.ts";
   import TrackList from "#lib/components/TrackList.svelte";
@@ -43,7 +43,7 @@
 
   function shuffle() {
     error = null;
-    playMix(playable, m.nav_favorites()).catch(showError);
+    playMix(playable, m.mix_context({ origin: m.nav_favorites() })).catch(showError);
   }
 </script>
 
@@ -61,8 +61,8 @@
         {m.albums_play_all()}
       </button>
       <button type="button" class="button button-secondary" onclick={shuffle} disabled={playable.length === 0}>
-        <Dices size={16} />
-        {m.songs_shuffle()}
+        <MixIcon size={16} />
+        {m.awesome_mix()}
       </button>
     </div>
   </header>

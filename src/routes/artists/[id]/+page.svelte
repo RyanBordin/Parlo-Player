@@ -6,7 +6,7 @@
   // albums come from the local cache; the biography and similar artists from
   // the server, kept 7 days.
   import { page } from "$app/state";
-  import { playContext, playMix, type AlbumCard as AlbumCardData } from "#lib/api.ts";
+  import { playContext, playItem, playMix, type AlbumCard as AlbumCardData } from "#lib/api.ts";
   import { artistSongs, loadArtistAbout, loadArtistPage, toggleArtistStar } from "#lib/artist-page.svelte.ts";
   import ArtistHeader from "#lib/components/ArtistHeader.svelte";
   import TrackTable from "#lib/components/TrackTable.svelte";
@@ -37,7 +37,7 @@
   let about = $derived(artistAbouts[id]);
   let error = $state<ErrorMessage | null>(null);
 
-  /** The artist's whole list: what Play, Shuffle and a click play. */
+  /** The artist's whole list: what Play, the Awesome Mix and a click play. */
   let songs = $derived(data ? artistSongs(data, about) : []);
   let songIds = $derived(songs.map((s) => s.id));
   let topRows = $derived(songs.slice(0, TOP_SIZE).map((_, index): TableRow => ({ kind: "song", index })));
@@ -82,10 +82,17 @@
     playContext(songIds, index, data.artist.name).catch(showError);
   }
 
+  /** "Random order" (spec 6.7, 9): the artist's albums drawn, each in order. */
   function shuffle() {
     if (!data) return;
     error = null;
-    playMix(songIds, data.artist.name).catch(showError);
+    playItem({ kind: "artist", id: data.artist.id }, "shuffled", data.artist.name).catch(showError);
+  }
+
+  function mix() {
+    if (!data) return;
+    error = null;
+    playMix(songIds, m.mix_context({ origin: data.artist.name })).catch(showError);
   }
 
   function star() {
@@ -121,6 +128,7 @@
         starred={artist.starred}
         onplay={() => play(0)}
         onshuffle={shuffle}
+        onmix={mix}
         onstar={star}
         onmore={(event) => openMenu(event, () => artistMenu(artist))}
       />

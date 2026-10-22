@@ -1,6 +1,8 @@
 <script lang="ts">
-  // Player Bar (spec 4.3): track | transport and progress | song actions | audio and queue.
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  // Player Bar (spec 4.3), five symmetric zones: current song | add to
+  // playlist, repeat, shuffle | transport and progress | favorite, volume,
+  // "..." | next song. A click on an empty part opens / closes Now Playing;
+  // the mouse wheel anywhere on it changes the volume.
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
@@ -12,41 +14,35 @@
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-  import Volume1 from "@lucide/svelte/icons/volume-1";
-  import Volume2 from "@lucide/svelte/icons/volume-2";
-  import VolumeX from "@lucide/svelte/icons/volume-x";
-  import {
-    cycleRepeat,
-    next,
-    previous,
-    seek,
-    setShuffle,
-    setSongStarred,
-    setVolume,
-    toggleMute,
-    togglePause,
-  } from "#lib/api.ts";
+  import { cycleRepeat, next, previous, seek, setShuffle, setSongStarred, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
+  import NextTrack from "#lib/components/player-bar/NextTrack.svelte";
+  import VolumeControl from "#lib/components/player-bar/VolumeControl.svelte";
   import { coverMode, setCoverExpanded } from "#lib/cover-mode.svelte.ts";
   import { openMenu } from "#lib/menu/menu.svelte.ts";
   import { addToPlaylistMenu, openSongsMenu } from "#lib/menu/menus.ts";
-  import { nowPlaying, toggleNowPlaying } from "#lib/now-playing.svelte.ts";
+  import { toggleNowPlaying } from "#lib/now-playing.svelte.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player, queue } from "#lib/player.svelte.ts";
 
+  /** Wheel movement that makes one 5% step: a mouse notch is about 100. */
+  const WHEEL_NOTCH = 50;
+
   // While dragging, the bar follows the mouse instead of the playback position.
   let dragging = $state<number | null>(null);
   let commandError = $state<ErrorMessage | null>(null);
   let starring = $state(false);
+  let volume = $state<ReturnType<typeof VolumeControl>>();
+  /** Touchpads send small movements: they add up to a step. */
+  let wheelRest = 0;
 
   let track = $derived(player.track);
   let shownPosition = $derived(dragging ?? player.position);
   let canControl = $derived(track !== null && player.status !== "idle");
   let hasQueue = $derived(queue.tracks.length > 0);
   let progress = $derived(player.duration ? Math.min(shownPosition / player.duration, 1) * 100 : 0);
-  let silent = $derived(player.muted || player.volume === 0);
   let repeatLabel = $derived(
     queue.repeat === "one"
       ? m.player_repeat_one()
@@ -67,6 +63,10 @@
     }
   }
 
+  function showError(e: unknown) {
+    commandError = describeError(e);
+  }
+
   function onSeekInput(event: Event) {
     dragging = Number((event.currentTarget as HTMLInputElement).value);
   }
@@ -76,13 +76,6 @@
     player.position = target;
     dragging = null;
     run(() => seek(target));
-  }
-
-  function onVolumeInput(event: Event) {
-    const volume = Number((event.currentTarget as HTMLInputElement).value);
-    player.volume = volume;
-    player.muted = false;
-    run(() => setVolume(volume));
   }
 
   let canOpenNowPlaying = $derived(track !== null || hasQueue);
@@ -100,7 +93,24 @@
   // Spec 4.3: a click on an empty part of the bar opens / closes Now Playing.
   function onBarClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (canOpenNowPlaying && !target.closest("button, a, input, label")) toggleNowPlaying();
+    if (canOpenNowPlaying && !target.closest("button, a, input, label, [data-bar-control]")) toggleNowPlaying();
+  }
+
+  // Spec 4.3: the wheel anywhere on the bar moves the volume by 5%.
+  function onWheel(event: WheelEvent) {
+    if (event.deltaY === 0 || !volume) return;
+    event.preventDefault();
+    const pixels = event.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? event.deltaY : event.deltaY * WHEEL_NOTCH;
+    if (Math.abs(pixels) >= WHEEL_NOTCH) {
+      wheelRest = 0;
+      volume.nudge(-Math.sign(pixels));
+      return;
+    }
+    wheelRest += pixels;
+    if (Math.abs(wheelRest) >= WHEEL_NOTCH) {
+      volume.nudge(-Math.sign(wheelRest));
+      wheelRest = 0;
+    }
   }
 
   // The heart changes at once and goes back if the server refuses.
@@ -122,10 +132,10 @@
   }
 </script>
 
-<!-- The click on empty parts is a mouse shortcut; the arrow button does the same. -->
+<!-- The click on empty parts is a mouse shortcut (Ctrl+B does the same); the wheel is the volume's. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-<footer class="bar" onclick={onBarClick}>
-  <!-- Zone 1: the song -->
+<footer class="bar" onclick={onBarClick} onwheel={onWheel}>
+  <!-- Zone 1: the current song -->
   <!-- svelte-ignore a11y_no_static_element_interactions (the right click repeats the "..." button) -->
   <div class="zone track" oncontextmenu={openTrackMenu}>
     {#if track && !coverMode.expanded}
@@ -173,7 +183,47 @@
     </div>
   </div>
 
-  <!-- Zone 2: transport and progress -->
+  <!-- Zone 2: the queue -->
+  <div class="zone buttons queue-modes">
+    <button
+      class="icon add"
+      type="button"
+      onclick={openAddToPlaylist}
+      disabled={!track}
+      aria-label={m.player_add_to_playlist()}
+      title={m.player_add_to_playlist()}
+      aria-haspopup="menu"
+    >
+      <ListPlus />
+    </button>
+    <button
+      class="icon mode"
+      class:active={queue.repeat !== "off"}
+      onclick={() => run(cycleRepeat)}
+      disabled={!hasQueue}
+      aria-label={repeatLabel}
+      title={repeatLabel}
+    >
+      {#if queue.repeat === "one"}
+        <Repeat1 />
+      {:else}
+        <Repeat />
+      {/if}
+    </button>
+    <button
+      class="icon mode"
+      class:active={queue.shuffle}
+      onclick={() => run(() => setShuffle(!queue.shuffle))}
+      disabled={!hasQueue}
+      aria-label={m.player_shuffle()}
+      aria-pressed={queue.shuffle}
+      title={m.player_shuffle()}
+    >
+      <Shuffle />
+    </button>
+  </div>
+
+  <!-- Zone 3: transport and progress -->
   <div class="zone transport">
     <div class="controls">
       <button class="icon" onclick={() => run(previous)} disabled={!hasQueue} aria-label={m.player_previous()} title={m.player_previous()}>
@@ -216,119 +266,46 @@
     </div>
   </div>
 
-  <div class="zone right">
-    <!-- Zone 3: actions on the current song -->
-    <div class="actions">
-      <button
-        class="icon favorite"
-        class:active={track?.starred}
-        onclick={toggleStar}
-        disabled={!track || starring}
-        aria-label={track?.starred ? m.player_unfavorite() : m.player_favorite()}
-        aria-pressed={track?.starred ?? false}
-        title={track?.starred ? m.player_unfavorite() : m.player_favorite()}
-      >
-        <Heart fill={track?.starred ? "currentColor" : "none"} />
-      </button>
-      <button
-        class="icon add"
-        type="button"
-        onclick={openAddToPlaylist}
-        disabled={!track}
-        aria-label={m.player_add_to_playlist()}
-        title={m.player_add_to_playlist()}
-        aria-haspopup="menu"
-      >
-        <ListPlus />
-      </button>
-      <button
-        class="icon"
-        type="button"
-        onclick={openTrackMenu}
-        disabled={!track}
-        aria-label={m.player_more()}
-        title={m.player_more()}
-        aria-haspopup="menu"
-      >
-        <Ellipsis />
-      </button>
-    </div>
+  <!-- Zone 4: actions on the current song -->
+  <div class="zone buttons">
+    <button
+      class="icon favorite"
+      class:active={track?.starred}
+      onclick={toggleStar}
+      disabled={!track || starring}
+      aria-label={track?.starred ? m.player_unfavorite() : m.player_favorite()}
+      aria-pressed={track?.starred ?? false}
+      title={track?.starred ? m.player_unfavorite() : m.player_favorite()}
+    >
+      <Heart fill={track?.starred ? "currentColor" : "none"} />
+    </button>
+    <VolumeControl bind:this={volume} onerror={showError} />
+    <button
+      class="icon"
+      type="button"
+      onclick={openTrackMenu}
+      disabled={!track}
+      aria-label={m.player_more()}
+      title={m.player_more()}
+      aria-haspopup="menu"
+    >
+      <Ellipsis />
+    </button>
+  </div>
 
-    <!-- Zone 4: audio, queue modes and Now Playing -->
-    <div class="audio">
-      <div class="volume">
-        <button
-          class="icon"
-          onclick={() => run(toggleMute)}
-          aria-label={player.muted ? m.player_unmute() : m.player_mute()}
-          aria-pressed={player.muted}
-          title={player.muted ? m.player_unmute() : m.player_mute()}
-        >
-          {#if silent}
-            <VolumeX />
-          {:else if player.volume < 50}
-            <Volume1 />
-          {:else}
-            <Volume2 />
-          {/if}
-        </button>
-        <input
-          class="slider volume-slider"
-          type="range"
-          min="0"
-          max="100"
-          step="1"
-          value={player.volume}
-          style:--fill={`${player.muted ? 0 : player.volume}%`}
-          aria-label={m.player_volume()}
-          oninput={onVolumeInput}
-        />
-      </div>
-      <button
-        class="icon mode"
-        class:active={queue.repeat !== "off"}
-        onclick={() => run(cycleRepeat)}
-        disabled={!hasQueue}
-        aria-label={repeatLabel}
-        title={repeatLabel}
-      >
-        {#if queue.repeat === "one"}
-          <Repeat1 />
-        {:else}
-          <Repeat />
-        {/if}
-      </button>
-      <button
-        class="icon mode"
-        class:active={queue.shuffle}
-        onclick={() => run(() => setShuffle(!queue.shuffle))}
-        disabled={!hasQueue}
-        aria-label={m.player_shuffle()}
-        aria-pressed={queue.shuffle}
-        title={m.player_shuffle()}
-      >
-        <Shuffle />
-      </button>
-      <button
-        class="icon"
-        type="button"
-        onclick={toggleNowPlaying}
-        disabled={!canOpenNowPlaying}
-        aria-expanded={nowPlaying.open}
-        aria-label={nowPlaying.open ? m.now_playing_close() : m.player_now_playing()}
-        title={nowPlaying.open ? m.now_playing_close() : m.player_now_playing()}
-      >
-        {#if nowPlaying.open}<ChevronDown />{:else}<ChevronUp />{/if}
-      </button>
-    </div>
+  <!-- Zone 5: the next song -->
+  <div class="zone upcoming">
+    <NextTrack onerror={showError} />
   </div>
 </footer>
 
 <style>
+  /* Zones 2 and 4 have the same width, so the transport stays centered. */
   .bar {
+    --side-zone: 110px;
     height: 100%;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 560px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) var(--side-zone) minmax(320px, 520px) var(--side-zone) minmax(0, 1fr);
     align-items: center;
     gap: var(--space-5);
     padding: 0 var(--space-4);
@@ -418,7 +395,18 @@
     font-size: var(--font-size-xs);
   }
 
-  /* Zone 2 */
+  /* Zones 2 and 4: three buttons each, next to the transport. */
+  .buttons {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .queue-modes {
+    justify-content: flex-end;
+  }
+
+  /* Zone 3 */
   .transport {
     display: flex;
     flex-direction: column;
@@ -473,29 +461,10 @@
     text-align: center;
   }
 
-  /* Zones 3 and 4 */
-  .right {
+  /* Zone 5 */
+  .upcoming {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .actions,
-  .audio,
-  .volume {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
-  .audio {
-    margin-left: auto;
-  }
-
-  .volume-slider {
-    width: 96px;
-    margin-right: var(--space-2);
+    justify-content: flex-end;
   }
 
   .icon {
@@ -525,7 +494,7 @@
     color: var(--color-text);
   }
 
-  /* Repeat / shuffle on: accent color and a dot below (spec 1.1). */
+  /* Repeat / shuffle on: accent color and a dot below (spec 4.3). */
   .mode.active {
     color: var(--color-accent-text);
   }
@@ -540,7 +509,7 @@
     background: currentColor;
   }
 
-  /* Thin bars: white up to the current value, grey after it. */
+  /* Thin bar: white up to the current value, grey after it. */
   .slider {
     height: 16px;
     margin: 0;
@@ -579,16 +548,9 @@
     opacity: 1;
   }
 
-  /* Spec 4.3, narrow window: first the volume slider goes, then the song
-     actions (Favorite and Add to playlist are also in the "..." menu). */
-  @media (max-width: 1199px) {
-    .volume-slider {
-      display: none;
-    }
-  }
-
+  /* Spec 4.3, narrow window: zone 5 goes first (see NextTrack.svelte), then
+     "Add to playlist" (it is also in the "..." menu). */
   @media (max-width: 1099px) {
-    .favorite,
     .add {
       display: none;
     }

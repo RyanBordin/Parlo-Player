@@ -28,7 +28,7 @@ use crate::db::history;
 use crate::downloads::{self, SaveItem, Saves, naming};
 use crate::navidrome;
 use crate::db::items::{AlbumInfo, ArtistInfo, SongInfo};
-use crate::playback::{self, AlbumsPlayMode, Placement, Playback, PlaybackError, QueueState};
+use crate::playback::{self, GroupsPlayMode, Placement, Playback, PlaybackError, QueueState};
 use crate::playlists::{self, AddOutcome, Duplicates, PlaylistEntry};
 use crate::player::AudioDevice;
 use crate::player::queue::RepeatMode;
@@ -694,7 +694,7 @@ pub async fn remove_recent_search(state: State<'_, Arc<AppState>>, query: String
     .await
 }
 
-/// "Shuffle" of the Songs page: at most 100 songs of the list (spec 9).
+/// "Awesome Mix" of a list of songs: at most the mix size (spec 9).
 #[tauri::command]
 pub async fn play_mix(
     playback: State<'_, PlaybackSlot>,
@@ -708,12 +708,12 @@ pub async fn play_mix(
     Ok(())
 }
 
-/// The buttons of the Albums page, on the albums shown (spec 6.4).
+/// The three buttons of the Albums page, on the albums shown (spec 6.4, 9).
 #[tauri::command]
 pub async fn play_albums(
     playback: State<'_, PlaybackSlot>,
     album_ids: Vec<String>,
-    mode: AlbumsPlayMode,
+    mode: GroupsPlayMode,
     context_label: String,
 ) -> Result<(), CommandError> {
     let playback = playback_of(&playback)?;
@@ -730,15 +730,16 @@ pub async fn list_artists(state: State<'_, Arc<AppState>>) -> Result<Vec<ArtistL
     run_blocking(move || artists::artist_list(&db::open(&active.db_path)?)).await
 }
 
-/// "Random mix" of the Artists page: at most 100 songs of the artists shown (spec 6.6).
+/// The three buttons of the Artists page, on the artists shown (spec 6.6, 9).
 #[tauri::command]
-pub async fn play_artists_mix(
+pub async fn play_artists(
     playback: State<'_, PlaybackSlot>,
     artist_ids: Vec<String>,
+    mode: GroupsPlayMode,
     context_label: String,
 ) -> Result<(), CommandError> {
     let playback = playback_of(&playback)?;
-    tauri::async_runtime::spawn_blocking(move || playback.play_artists_mix(&artist_ids, context_label))
+    tauri::async_runtime::spawn_blocking(move || playback.play_artists(&artist_ids, mode, context_label))
         .await
         .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
     Ok(())
@@ -908,34 +909,30 @@ async fn songs_of(active: &ActiveLibrary, target: ItemTarget) -> Result<Vec<Stri
     }
 }
 
-/// How the "Play" items of a menu start (spec 8.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ItemPlayMode {
-    /// "Play": in the item's order.
-    InOrder,
-    /// "Play shuffled": shuffle on, from a random song.
-    Shuffled,
-    /// "Random mix (up to 100)" of an artist: at most the mix size.
-    Mix,
-}
-
-/// "Play", "Play shuffled" and "Random mix" of an album, artist or playlist.
+/// "Play", "Random order" and "Awesome Mix" of an album, artist or
+/// playlist (spec 8.1, 9): `GroupsPlayMode` on the item. An artist's groups
+/// are its albums; the other items are one group.
 #[tauri::command]
 pub async fn play_item(
     state: State<'_, Arc<AppState>>,
     playback: State<'_, PlaybackSlot>,
     target: ItemTarget,
-    mode: ItemPlayMode,
+    mode: GroupsPlayMode,
     context_label: String,
 ) -> Result<(), CommandError> {
     let active = state.active().ok_or(CommandError::NotLoggedIn)?;
     let playback = playback_of(&playback)?;
-    let ids = songs_of(&active, target).await?;
+    let groups = match (&target, mode) {
+        (ItemTarget::Artist { id }, GroupsPlayMode::Shuffled) => {
+            let (db_path, id) = (active.db_path.clone(), id.clone());
+            run_blocking(move || artist_page_db::album_groups(&db::open(&db_path)?, &id)).await?
+        }
+        _ => vec![songs_of(&active, target).await?],
+    };
     tauri::async_runtime::spawn_blocking(move || match mode {
-        ItemPlayMode::InOrder => playback.play_context(ids, 0, context_label),
-        ItemPlayMode::Shuffled => playback.play_shuffled(ids, context_label),
-        ItemPlayMode::Mix => playback.play_mix(ids, context_label),
+        // "Play" keeps the item's own order (an artist: most played first).
+        GroupsPlayMode::InOrder => playback.play_context(groups.concat(), 0, context_label),
+        _ => playback.play_groups(groups, mode, context_label),
     })
     .await
     .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
@@ -1350,19 +1347,6 @@ pub async fn get_artist_info(
     run_blocking(move || db::items::artist_info(&db::open(&active.db_path)?, &artist_id)).await
 }
 
-/// "Shuffle" button of a list: shuffle on, from a random song.
-#[tauri::command]
-pub async fn play_shuffled(
-    playback: State<'_, PlaybackSlot>,
-    song_ids: Vec<String>,
-    context_label: String,
-) -> Result<(), CommandError> {
-    let playback = playback_of(&playback)?;
-    tauri::async_runtime::spawn_blocking(move || playback.play_shuffled(song_ids, context_label))
-        .await
-        .map_err(|e| CommandError::Playback { detail: e.to_string() })??;
-    Ok(())
-}
 
 #[tauri::command]
 pub fn toggle_pause(playback: State<'_, PlaybackSlot>) -> Result<(), CommandError> {

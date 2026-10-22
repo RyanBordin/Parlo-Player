@@ -118,6 +118,26 @@ pub fn song_ids(conn: &Connection, artist_id: &str) -> DbResult<Vec<String>> {
     Ok(ids)
 }
 
+/// The artist's songs grouped by album, each album in disc and track order:
+/// the groups of "Random order" on the artist page (spec 6.7, 9).
+pub fn album_groups(conn: &Connection, artist_id: &str) -> DbResult<Vec<Vec<String>>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT album_id, id FROM songs WHERE id IN ({ARTIST_SONGS})
+         ORDER BY album_id NULLS LAST, COALESCE(disc_number, 1), COALESCE(track, 0), sort_title"
+    ))?;
+    let rows = stmt.query_map([artist_id], |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?)))?;
+    let mut groups: Vec<(Option<String>, Vec<String>)> = Vec::new();
+    for row in rows {
+        let (album, song) = row?;
+        match groups.last_mut() {
+            // Songs without an album are each a group of their own.
+            Some((last, songs)) if album.is_some() && *last == album => songs.push(song),
+            _ => groups.push((album, vec![song])),
+        }
+    }
+    Ok(groups.into_iter().map(|(_, songs)| songs).collect())
+}
+
 /// What `getArtistInfo2` said about an artist, as kept in `artist_info`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CachedInfo {
@@ -265,6 +285,19 @@ mod tests {
         assert_eq!(song_ids(&conn, "band").unwrap(), ["hit", "a1", "b1", "b2"]);
         assert_eq!(page.artist.name, "Name band");
         assert_eq!(artist_page(&conn, "unknown").unwrap(), None);
+    }
+
+    #[test]
+    fn album_groups_keep_each_album_in_track_order() {
+        let conn = open_in_memory().unwrap();
+        artist(&conn, "band");
+        song(&conn, "b2", "b-album", 2, 9, &["band"]);
+        song(&conn, "a1", "a-album", 1, 0, &["band", "guest"]);
+        song(&conn, "b1", "b-album", 1, 0, &["band"]);
+        song(&conn, "other", "a-album", 2, 0, &["guest"]);
+        fill_song_artists(&conn).unwrap();
+
+        assert_eq!(album_groups(&conn, "band").unwrap(), [vec!["a1"], vec!["b1", "b2"]]);
     }
 
     #[test]

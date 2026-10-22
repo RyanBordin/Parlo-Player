@@ -1,10 +1,12 @@
 <script lang="ts">
-  // Action bar of album and playlist pages (spec 6.5): Play (bigger circle),
-  // Shuffle, Favorite (albums) and "..." (the item's menu, spec 8).
+  // Action bar of album, playlist and artist pages (spec 6.5, 6.7, 9): Play
+  // (bigger circle), Random order (artists only), Awesome Mix, Favorite and
+  // "..." (the item's menu, spec 8).
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
   import Play from "@lucide/svelte/icons/play";
   import Shuffle from "@lucide/svelte/icons/shuffle";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import { m } from "#lib/paraglide/messages.js";
 
   let {
@@ -12,6 +14,7 @@
     starred = null,
     onplay,
     onshuffle,
+    onmix,
     onstar,
     onmore,
   }: {
@@ -20,7 +23,9 @@
     /** `null`: no heart (playlists cannot be starred). */
     starred?: boolean | null;
     onplay: () => void;
-    onshuffle: () => void;
+    /** "Random order": only where there are groups (an artist's albums). */
+    onshuffle?: () => void;
+    onmix: () => void;
     onstar?: () => void;
     /** Opens the item's "..." menu. */
     onmore?: (event: MouseEvent) => void;
@@ -31,8 +36,13 @@
   <button type="button" class="play" onclick={onplay} {disabled} aria-label={m.collection_play()} title={m.collection_play()}>
     <Play size={24} fill="currentColor" />
   </button>
-  <button type="button" class="icon" onclick={onshuffle} {disabled} aria-label={m.collection_shuffle()} title={m.collection_shuffle()}>
-    <Shuffle size={22} />
+  {#if onshuffle}
+    <button type="button" class="icon" onclick={onshuffle} {disabled} aria-label={m.play_random_order()} title={m.play_random_order()}>
+      <Shuffle size={22} />
+    </button>
+  {/if}
+  <button type="button" class="icon" onclick={onmix} {disabled} aria-label={m.awesome_mix()} title={m.awesome_mix()}>
+    <MixIcon size={22} />
   </button>
   {#if starred !== null}
     <button

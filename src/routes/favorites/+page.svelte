@@ -3,11 +3,11 @@
   // and "Shuffle"; then Recent, Albums, Songs and Artists, last starred
   // first. A song plays the whole list of favorite songs ("Playing from:
   // Favorites"), not only the ones in view.
-  import Dices from "@lucide/svelte/icons/dices";
   import Play from "@lucide/svelte/icons/play";
   import { onDestroy } from "svelte";
   import { playContext, playMix } from "#lib/api.ts";
   import TrackTable from "#lib/components/TrackTable.svelte";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import AlbumCard from "#lib/components/cards/AlbumCard.svelte";
   import ArtistCard from "#lib/components/cards/ArtistCard.svelte";
   import Carousel from "#lib/components/cards/Carousel.svelte";
@@ -31,7 +31,7 @@
   let songs = $derived(data?.songs ?? []);
   /** Every song shown, in order: the queue of a click. */
   let songIds = $derived(songs.map((s) => s.id));
-  /** "Play all" and "Shuffle" leave out the songs just unstarred. */
+  /** "Play all" and the Awesome Mix leave out the songs just unstarred. */
   let starredIds = $derived(songs.filter(isStarredNow).map((s) => s.id));
   let tableRows = $derived(songs.slice(0, TABLE_SIZE).map((_, index): TableRow => ({ kind: "song", index })));
   let count = $derived(data ? favoritesCount(data.albums.length, starredIds.length, data.artists.length) : "");
@@ -69,7 +69,7 @@
 
   function shuffle() {
     error = null;
-    playMix(starredIds, m.nav_favorites()).catch(showError);
+    playMix(starredIds, m.mix_context({ origin: m.nav_favorites() })).catch(showError);
   }
 </script>
 
@@ -92,8 +92,8 @@
           {m.albums_play_all()}
         </button>
         <button type="button" class="button button-secondary" onclick={shuffle} disabled={starredIds.length === 0}>
-          <Dices size={16} />
-          {m.songs_shuffle()}
+          <MixIcon size={16} />
+          {m.awesome_mix()}
         </button>
       </div>
     {/if}

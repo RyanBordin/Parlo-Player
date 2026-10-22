@@ -415,8 +415,8 @@ export type AudioDevice = { name: string; description: string };
 /** Payload: `AudioDevice[]`, when a device is plugged in or removed. */
 export const AUDIO_DEVICES_EVENT = "audio-devices";
 
-/** The buttons of the Albums page (spec 6.4). */
-export type AlbumsPlayMode = "inOrder" | "shuffledAlbums" | "mix";
+/** The three ways to play a set of albums or artists (spec 9): Play all, Random order, Awesome Mix. */
+export type GroupsPlayMode = "inOrder" | "shuffled" | "mix";
 
 /** Lyrics of a song (Now Playing). Mirrors `Lyrics` in src-tauri/src/now_playing.rs. */
 export type Lyrics =
@@ -537,11 +537,6 @@ export function setAlbumStarred(albumId: string, starred: boolean): Promise<void
   return invoke("set_album_starred", { albumId, starred });
 }
 
-/** "Shuffle" of a list: shuffle on, starting at a random song. */
-export function playShuffled(songIds: string[], contextLabel: string): Promise<void> {
-  return invoke("play_shuffled", { songIds, contextLabel });
-}
-
 /** The app preferences, or the defaults. */
 export function getAppSettings(): Promise<AppSettings> {
   return invoke("get_app_settings");
@@ -639,7 +634,7 @@ export function removeRecentSearch(query: string): Promise<string[]> {
   return invoke("remove_recent_search", { query });
 }
 
-/** At most 100 of these songs, in a random order (spec 9). */
+/** "Awesome Mix": at most the mix size of these songs, in a random order (spec 9). */
 export function playMix(songIds: string[], contextLabel: string): Promise<void> {
   return invoke("play_mix", { songIds, contextLabel });
 }
@@ -649,8 +644,8 @@ export function listAlbums(): Promise<AlbumListItem[]> {
   return invoke("list_albums");
 }
 
-/** Plays the albums shown: in order, in a random album order, or as a mix. */
-export function playAlbums(albumIds: string[], mode: AlbumsPlayMode, contextLabel: string): Promise<void> {
+/** Plays the albums shown: in order, in a random album order, or as an Awesome Mix. */
+export function playAlbums(albumIds: string[], mode: GroupsPlayMode, contextLabel: string): Promise<void> {
   return invoke("play_albums", { albumIds, mode, contextLabel });
 }
 
@@ -659,9 +654,9 @@ export function listArtists(): Promise<ArtistListItem[]> {
   return invoke("list_artists");
 }
 
-/** At most 100 songs of these artists, in a random order (spec 6.6). */
-export function playArtistsMix(artistIds: string[], contextLabel: string): Promise<void> {
-  return invoke("play_artists_mix", { artistIds, contextLabel });
+/** Plays the artists shown: in order, in a random artist order, or as an Awesome Mix (spec 6.6). */
+export function playArtists(artistIds: string[], mode: GroupsPlayMode, contextLabel: string): Promise<void> {
+  return invoke("play_artists", { artistIds, mode, contextLabel });
 }
 
 /** An artist page from the local cache; `null` if not in the library. */
@@ -749,8 +744,6 @@ export type ItemTarget =
   | { kind: "artist"; id: string }
   | { kind: "playlist"; id: string };
 
-/** "Play", "Play shuffled" and "Random mix" of a menu. */
-export type ItemPlayMode = "inOrder" | "shuffled" | "mix";
 
 /** "Play next" or "Add to queue". */
 export type Placement = "next" | "end";
@@ -813,8 +806,8 @@ export type ArtistInfo = {
   starred: boolean;
 };
 
-/** Plays an album, artist or playlist from a menu. */
-export function playItem(target: ItemTarget, mode: ItemPlayMode, contextLabel: string): Promise<void> {
+/** Plays an album, artist or playlist (an artist's groups are its albums). */
+export function playItem(target: ItemTarget, mode: GroupsPlayMode, contextLabel: string): Promise<void> {
   return invoke("play_item", { target, mode, contextLabel });
 }
 

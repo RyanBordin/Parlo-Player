@@ -2,8 +2,10 @@
   // Artists (spec 6.6): album artists (or every artist, featured ones
   // included) in a grid of square cards, with quick search, "Sort by" and
   // "Random mix" of the artists shown.
-  import Dices from "@lucide/svelte/icons/dices";
-  import { playArtistsMix } from "#lib/api.ts";
+  import Play from "@lucide/svelte/icons/play";
+  import Shuffle from "@lucide/svelte/icons/shuffle";
+  import { playArtists, type GroupsPlayMode } from "#lib/api.ts";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import {
     ARTIST_SORTS,
     ARTIST_TYPES,
@@ -60,11 +62,13 @@
     refreshArtists();
   });
 
-  function mix() {
+  // Spec 6.6, 9: "Artists", or "Awesome Mix: Artists".
+  function play(mode: GroupsPlayMode) {
     error = null;
-    playArtistsMix(
+    playArtists(
       shown.map((a) => a.id),
-      m.nav_artists(),
+      mode,
+      mode === "mix" ? m.mix_context({ origin: m.nav_artists() }) : m.nav_artists(),
     ).catch((e) => (error = describeError(e)));
   }
 </script>
@@ -78,9 +82,17 @@
       {/if}
     </div>
     <div class="buttons">
-      <button type="button" class="button button-primary" onclick={mix} disabled={shown.length === 0}>
-        <Dices size={16} />
-        {m.albums_mix()}
+      <button type="button" class="button button-primary" onclick={() => play("inOrder")} disabled={shown.length === 0}>
+        <Play size={16} fill="currentColor" />
+        {m.albums_play_all()}
+      </button>
+      <button type="button" class="button button-secondary" onclick={() => play("shuffled")} disabled={shown.length === 0}>
+        <Shuffle size={16} />
+        {m.play_random_order()}
+      </button>
+      <button type="button" class="button button-secondary" onclick={() => play("mix")} disabled={shown.length === 0}>
+        <MixIcon size={16} />
+        {m.awesome_mix()}
       </button>
     </div>
   </header>

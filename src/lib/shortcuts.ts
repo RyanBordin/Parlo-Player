@@ -1,6 +1,7 @@
 // Playback keyboard shortcuts (spec 12.2).
 import { next, previous, seekBy, togglePause } from "#lib/api.ts";
 import { m } from "#lib/paraglide/messages.js";
+import { toggleNowPlaying } from "#lib/now-playing.svelte.ts";
 import { player, queue } from "#lib/player.svelte.ts";
 
 /** Seconds moved by ← and →. */
@@ -18,11 +19,12 @@ export const SHORTCUTS: { keys: () => string[]; label: () => string }[] = [
   { keys: () => ["→"], label: () => m.shortcut_forward({ seconds: SEEK_STEP }) },
   { keys: () => ["←"], label: () => m.shortcut_back({ seconds: SEEK_STEP }) },
   { keys: () => ["Ctrl", "K"], label: m.shortcut_search },
+  { keys: () => ["Ctrl", "B"], label: m.shortcut_now_playing },
   { keys: () => ["Esc"], label: m.shortcut_clear_search },
   { keys: () => ["Esc"], label: m.shortcut_close_now_playing },
 ];
 
-type Action = "togglePause" | "next" | "previous" | "back" | "forward";
+type Action = "togglePause" | "next" | "previous" | "back" | "forward" | "nowPlaying";
 
 /**
  * Typing never triggers a shortcut: text fields, selects and editable areas
@@ -47,6 +49,10 @@ function actionFor(event: KeyboardEvent): Action | null {
       return event.ctrlKey ? "next" : "forward";
     case "ArrowLeft":
       return event.ctrlKey ? "previous" : "back";
+    case "b":
+    case "B":
+      // Opens / closes Now Playing: the Player Bar has no arrow for it (spec 4.3).
+      return event.ctrlKey ? "nowPlaying" : null;
     default:
       return null;
   }
@@ -78,6 +84,9 @@ export function handleShortcut(event: KeyboardEvent): void {
       break;
     case "back":
       if (hasTrack) run(() => seekBy(-SEEK_STEP));
+      break;
+    case "nowPlaying":
+      if (player.track !== null || queue.tracks.length) toggleNowPlaying();
       break;
   }
 }

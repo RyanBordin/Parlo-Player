@@ -21,7 +21,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rand::seq::SliceRandom;
-use rand::{Rng, RngExt};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use thiserror::Error;
@@ -48,15 +48,15 @@ const PLAYER_ERROR_EVENT: &str = "player-error";
 /// Payload: the audio outputs (`AudioDevice` list), when they change.
 const AUDIO_DEVICES_EVENT: &str = "audio-devices";
 
-/// The three buttons of the Albums page (spec 6.4).
+/// The three ways to play a set of groups, albums or artists (spec 9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum AlbumsPlayMode {
-    /// The albums in the order shown, one after the other.
+pub enum GroupsPlayMode {
+    /// "Play all": the groups in the order shown, one after the other.
     InOrder,
-    /// The albums in a random order, each album's songs in order.
-    ShuffledAlbums,
-    /// The songs of all the albums mixed, at most the mix size (spec 6.10).
+    /// "Random order": the groups in a random order, each one's songs in order.
+    Shuffled,
+    /// "Awesome Mix": the songs of every group mixed, at most the mix size (spec 6.10).
     Mix,
 }
 
@@ -70,14 +70,12 @@ pub enum Placement {
     End,
 }
 
-/// What a new queue does with the shuffle mode.
+/// What a new queue does with the shuffle mode of the Player Bar (spec 5.4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShuffleMode {
     /// As the user left it, from the clicked song.
     Keep,
-    /// On, from a random song ("Shuffle" buttons).
-    On,
-    /// Off: the order given is the point (Albums page buttons).
+    /// Off: the order given is the point (Random order, Awesome Mix).
     Off,
 }
 
@@ -225,39 +223,38 @@ impl Playback {
         self.play_list(song_ids, start_index, label, ShuffleMode::Keep)
     }
 
-    /// "Shuffle" button of a list (spec 6.5): turns shuffle on and starts
-    /// at a random song, with the rest shuffled after it.
-    pub fn play_shuffled(&self, song_ids: Vec<String>, label: String) -> Result<(), PlaybackError> {
-        self.play_list(song_ids, 0, label, ShuffleMode::On)
-    }
-
-    /// "Shuffle" of the Songs page (spec 6.3, 9): at most the mix size
-    /// (spec 6.10) of songs drawn from the list, in a random order. Shuffle
-    /// turns off, as for the other mixes.
+    /// "Awesome Mix" of a list of songs (spec 9): at most the mix size
+    /// (spec 6.10) of songs drawn from the list, in a random order. The
+    /// Player Bar's shuffle turns off: the mix is the order.
     pub fn play_mix(&self, song_ids: Vec<String>, label: String) -> Result<(), PlaybackError> {
         let ids = mix(song_ids, self.mix_size(), &mut rand::rng());
         self.play_list(ids, 0, label, ShuffleMode::Off)
     }
 
-    /// "Random mix" of the Artists page (spec 6.6): at most the mix size of
-    /// songs where the artists shown appear.
-    pub fn play_artists_mix(&self, artist_ids: &[String], label: String) -> Result<(), PlaybackError> {
-        let library = self.library()?;
-        let songs = read_db(&library.db_path, |conn| db::artists::songs_of_artists(conn, artist_ids))?;
-        self.play_mix(songs, label)
-    }
-
-    /// The buttons of the Albums page (spec 6.4), on the albums shown, in the
-    /// order shown. Shuffle turns off: the order built is the point.
-    pub fn play_albums(&self, album_ids: &[String], mode: AlbumsPlayMode, label: String) -> Result<(), PlaybackError> {
+    /// The three buttons of the Albums page (spec 6.4, 9), on the albums
+    /// shown, in the order shown.
+    pub fn play_albums(&self, album_ids: &[String], mode: GroupsPlayMode, label: String) -> Result<(), PlaybackError> {
         let library = self.library()?;
         let albums = read_db(&library.db_path, |conn| db::albums::songs_of_albums(conn, album_ids))?;
-        let ids = arrange_albums(albums, mode, self.mix_size(), &mut rand::rng());
+        self.play_groups(albums, mode, label)
+    }
+
+    /// The three buttons of the Artists page (spec 6.6, 9), on the artists
+    /// shown, in the order shown.
+    pub fn play_artists(&self, artist_ids: &[String], mode: GroupsPlayMode, label: String) -> Result<(), PlaybackError> {
+        let library = self.library()?;
+        let artists = read_db(&library.db_path, |conn| db::artists::songs_by_artist(conn, artist_ids))?;
+        self.play_groups(artists, mode, label)
+    }
+
+    /// Plays groups of songs (albums, artists) in one of the three ways
+    /// (spec 9). The Player Bar's shuffle turns off: the order built is the point.
+    pub fn play_groups(&self, groups: Vec<Vec<String>>, mode: GroupsPlayMode, label: String) -> Result<(), PlaybackError> {
+        let ids = arrange_groups(groups, mode, self.mix_size(), &mut rand::rng());
         self.play_list(ids, 0, label, ShuffleMode::Off)
     }
 
-    /// Replaces the queue with `song_ids` and plays from `start_index` (or a
-    /// random song, with shuffle `On`).
+    /// Replaces the queue with `song_ids` and plays from `start_index`.
     fn play_list(
         &self,
         song_ids: Vec<String>,
@@ -278,17 +275,9 @@ impl Playback {
         let mut rng = rand::rng();
         let mut inner = self.lock();
         inner.tracks = tracks_of(found, gains);
-        let start = match shuffle {
-            ShuffleMode::Keep => start,
-            ShuffleMode::On => {
-                inner.queue.set_shuffle(true, &mut rng);
-                rng.random_range(0..ids.len())
-            }
-            ShuffleMode::Off => {
-                inner.queue.set_shuffle(false, &mut rng);
-                start
-            }
-        };
+        if shuffle == ShuffleMode::Off {
+            inner.queue.set_shuffle(false, &mut rng);
+        }
         inner.queue.replace(ids, start, label, &mut rng);
         let result = self.play_current(&mut inner, &library, 0.0, false);
         self.changed(&mut inner, &library);
@@ -931,15 +920,15 @@ fn queue_state(inner: &Inner) -> QueueState {
     }
 }
 
-/// One queue from the songs of several albums (each list in track order).
-fn arrange_albums(mut albums: Vec<Vec<String>>, mode: AlbumsPlayMode, mix_size: usize, rng: &mut impl Rng) -> Vec<String> {
+/// One queue from groups of songs (albums, artists), each group in order.
+fn arrange_groups(mut groups: Vec<Vec<String>>, mode: GroupsPlayMode, mix_size: usize, rng: &mut impl Rng) -> Vec<String> {
     match mode {
-        AlbumsPlayMode::InOrder => albums.concat(),
-        AlbumsPlayMode::ShuffledAlbums => {
-            albums.shuffle(rng);
-            albums.concat()
+        GroupsPlayMode::InOrder => groups.concat(),
+        GroupsPlayMode::Shuffled => {
+            groups.shuffle(rng);
+            groups.concat()
         }
-        AlbumsPlayMode::Mix => mix(albums.concat(), mix_size, rng),
+        GroupsPlayMode::Mix => mix(groups.concat(), mix_size, rng),
     }
 }
 
@@ -1062,7 +1051,7 @@ mod tests {
 
     #[test]
     fn play_all_follows_the_albums_shown_one_after_the_other() {
-        let songs = arrange_albums(albums(), AlbumsPlayMode::InOrder, 100, &mut StdRng::seed_from_u64(1));
+        let songs = arrange_groups(albums(), GroupsPlayMode::InOrder, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(songs.len(), 300);
         assert_eq!(songs[..2], ["a0-t0", "a0-t1"]);
         assert_eq!(songs[10], "a1-t0");
@@ -1070,7 +1059,7 @@ mod tests {
 
     #[test]
     fn shuffled_albums_keep_each_album_in_order() {
-        let songs = arrange_albums(albums(), AlbumsPlayMode::ShuffledAlbums, 100, &mut StdRng::seed_from_u64(1));
+        let songs = arrange_groups(albums(), GroupsPlayMode::Shuffled, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(songs.len(), 300);
         let order: Vec<&str> = songs.chunks(10).map(|album| album[0].split('-').next().unwrap()).collect();
         assert_ne!(order[..5], ["a0", "a1", "a2", "a3", "a4"], "the albums are shuffled");
@@ -1083,12 +1072,12 @@ mod tests {
 
     #[test]
     fn a_mix_has_at_most_100_different_songs() {
-        let songs = arrange_albums(albums(), AlbumsPlayMode::Mix, 100, &mut StdRng::seed_from_u64(1));
+        let songs = arrange_groups(albums(), GroupsPlayMode::Mix, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(songs.len(), 100);
         let unique: std::collections::HashSet<&String> = songs.iter().collect();
         assert_eq!(unique.len(), 100);
 
-        let small = arrange_albums(vec![vec!["x".into(), "y".into()]], AlbumsPlayMode::Mix, 100, &mut StdRng::seed_from_u64(1));
+        let small = arrange_groups(vec![vec!["x".into(), "y".into()]], GroupsPlayMode::Mix, 100, &mut StdRng::seed_from_u64(1));
         assert_eq!(small.len(), 2, "fewer songs than the limit: all of them");
     }
 
@@ -1124,11 +1113,11 @@ mod tests {
     }
 
     #[test]
-    fn album_modes_come_from_the_ui() {
-        let parse = |name: &str| serde_json::from_value::<AlbumsPlayMode>(serde_json::json!(name)).ok();
-        assert_eq!(parse("inOrder"), Some(AlbumsPlayMode::InOrder));
-        assert_eq!(parse("shuffledAlbums"), Some(AlbumsPlayMode::ShuffledAlbums));
-        assert_eq!(parse("mix"), Some(AlbumsPlayMode::Mix));
+    fn group_modes_come_from_the_ui() {
+        let parse = |name: &str| serde_json::from_value::<GroupsPlayMode>(serde_json::json!(name)).ok();
+        assert_eq!(parse("inOrder"), Some(GroupsPlayMode::InOrder));
+        assert_eq!(parse("shuffled"), Some(GroupsPlayMode::Shuffled));
+        assert_eq!(parse("mix"), Some(GroupsPlayMode::Mix));
     }
 
     #[test]

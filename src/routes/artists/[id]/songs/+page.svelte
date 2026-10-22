@@ -2,8 +2,8 @@
   // "See all" of the artist's songs (spec 6.7): the whole list, in the
   // artist page's order, in the virtualized tracklist with the list tools
   // (spec 7). A click plays the list as shown ("Playing from: [Artist]").
-  import Dices from "@lucide/svelte/icons/dices";
   import Play from "@lucide/svelte/icons/play";
+  import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import { page } from "$app/state";
   import { playContext, playMix } from "#lib/api.ts";
   import { artistSongs, loadArtistAbout, loadArtistPage } from "#lib/artist-page.svelte.ts";
@@ -50,7 +50,7 @@
   function shuffle() {
     if (!data) return;
     error = null;
-    playMix(shownIds, data.artist.name).catch(showError);
+    playMix(shownIds, m.mix_context({ origin: data.artist.name })).catch(showError);
   }
 </script>
 
@@ -72,8 +72,8 @@
           {m.albums_play_all()}
         </button>
         <button type="button" class="button button-secondary" onclick={shuffle} disabled={shownIds.length === 0}>
-          <Dices size={16} />
-          {m.songs_shuffle()}
+          <MixIcon size={16} />
+          {m.awesome_mix()}
         </button>
       </div>
     </header>

@@ -3,7 +3,6 @@
 // versions (Download, v0.2).
 import AudioLines from "@lucide/svelte/icons/audio-lines";
 import Copy from "@lucide/svelte/icons/copy";
-import Dices from "@lucide/svelte/icons/dices";
 import Disc3 from "@lucide/svelte/icons/disc-3";
 import ExternalLink from "@lucide/svelte/icons/external-link";
 import Globe from "@lucide/svelte/icons/globe";
@@ -26,6 +25,7 @@ import Save from "@lucide/svelte/icons/save";
 import Shuffle from "@lucide/svelte/icons/shuffle";
 import Trash from "@lucide/svelte/icons/trash";
 import Users from "@lucide/svelte/icons/users";
+import MixIcon from "#lib/components/icons/MixIcon.svelte";
 import { goto } from "$app/navigation";
 import {
   getAlbumInfo,
@@ -60,7 +60,6 @@ import { playlists } from "#lib/playlists.svelte.ts";
 import { saveItem } from "#lib/saves.svelte.ts";
 import { server } from "#lib/server-info.svelte.ts";
 import { app } from "#lib/session.svelte.ts";
-import { appSettings } from "#lib/settings/app-settings.svelte.ts";
 
 /** With more playlists, "Add to playlist ›" gets a search field (spec 8.2). */
 const PLAYLIST_SEARCH_FROM = 11;
@@ -253,7 +252,7 @@ export async function albumMenu(album: { id: string; name: string; artistId: str
     groups: [
       [
         action(m.menu_play(), Play, () => playItem(target, "inOrder", album.name)),
-        action(m.menu_play_shuffled(), Shuffle, () => playItem(target, "shuffled", album.name)),
+        action(m.awesome_mix(), MixIcon, () => playItem(target, "mix", m.mix_context({ origin: album.name }))),
         action(m.menu_play_next(), ListStart, () => queueSongs(target, "next", album.name)),
         action(m.menu_add_to_queue(), ListEnd, () => queueSongs(target, "end", album.name)),
       ],
@@ -281,7 +280,8 @@ export async function artistMenu(artist: { id: string; name: string }): Promise<
     groups: [
       [
         action(m.menu_play(), Play, () => playItem(target, "inOrder", artist.name)),
-        action(m.menu_artist_mix({ count: appSettings.mixSize }), Dices, () => playItem(target, "mix", artist.name)),
+        action(m.play_random_order(), Shuffle, () => playItem(target, "shuffled", artist.name)),
+        action(m.awesome_mix(), MixIcon, () => playItem(target, "mix", m.mix_context({ origin: artist.name }))),
         action(m.menu_artist_radio(), Radio, () =>
           playArtistRadio(artist.id, m.menu_radio_context({ artist: artist.name })),
         ),
@@ -310,7 +310,7 @@ export function playlistMenu(playlist: PlaylistSummary): MenuSpec {
     groups: [
       [
         action(m.menu_play(), Play, () => playItem(target, "inOrder", playlist.name)),
-        action(m.menu_play_shuffled(), Shuffle, () => playItem(target, "shuffled", playlist.name)),
+        action(m.awesome_mix(), MixIcon, () => playItem(target, "mix", m.mix_context({ origin: playlist.name }))),
         action(m.menu_play_next(), ListStart, () => queueSongs(target, "next", playlist.name)),
         action(m.menu_add_to_queue(), ListEnd, () => queueSongs(target, "end", playlist.name)),
       ],

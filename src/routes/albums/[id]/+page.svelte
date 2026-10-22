@@ -1,7 +1,7 @@
 <script lang="ts">
   // Album page (spec 6.5), from the local cache.
   import { page } from "$app/state";
-  import { getAlbumPage, playContext, playShuffled, setAlbumStarred } from "#lib/api.ts";
+  import { getAlbumPage, playContext, playMix, setAlbumStarred } from "#lib/api.ts";
   import CollectionActions from "#lib/components/collection/CollectionActions.svelte";
   import CollectionHeader from "#lib/components/collection/CollectionHeader.svelte";
   import TrackList from "#lib/components/TrackList.svelte";
@@ -17,7 +17,7 @@
   /** `undefined` while loading the first time, `null` if not in the library. */
   let data = $derived(albumPages[id]);
   let error = $state<ErrorMessage | null>(null);
-  /** The tracklist as shown (filtered and sorted): what Play and Shuffle play. */
+  /** The tracklist as shown (filtered and sorted): what Play and the Awesome Mix play. */
   let shownIds = $state<string[]>([]);
 
   let duration = $derived(data ? (data.album.duration ?? data.songs.reduce((sum, s) => sum + (s.duration ?? 0), 0)) : 0);
@@ -94,7 +94,7 @@
       disabled={shownIds.length === 0}
       starred={album.starred}
       onplay={() => playContext(shownIds, 0, album.name).catch(showError)}
-      onshuffle={() => playShuffled(shownIds, album.name).catch(showError)}
+      onmix={() => playMix(shownIds, m.mix_context({ origin: album.name })).catch(showError)}
       onstar={toggleStar}
       onmore={(event) => openMenu(event, () => albumMenu(album))}
     />

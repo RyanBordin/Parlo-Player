@@ -121,16 +121,32 @@ pub fn artist_list(conn: &Connection) -> DbResult<Vec<ArtistListItem>> {
     Ok(artists)
 }
 
-/// Every song where one of these artists appears, each once.
-pub fn songs_of_artists(conn: &Connection, artist_ids: &[String]) -> DbResult<Vec<String>> {
+/// The songs of each artist, in the order of `artist_ids` (spec 6.6): the
+/// albums from the oldest to the newest, each in disc and track order. A
+/// song of two artists shown goes only with the first one.
+pub fn songs_by_artist(conn: &Connection, artist_ids: &[String]) -> DbResult<Vec<Vec<String>>> {
     let ids = serde_json::to_string(artist_ids).unwrap_or_else(|_| "[]".into());
+    // `json_each.key` is the position in the list, so artists keep their order.
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT sa.song_id FROM song_artists sa
-          WHERE sa.artist_id IN (SELECT value FROM json_each(?1))
-            AND sa.song_id IN (SELECT id FROM songs)",
+        "SELECT j.key, s.id FROM json_each(?1) AS j
+           JOIN (SELECT DISTINCT song_id, artist_id FROM song_artists) AS sa ON sa.artist_id = j.value
+           JOIN songs AS s ON s.id = sa.song_id
+           LEFT JOIN albums AS al ON al.id = s.album_id
+          ORDER BY j.key, COALESCE(al.year, s.year) NULLS LAST, s.album_id,
+                   COALESCE(s.disc_number, 1), COALESCE(s.track, 0), s.title",
     )?;
-    let songs = stmt.query_map([ids], |row| row.get(0))?.collect::<Result<_, _>>()?;
-    Ok(songs)
+    let mut groups = vec![Vec::new(); artist_ids.len()];
+    let mut seen = std::collections::HashSet::new();
+    let rows = stmt.query_map([ids], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+    for row in rows {
+        let (position, song_id) = row?;
+        if let Some(songs) = groups.get_mut(position as usize)
+            && seen.insert(song_id.clone())
+        {
+            songs.push(song_id);
+        }
+    }
+    Ok(groups)
 }
 
 /// Records a star / unstar of an artist done in the app (see
@@ -295,15 +311,33 @@ mod tests {
     }
 
     #[test]
-    fn songs_of_artists_lists_each_song_once() {
+    fn songs_by_artist_keep_the_artists_order_and_each_song_once() {
         let conn = open_in_memory().unwrap();
         song(&conn, "s1", r#"{"artists":[{"id":"a"},{"id":"b"}]}"#, 0, "2026-01-01T00:00:00Z");
         song(&conn, "s2", r#"{"artists":[{"id":"b"}]}"#, 0, "2026-01-01T00:00:00Z");
         song(&conn, "s3", r#"{"artists":[{"id":"c"}]}"#, 0, "2026-01-01T00:00:00Z");
         fill_song_artists(&conn).unwrap();
 
-        let mut songs = songs_of_artists(&conn, &["a".into(), "b".into()]).unwrap();
-        songs.sort();
-        assert_eq!(songs, ["s1", "s2"]);
+        let groups = songs_by_artist(&conn, &["b".into(), "a".into()]).unwrap();
+        assert_eq!(groups, [vec!["s1", "s2"], vec![]], "s1 went with b, shown first");
+    }
+
+    #[test]
+    fn an_artists_songs_go_from_the_oldest_album() {
+        let conn = open_in_memory().unwrap();
+        for (id, year) in [("new", 2020), ("old", 1999)] {
+            conn.execute("INSERT INTO albums (id, name, year, raw_json) VALUES (?1, ?1, ?2, '{}')", params![id, year])
+                .unwrap();
+        }
+        for (id, album, track) in [("n1", "new", 1), ("o2", "old", 2), ("o1", "old", 1)] {
+            conn.execute(
+                r#"INSERT INTO songs (id, title, album_id, track, raw_json)
+                   VALUES (?1, ?1, ?2, ?3, '{"artists":[{"id":"a"}]}')"#,
+                params![id, album, track],
+            )
+            .unwrap();
+        }
+        fill_song_artists(&conn).unwrap();
+        assert_eq!(songs_by_artist(&conn, &["a".into()]).unwrap(), [vec!["o1", "o2", "n1"]]);
     }
 }

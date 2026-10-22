@@ -200,7 +200,7 @@ Da esquerda para a direita, cinco zonas:
 
 #### Abrir a tela Tocando Agora
 
-* Não há mais seta ▲/▼ na barra. A tela abre e fecha pelo clique numa **área vazia** da barra; fecha também por **Esc** ou ao navegar pela barra lateral (Seção 4.4).
+* Não há mais seta ▲/▼ na barra. A tela abre e fecha pelo clique numa **área vazia** da barra ou pelo atalho **Ctrl+B** (acesso pelo teclado); fecha também por **Esc** ou ao navegar pela barra lateral (Seção 4.4).
 
 #### Volume pela roda do mouse
 
@@ -241,7 +241,7 @@ Sobe cobrindo a Viewport Principal, mantendo a Player Bar visível.
 
 Referência visual: tela "Tocando agora" do YouTube Music.
 
-* **Abrir e fechar:** clique numa área vazia da Player Bar (Seção 4.3), ou **Esc** para fechar. Navegar pela barra lateral também fecha. A barra lateral e a Player Bar continuam visíveis. A aba escolhida é lembrada.
+* **Abrir e fechar:** clique numa área vazia da Player Bar (Seção 4.3) ou **Ctrl+B**, ou **Esc** para fechar. Navegar pela barra lateral também fecha. A barra lateral e a Player Bar continuam visíveis. A aba escolhida é lembrada.
 * **Capa:** acompanha a faixa atual, em alta resolução, com cantos arredondados e sombra suave.
 * **Fundo da capa:** brilho ambiente só na coluna esquerda: a capa atual ampliada, com desfoque forte e opacidade ~60%, esmaecendo para o preto nas bordas antes da coluna das abas, sem borda visível. Uma sombra escura suave fica só atrás do título e do artista, para manter a leitura.
   * Na troca de faixa, o fundo novo aparece sobre o antigo num esmaecimento de ~600 ms; com "Reduzir animações", troca direto.
@@ -357,7 +357,7 @@ Referência: página Favorites do Swing Music.
 * Clicar numa faixa toca o contexto "Favoritos" a partir dela.
 * Dados: `getStarred2`, ordenados pela data em que foram favoritados.
 * **Detalhes:**
-  * **Cabeçalho:** além do contador, botões **Tocar tudo** (todas as músicas favoritas, das mais recentes para as mais antigas) e **Aleatório** (mix de até 100 favoritas, Seção 9).
+  * **Cabeçalho:** além do contador, botões **Tocar tudo** (todas as músicas favoritas, das mais recentes para as mais antigas) e **Mix Incrível** (até 100 favoritas, Seção 9).
   * **Recentes:** os 20 últimos itens favoritados. Clicar num álbum ou artista abre a página dele; numa faixa, toca o contexto "Favoritos" a partir dela.
   * **Álbuns** e **Artistas:** carrosséis com todos os favoritos, do mais recente para o mais antigo, e botão **Ver mais** que abre a grade completa (mesmo padrão da Home).
   * **Músicas:** a tabela mostra as **10** mais recentes; **Ver tudo** abre a lista completa com a tracklist virtualizada e as Ferramentas de lista.
@@ -368,7 +368,7 @@ Referência: página Favorites do Swing Music.
 
 ### 6.3. Músicas
 
-* **Cabeçalho:** título, contador de faixas, botões **Tocar tudo** e **Aleatório**.
+* **Cabeçalho:** título, contador de faixas, botões **Tocar tudo** e **Mix Incrível** (Seção 9).
 * **Barra de ferramentas:** Ferramentas de lista (Seção 7) + seletor de colunas opcionais.
 * **Tabela:**
   * Colunas padrão: `#`, capa pequena + título, artista, álbum, duração, coração de favorito.
@@ -382,8 +382,8 @@ Referência: página Favorites do Swing Music.
 
 * **Cabeçalho:** título, contador e três botões aplicados aos álbuns visíveis (já filtrados e ordenados):
   * **Tocar tudo:** álbuns na ordem da tela, um após o outro.
-  * **Álbuns em ordem aleatória:** sorteia a ordem dos álbuns, mantendo a ordem das faixas dentro de cada um.
-  * **Mix aleatório:** mistura as faixas dos álbuns visíveis, com no máximo 100 faixas.
+  * **Em ordem aleatória:** sorteia a ordem dos álbuns, mantendo a ordem das faixas dentro de cada um.
+  * **Mix Incrível:** mistura as faixas dos álbuns visíveis, com no máximo 100 faixas (Seção 9).
 * **Barra de ferramentas:** busca rápida, filtros por metadado do álbum (artista, ano, gênero, formato, data de adição, nº de reproduções, favorito, baixado) e seletor "Ordenar por" (nome A–Z, artista, ano, adicionados recentemente, mais tocados, tocados recentemente, aleatório). Padrão: **adicionados recentemente**.
 * **Grade:** cards quadrados (capa, título, artista em tom secundário), selos discretos de favorito e baixado, rolagem contínua, colunas ajustadas à largura da janela.
 * Clique no card abre o álbum; Play no hover toca; clique direito ou `...` abre o menu de álbum.
@@ -398,7 +398,7 @@ Referência: página Favorites do Swing Music.
   * **Fundo:** capa ampliada com desfoque pesado (`backdrop-filter: blur`) e gradiente escuro.
   * **Esquerda:** capa nítida (~180–220px), cantos arredondados, sombra leve.
   * **Metadados:** título grande em negrito; linha `ALBUM by [Artista] • [Nº de músicas], [Duração] • [Ano]`; linha secundária com `Added [Data]` e pílulas clicáveis de Artista e Gênero.
-* **Barra de ações:** Play (círculo maior), Aleatório, Favoritar, Opções (`...`).
+* **Barra de ações:** Play (círculo maior), **Mix Incrível** (todas as faixas misturadas), Favoritar, Opções (`...`).
 * **Tracklist:** tabela com as Ferramentas de lista (Seção 7) e indicador da faixa atual.
   * Ordem padrão: **álbum** = nº da faixa; **playlist** = ordem salva.
   * Nº da faixa só existe como critério em álbuns.
@@ -414,14 +414,17 @@ Referência: página Favorites do Swing Music.
 ### 6.6. Artistas
 
 * **Grade de cards quadrados** (foto e nome). Sem foto no servidor, o card usa a capa do álbum mais recente do artista, nunca um ícone genérico.
-* **Cabeçalho:** título, contador e **Mix aleatório** (até 100 faixas dos artistas visíveis, salvável como playlist).
+* **Cabeçalho:** título, contador e três botões aplicados aos artistas visíveis (Seção 9):
+  * **Tocar tudo:** artistas na ordem da tela; de cada um, os álbuns do mais antigo ao mais recente, com as faixas na ordem.
+  * **Em ordem aleatória:** sorteia a ordem dos artistas, mantendo a ordem das faixas de cada um.
+  * **Mix Incrível:** mistura as faixas dos artistas visíveis, até 100.
 * **Barra de ferramentas:** busca rápida, filtros (gênero, favorito, baixado), "Ordenar por" (nome A–Z padrão, mais tocados, adicionados recentemente, nº de álbuns) e filtro de tipo: **artistas de álbum** (padrão) ou **todos os artistas**.
 * **Detalhes:**
   * **Escopo:** na v0.1, busca rápida, "Ordenar por", filtro de tipo e selo de favorito. Os filtros por gênero, favorito e baixado entram na v0.2 (mesmo padrão de Álbuns).
   * **Todos os artistas** inclui quem só aparece em faixas (participações, "feat."), usando a lista de artistas de cada faixa (campo `artists` do OpenSubsonic) guardada no banco local.
   * **Foto do artista:** a do servidor quando existir (`coverArt` do artista); senão, a capa do álbum mais recente.
   * Grade virtualizada; volta da página do artista na mesma posição; busca, ordenação e tipo salvos entre sessões.
-  * Contexto do Mix aleatório na fila: "Artistas".
+  * Contexto na fila: "Artistas" (ou "Mix Incrível: Artistas").
 
 ### 6.7. Página do Artista
 
@@ -429,7 +432,7 @@ Referência: página de artista do YouTube Music.
 
 * **Banner largo** com a foto do artista no topo, escurecida embaixo.
 * Sobre o banner: nome grande e biografia curta (`getArtistInfo2`) com botão **Mais**.
-* **Botões:** Tocar, Aleatório (mix de até 100 faixas), Favoritar, `...`.
+* **Botões:** Tocar, **Em ordem aleatória** (álbuns do artista sorteados, faixas na ordem), **Mix Incrível** (até 100 faixas), Favoritar, `...`.
 * **Seções:**
   1. **Top músicas:** faixas mais tocadas neste servidor (`playCount`); sem reproduções, usa `getTopSongs`.
   2. **Álbuns:** grade, do mais novo para o mais antigo.
@@ -514,7 +517,7 @@ Página dividida **por setores**, nunca com opções misturadas. Referência de 
 * **ReplayGain:** desligado, por faixa, por álbum ou **automático** (padrão: álbum quando a fila é um álbum tocado em ordem; faixa nos demais casos). Com **pré-amplificação** (−15 a +15 dB, padrão 0) e **evitar distorção** (padrão: ligado).
 * **Dispositivo de saída:** padrão do sistema ou um dispositivo específico. A troca vale na hora, sem parar a música. Se o dispositivo escolhido sumir, volta ao padrão do sistema.
 * **Modo exclusivo** (só Windows, padrão: desligado): o app usa a saída de áudio sozinho, sem mixagem do Windows. Para quem usa DAC.
-* **Tamanho do mix aleatório:** 50, 100 (padrão), 200, 500 (Seção 9).
+* **Tamanho do Mix Incrível:** 50, 100 (padrão), 200, 500 (Seção 9).
 * **Enviar reproduções ao servidor (scrobble)** (padrão: ligado). Desligado, o histórico local continua sendo gravado (Seção 5.7).
 * `[Depois]` crossfade e equalizador.
 
@@ -591,9 +594,9 @@ Cada menu abre pelo botão `...` e pelo **clique direito** no item, com o mesmo 
 ### 8.1. Itens por tipo
 
 * **Faixa:** Tocar a seguir • Adicionar ao fim da fila • Tocar músicas parecidas (`getSimilarSongs2`) | Favoritar / Remover dos favoritos • Adicionar à playlist › | Ir para o álbum • Ir para o artista (vira submenu **›** quando a faixa tem mais de um artista, Seção 6.6) | **Salvar no computador...** • Baixar `[v0.2]` • Copiar "Título – Artista" • Informações do arquivo (formato, bitrate, taxa de amostragem, tamanho, caminho) • **Abrir no Navidrome** | *Só em playlist manual:* Remover desta playlist • *Só em A Seguir:* Remover da fila.
-* **Álbum:** Tocar • Tocar em ordem aleatória • Tocar a seguir • Adicionar ao fim da fila | Favoritar / Remover • Adicionar à playlist › | Ir para o artista | **Salvar no computador...** • Baixar álbum `[v0.2]` • Informações (ano, gravadora, gênero, formato, nº de faixas, duração) • **Abrir no Navidrome**.
-* **Artista:** Tocar • Mix aleatório (até 100) • **Rádio do artista** • Tocar a seguir • Adicionar ao fim da fila | Favoritar / Remover | Ir para artistas parecidos | Baixar todas as faixas `[v0.2]` • Informações (biografia, nº de álbuns e faixas) • **Abrir no Navidrome**.
-* **Playlist manual:** Tocar • Tocar em ordem aleatória • Tocar a seguir • Adicionar ao fim da fila | Renomear / editar descrição • Tornar pública ou privada | **Salvar no computador...** • Baixar playlist `[v0.2]` | Excluir playlist (com confirmação).
+* **Álbum:** Tocar • Mix Incrível • Tocar a seguir • Adicionar ao fim da fila | Favoritar / Remover • Adicionar à playlist › | Ir para o artista | **Salvar no computador...** • Baixar álbum `[v0.2]` • Informações (ano, gravadora, gênero, formato, nº de faixas, duração) • **Abrir no Navidrome**.
+* **Artista:** Tocar • Em ordem aleatória • Mix Incrível • **Rádio do artista** • Tocar a seguir • Adicionar ao fim da fila | Favoritar / Remover | Ir para artistas parecidos | Baixar todas as faixas `[v0.2]` • Informações (biografia, nº de álbuns e faixas) • **Abrir no Navidrome**.
+* **Playlist manual:** Tocar • Mix Incrível • Tocar a seguir • Adicionar ao fim da fila | Renomear / editar descrição • Tornar pública ou privada | **Salvar no computador...** • Baixar playlist `[v0.2]` | Excluir playlist (com confirmação).
 * **Playlist automática** `[v0.2]`: Tocar a seguir • Adicionar ao fim da fila • Salvar como playlist normal (cópia fixa) • **Salvar no computador...** • Configurar regras (→ Configurações). Não pode ser renomeada nem excluída.
 * **Seleção múltipla** (Ctrl/Shift + clique, Seção 5.3): o clique direito sobre a seleção abre um menu que vale para **todas as faixas selecionadas**: Tocar a seguir • Adicionar ao fim da fila | Favoritar todas • Adicionar à playlist › | **Salvar no computador...** • Baixar `[v0.2]` | *Em playlist manual:* Remover desta playlist • *Em A Seguir:* Remover da fila. O topo do menu mostra "N faixas selecionadas".
 
@@ -619,11 +622,23 @@ Cada menu abre pelo botão `...` e pelo **clique direito** no item, com o mesmo 
 
 ---
 
-## 9. Regra Global: Aleatorizar e Salvar o Mix
+## 9. Regra Global: Os Três Jeitos de Tocar e o Mix Incrível
 
-* Toda tela que lista música permite aleatorizar: Músicas, Álbuns, Artistas, Favoritos, Baixados e páginas de álbum, artista e playlist.
-* Mixes gerados a partir de conjuntos grandes têm **no máximo 100 faixas** (padrão ajustável nas Configurações).
-* Qualquer fila gerada pode ser salva como **playlist manual** no servidor pelo botão **Salvar** da aba `A SEGUIR` (`createPlaylist`), com nome sugerido (ex.: "Mix de Álbuns, 18/10/2026") editável. A playlist aparece na barra lateral.
+O app tem **três jeitos de tocar** um conjunto de músicas, sempre com os mesmos nomes, na mesma ordem e com os mesmos ícones em todo lugar:
+
+| Botão | O que faz | Ícone |
+| --- | --- | --- |
+| **Tocar tudo** (ou **Tocar**) | Na ordem da tela. | Play |
+| **Em ordem aleatória** | Sorteia a ordem dos **grupos** (álbuns ou artistas), mantendo a ordem das faixas dentro de cada um. | Embaralhar |
+| **Mix Incrível** (inglês: **Awesome Mix**) | Mistura **todas as faixas**. É o nome do aleatório do Parlo. | Embaralhar com brilho |
+
+* **Onde aparece cada um:**
+  * Com grupos (os três): página **Álbuns**, página **Artistas** e **página do artista** (os grupos são os álbuns dele); menu `...` de artista.
+  * Só faixas (Tocar tudo + Mix Incrível, porque "em ordem aleatória" seria igual ao mix): **Músicas**, **Favoritos**, **Baixados**, página de **álbum** e de **playlist**; menus `...` de álbum e de playlist.
+* **Tamanho:** o Mix Incrível tem **no máximo 100 faixas** quando o conjunto é maior (ajustável em Configurações → Reprodução e áudio). Álbuns e playlists menores entram inteiros.
+* **Contexto na fila:** "Mix Incrível: [origem]" (ex.: "Mix Incrível: Álbuns").
+* Qualquer fila gerada pode ser salva como **playlist manual** no servidor pelo botão **Salvar** da aba `A SEGUIR` (`createPlaylist`), com nome sugerido (ex.: "Mix Incrível: Álbuns, 22/10/2026") editável. A playlist aparece na barra lateral.
+* **Não confundir** com o botão **Aleatório** da Player Bar (Seção 4.3), que é um modo liga/desliga que embaralha a fila atual (Seção 5.4). Ele continua com esse nome.
 
 ---
 
@@ -679,7 +694,7 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 * **Linux:** MPRIS (teclas de mídia, widget do desktop, KDE Connect).
 * **Windows:** SMTC (painel de mídia, teclas de mídia, tela de bloqueio) e **botões na miniatura da barra de tarefas** (Anterior, Play/Pause, Próxima) `[v0.2]`.
 * **Segundo plano:** fechar a janela **não encerra** o app; ele continua tocando, com ícone e controles na bandeja. Na primeira vez, uma notificação avisa o usuário. Para encerrar: "Sair" no menu da bandeja.
-* **Atalhos:** Espaço (play/pause), Ctrl+K (busca), Ctrl+→ / Ctrl+← (próxima/anterior), ← / → (±5 s).
+* **Atalhos:** Espaço (play/pause), Ctrl+K (busca), Ctrl+B (abrir/fechar Tocando Agora), Ctrl+→ / Ctrl+← (próxima/anterior), ← / → (±5 s).
 * `[Depois]` Discord Rich Presence.
 
 ### 12.3. Desempenho (metas)
@@ -820,4 +835,6 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 20/10/2026 | Busca: página de resultados atualizada enquanto digita (sem painel suspenso), Álbuns antes de Artistas na aba Top, busca sem acentos e por palavras em qualquer ordem, regra do melhor resultado, "Ver todos" por seção. |
 | 20/10/2026 | Tocando Agora: brilho ambiente com as cores da capa atrás dela (só na coluna esquerda, esmaecido nas bordas, troca em ~600 ms), desligável em Aparência. |
 | 21/10/2026 | Menus `...` revisados: itens agrupados; "Salvar no computador..." (arquivo original, v0.1) em faixa, álbum, playlist e seleção; "Abrir no Navidrome" em faixa, álbum e artista; Rádio do artista; menu para seleção múltipla; submenu Adicionar à playlist com aviso de duplicadas. |
-| 22/10/2026 | Player Bar redesenhada pelo autor, simétrica em 5 zonas: faixa atual; Adicionar à playlist, Repetir e Aleatório; transporte; Favoritar, Volume (slider em popover) e `...`; próxima faixa espelhada à direita com rótulo A SEGUIR, que abre o Tocando Agora. Seta ▲/▼ removida. Revisão do autor: sem rótulo na próxima faixa; clicar nela toca a próxima; área vazia abre/fecha o Tocando Agora; roda do mouse sobre a barra ajusta o volume. |
+| 22/10/2026 | Player Bar redesenhada pelo autor, simétrica em 5 zonas: faixa atual; Adicionar à playlist, Repetir e Aleatório; transporte; Favoritar, Volume (slider em popover) e `...`; próxima faixa espelhada à direita. Seta ▲/▼ removida. Sem rótulo na próxima faixa; clicar nela toca a próxima; área vazia abre/fecha o Tocando Agora; roda do mouse sobre a barra ajusta o volume. |
+| 22/10/2026 | Atalho Ctrl+B abre e fecha o Tocando Agora, para o acesso pelo teclado sem a seta ▲/▼. |
+| 22/10/2026 | Três jeitos de tocar com nomes fixos em todo o app: Tocar tudo, Em ordem aleatória (ordem dos grupos) e **Mix Incrível / Awesome Mix** (todas as faixas misturadas, até 100), que substitui "Mix aleatório" e "Aleatório". O botão Aleatório da Player Bar continua sendo o modo de embaralhar a fila. |
