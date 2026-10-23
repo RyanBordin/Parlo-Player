@@ -1241,12 +1241,17 @@ pub async fn save_to_computer(
         if let Some(dir) = &start_dir {
             dialog = dialog.set_directory(dir);
         }
+        #[cfg(desktop)]
         if let Some(window) = dialog_app.get_webview_window("main") {
             dialog = dialog.set_parent(&window);
         }
         let picked = match suggested {
             Some((name, ext)) => dialog.set_file_name(name).add_filter(ext.to_uppercase(), &[ext.as_str()]).blocking_save_file(),
+            #[cfg(desktop)]
             None => dialog.blocking_pick_folder(),
+            // Android has no folder picker: saving several songs waits for its own downloads.
+            #[cfg(mobile)]
+            None => None,
         };
         picked.and_then(|path| path.into_path().ok())
     })

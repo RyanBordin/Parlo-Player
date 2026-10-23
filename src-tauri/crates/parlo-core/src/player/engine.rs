@@ -20,6 +20,12 @@ pub struct Media {
 #[error("{0}")]
 pub struct EngineError(pub String);
 
+impl From<std::io::Error> for EngineError {
+    fn from(error: std::io::Error) -> Self {
+        EngineError(format!("could not start the player thread: {error}"))
+    }
+}
+
 /// Plays one song at a time, with the next one preloaded for gapless playback.
 /// Changes arrive as `PlayerEvent`s through the callback the engine was built with.
 pub trait AudioEngine: Send + Sync {
