@@ -12,7 +12,6 @@ mod artist_page;
 mod auto_sync;
 mod commands;
 mod covers;
-mod db;
 mod downloads;
 mod home;
 mod locale;
@@ -24,10 +23,12 @@ mod playlists;
 mod session;
 mod settings;
 mod state;
-pub mod subsonic;
 mod sync;
 mod test_library;
-mod time;
+
+// Shared with the Android app (crates/parlo-core).
+use parlo_core::{db, time};
+pub use parlo_core::subsonic;
 
 /// Each log file grows to this size, then a new one starts.
 const LOG_FILE_BYTES: u128 = 2 * 1024 * 1024;

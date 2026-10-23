@@ -84,17 +84,17 @@ pub enum PlayerEvent {
 /// Limits `player-position` events: mpv reports the position many times per
 /// second, the UI only needs a few.
 #[derive(Debug)]
-pub(super) struct PositionThrottle {
+pub struct PositionThrottle {
     interval: Duration,
     last: Option<Instant>,
 }
 
 impl PositionThrottle {
-    pub(super) fn new(interval: Duration) -> Self {
+    pub fn new(interval: Duration) -> Self {
         Self { interval, last: None }
     }
 
-    pub(super) fn should_emit(&mut self, now: Instant) -> bool {
+    pub fn should_emit(&mut self, now: Instant) -> bool {
         let due = self.last.is_none_or(|last| now.duration_since(last) >= self.interval);
         if due {
             self.last = Some(now);
@@ -103,13 +103,13 @@ impl PositionThrottle {
     }
 
     /// Lets the next position through right away (new song, after a seek).
-    pub(super) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.last = None;
     }
 }
 
 /// Volume accepted by the player: 0–100.
-pub(super) fn clamp_volume(volume: f64) -> f64 {
+pub fn clamp_volume(volume: f64) -> f64 {
     if volume.is_nan() { 100.0 } else { volume.clamp(0.0, 100.0) }
 }
 

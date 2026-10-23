@@ -1,0 +1,22 @@
+[package]
+name = "parlo-core"
+version = "0.1.0"
+description = "Parlo Player logic shared by the desktop and Android apps: Subsonic client, library cache, queue and settings"
+authors = ["Ryan Bordin"]
+edition = "2024"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "query", "form", "http2", "charset"] }
+md-5 = "0.11.0"
+rand = "0.10.3"
+thiserror = "2.0.21"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+icu_normalizer = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
+icu_properties = { version = "2.3.0", default-features = false, features = ["compiled_data"] }
+log = "0.4.34"
+
+[features]
+# Helpers for the app's tests (in-memory database, synthetic media URLs).
+test-utils = []

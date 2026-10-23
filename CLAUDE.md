@@ -27,11 +27,16 @@ Cliente desktop (Windows e Linux) para servidores Subsonic / OpenSubsonic, com f
 
 ## Arquitetura (backend Rust)
 
-Organizar `src-tauri/src/` em módulos:
+`src-tauri/` é um workspace Cargo. O que não depende de Tauri nem de libmpv fica no crate `crates/parlo-core/`, que será compartilhado com o app Android:
 
-- `subsonic/` — cliente da API Subsonic (autenticação token + salt, endpoints, tipos)
-- `player/` — reprodução com libmpv, fila, shuffle, repeat, gapless
-- `db/` — SQLite (cache da biblioteca, histórico, estado)
+- `parlo-core/src/subsonic/` — cliente da API Subsonic (autenticação token + salt, endpoints, tipos)
+- `parlo-core/src/player/` — fila, shuffle, repeat, retomada, tempo ouvido, ReplayGain
+- `parlo-core/src/db/` — SQLite (cache da biblioteca, histórico, estado)
+- `parlo-core/src/settings.rs` — preferências do app
+
+O app desktop fica em `src-tauri/src/`:
+
+- `player/` — reprodução com libmpv, gapless
 - `media_controls/` — integração com MPRIS/SMTC e bandeja
 - `commands.rs` — comandos Tauri expostos para a interface
 
@@ -48,7 +53,7 @@ A interface só conversa com o backend por **comandos e eventos Tauri**.
 ## Comandos
 
 - Rodar em modo desenvolvimento: `npm run tauri dev`
-- Testes do backend: `cargo test` (dentro de `src-tauri/`)
+- Testes do backend: `cargo test --workspace` (dentro de `src-tauri/`)
 - Checagem da interface: `npm run check`
 
 ## Ordem de construção (v0.1)

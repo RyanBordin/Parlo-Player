@@ -20,7 +20,7 @@ impl SecretUrl {
 
     /// Wraps any media address, for player tests that play synthetic media
     /// (e.g. `av://lavfi:...`, which is not a standard URL).
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn for_test(url: &str) -> Self {
         Self(url.to_string())
     }

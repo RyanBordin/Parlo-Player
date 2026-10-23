@@ -2965,16 +2965,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "parlo-core"
+version = "0.1.0"
+dependencies = [
+ "icu_normalizer",
+ "icu_properties",
+ "log",
+ "md-5",
+ "rand",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "parlo-player"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
- "icu_normalizer",
- "icu_properties",
  "keyring",
  "libmpv2",
  "log",
  "md-5",
+ "parlo-core",
  "rand",
  "reqwest",
  "rusqlite",
