@@ -32,7 +32,7 @@ use crate::player::audio::{self, AudioDevice, ReplayGainData};
 use crate::player::listen::ListenTracker;
 use crate::player::queue::{Queue, Removed, RepeatMode, Step};
 use crate::player::resume::{self, SavedQueue, ServerQueue, Source};
-use crate::player::{Media, PlaybackStatus, Player, PlayerError, PlayerEvent, Track};
+use crate::player::{AudioEngine, EngineError, Media, PlaybackStatus, Player, PlayerError, PlayerEvent, Track};
 use crate::settings::AppSettings;
 use crate::state::{ActiveLibrary, AppState};
 use crate::subsonic::{SubsonicClient, SubsonicError};
@@ -118,7 +118,7 @@ pub struct QueueState {
 #[derive(Debug, Error)]
 pub enum PlaybackError {
     #[error(transparent)]
-    Player(#[from] PlayerError),
+    Player(#[from] EngineError),
 
     #[error(transparent)]
     Db(#[from] DbError),
@@ -161,7 +161,7 @@ struct SaveJob {
 }
 
 pub struct Playback {
-    player: Player,
+    player: Box<dyn AudioEngine>,
     inner: Mutex<Inner>,
     app: AppHandle,
     saver: mpsc::Sender<SaveJob>,
@@ -174,9 +174,9 @@ impl Playback {
     /// Starts the player and the thread that handles its events.
     pub fn start(app: AppHandle) -> Result<Arc<Self>, PlayerError> {
         let (tx, rx) = mpsc::channel::<PlayerEvent>();
-        let player = Player::new(&[], move |event| {
+        let player: Box<dyn AudioEngine> = Box::new(Player::new(&[], move |event| {
             let _ = tx.send(event);
-        })?;
+        })?);
 
         let (saver, jobs) = mpsc::channel::<SaveJob>();
         let writing = Arc::new(Mutex::new(()));
@@ -208,8 +208,8 @@ impl Playback {
         Ok(playback)
     }
 
-    pub fn player(&self) -> &Player {
-        &self.player
+    pub fn player(&self) -> &dyn AudioEngine {
+        self.player.as_ref()
     }
 
     /// Replaces the queue with a context and plays from `start_index`
@@ -392,7 +392,7 @@ impl Playback {
         if let Some(track) = self.lock().tracks.get_mut(song_id) {
             track.starred = starred;
         }
-        self.player.update_track(song_id, |track| track.starred = starred);
+        self.player.update_track(song_id, &|track| track.starred = starred);
     }
 
     pub fn queue_state(&self) -> QueueState {
@@ -973,7 +973,7 @@ fn tracks_of(found: HashMap<String, SongSummary>, mut gains: HashMap<String, Rep
         .collect()
 }
 
-fn log_error(context: &str, error: &PlayerError) {
+fn log_error(context: &str, error: &EngineError) {
     log::warn!("{context}: {error}");
 }
 

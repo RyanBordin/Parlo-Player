@@ -14,6 +14,7 @@
 
 // The engine-independent parts live in parlo-core, shared with Android.
 use parlo_core::player::events;
+pub use parlo_core::player::engine::{AudioEngine, EngineError, Media};
 pub use parlo_core::player::{audio, listen, queue, resume};
 
 pub use audio::{AudioDevice, Gain};
@@ -27,7 +28,6 @@ use libmpv2::events::{Event, PropertyData};
 use libmpv2::{Format, Mpv, mpv_end_file_reason, mpv_error};
 use thiserror::Error;
 
-use crate::subsonic::SecretUrl;
 use events::{PositionThrottle, clamp_volume};
 
 /// Options for an audio-only player without window, terminal output or user config.
@@ -58,13 +58,6 @@ const OBSERVE_DURATION: u64 = 2;
 const OBSERVE_PAUSE: u64 = 3;
 const OBSERVE_PLAYLIST_POS: u64 = 4;
 const OBSERVE_DEVICES: u64 = 5;
-
-/// What mpv loads for a song: its stream and how loud it plays.
-#[derive(Debug, Clone)]
-pub struct Media {
-    pub url: SecretUrl,
-    pub gain: Gain,
-}
 
 #[derive(Debug, Error)]
 pub enum PlayerError {
@@ -481,6 +474,82 @@ fn event_loop(mpv: &Mpv, shared: &Mutex<Shared>, sink: &EventSink) {
 }
 
 /// Short English description of an mpv error code. Never includes the URL.
+impl From<PlayerError> for EngineError {
+    fn from(error: PlayerError) -> Self {
+        EngineError(error.to_string())
+    }
+}
+
+/// The desktop engine: each call goes to the methods above.
+impl AudioEngine for Player {
+    fn play(
+        &self,
+        track: Track,
+        media: &Media,
+        next: Option<(Track, Media)>,
+        start_secs: f64,
+        paused: bool,
+    ) -> Result<(), EngineError> {
+        Ok(Player::play(self, track, media, next, start_secs, paused)?)
+    }
+
+    fn set_next(&self, next: Option<(Track, Media)>) -> Result<(), EngineError> {
+        Ok(Player::set_next(self, next)?)
+    }
+
+    fn apply_gain(&self, gain: &Gain) -> Result<(), EngineError> {
+        Ok(Player::apply_gain(self, gain)?)
+    }
+
+    fn set_audio_device(&self, name: &str) -> Result<(), EngineError> {
+        Ok(Player::set_audio_device(self, name)?)
+    }
+
+    fn set_exclusive(&self, exclusive: bool) -> Result<(), EngineError> {
+        Ok(Player::set_exclusive(self, exclusive)?)
+    }
+
+    fn audio_devices(&self) -> Vec<AudioDevice> {
+        Player::audio_devices(self)
+    }
+
+    fn toggle_pause(&self) -> Result<(), EngineError> {
+        Ok(Player::toggle_pause(self)?)
+    }
+
+    fn seek(&self, seconds: f64) -> Result<(), EngineError> {
+        Ok(Player::seek(self, seconds)?)
+    }
+
+    fn seek_by(&self, seconds: f64) -> Result<(), EngineError> {
+        Ok(Player::seek_by(self, seconds)?)
+    }
+
+    fn set_volume(&self, volume: f64) -> Result<f64, EngineError> {
+        Ok(Player::set_volume(self, volume)?)
+    }
+
+    fn toggle_mute(&self) -> Result<bool, EngineError> {
+        Ok(Player::toggle_mute(self)?)
+    }
+
+    fn update_track(&self, song_id: &str, change: &dyn Fn(&mut Track)) {
+        Player::update_track(self, song_id, change)
+    }
+
+    fn stop(&self) -> Result<(), EngineError> {
+        Ok(Player::stop(self)?)
+    }
+
+    fn state(&self) -> PlayerState {
+        Player::state(self)
+    }
+
+    fn position(&self) -> f64 {
+        Player::position(self)
+    }
+}
+
 fn describe_mpv_error(error: &libmpv2::Error) -> String {
     let libmpv2::Error::Raw(code) = error else {
         return format!("{error}");
@@ -505,6 +574,7 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::subsonic::SecretUrl;
     use std::sync::mpsc;
 
     fn track(id: &str, title: &str) -> Track {

@@ -32,7 +32,7 @@ use crate::playback::{self, GroupsPlayMode, Placement, Playback, PlaybackError, 
 use crate::playlists::{self, AddOutcome, Duplicates, PlaylistEntry};
 use crate::player::AudioDevice;
 use crate::player::queue::RepeatMode;
-use crate::player::{PlayerError, PlayerState};
+use crate::player::{EngineError, PlayerState};
 use crate::session::{self, SavedSession, SessionError};
 use crate::settings::{self, AppSettings, SettingsError};
 use crate::state::{ActiveLibrary, AppState, PlaybackSlot};
@@ -67,8 +67,8 @@ pub enum CommandError {
     TestLibrary,
 }
 
-impl From<PlayerError> for CommandError {
-    fn from(error: PlayerError) -> Self {
+impl From<EngineError> for CommandError {
+    fn from(error: EngineError) -> Self {
         Self::Playback { detail: error.to_string() }
     }
 }
