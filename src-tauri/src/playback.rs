@@ -32,7 +32,7 @@ use crate::player::audio::{self, AudioDevice, ReplayGainData};
 use crate::player::listen::ListenTracker;
 use crate::player::queue::{Queue, Removed, RepeatMode, Step};
 use crate::player::resume::{self, SavedQueue, ServerQueue, Source};
-use crate::player::{AudioEngine, EngineError, Media, PlaybackStatus, Player, PlayerError, PlayerEvent, Track};
+use crate::player::{AudioEngine, EngineError, Media, PlaybackStatus, PlayerEvent, Track};
 use crate::settings::AppSettings;
 use crate::state::{ActiveLibrary, AppState};
 use crate::subsonic::{SubsonicClient, SubsonicError};
@@ -172,11 +172,17 @@ pub struct Playback {
 
 impl Playback {
     /// Starts the player and the thread that handles its events.
-    pub fn start(app: AppHandle) -> Result<Arc<Self>, PlayerError> {
+    pub fn start(app: AppHandle) -> Result<Arc<Self>, EngineError> {
         let (tx, rx) = mpsc::channel::<PlayerEvent>();
-        let player: Box<dyn AudioEngine> = Box::new(Player::new(&[], move |event| {
+        #[cfg(desktop)]
+        let player: Box<dyn AudioEngine> = Box::new(crate::player::Player::new(&[], move |event| {
             let _ = tx.send(event);
         })?);
+        #[cfg(mobile)]
+        let player: Box<dyn AudioEngine> = {
+            drop(tx);
+            Box::new(crate::player::NoEngine)
+        };
 
         let (saver, jobs) = mpsc::channel::<SaveJob>();
         let writing = Arc::new(Mutex::new(()));

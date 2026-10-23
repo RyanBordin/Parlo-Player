@@ -2,7 +2,8 @@
 //!
 //! - Server URL and username: `config.json` in the app config directory.
 //! - Password: the OS credential store (Windows Credential Manager, Secret
-//!   Service on Linux). It is never written to disk by the app.
+//!   Service on Linux). It is never written to disk by the app. Android has
+//!   no store yet, so there the password is not kept and each launch asks again.
 
 use std::fmt;
 use std::fs;
@@ -13,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const CONFIG_FILE: &str = "config.json";
-const KEYRING_SERVICE: &str = "com.ryanbordin.parloplayer";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,8 +47,9 @@ pub enum SessionError {
     #[error("invalid config file: {0}")]
     InvalidConfig(#[from] serde_json::Error),
 
+    #[cfg(desktop)]
     #[error("credential store error: {0}")]
-    CredentialStore(#[from] keyring::Error),
+    CredentialStore(String),
 }
 
 /// Returns the saved session, or `None` if there is no config file or its
@@ -58,21 +59,16 @@ pub fn load(config_dir: &Path) -> Result<Option<StoredLogin>, SessionError> {
         return Ok(None);
     };
 
-    match keyring_entry(&session)?.get_password() {
-        Ok(password) => Ok(Some(StoredLogin { session, password })),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.into()),
-    }
+    Ok(credentials::get(&session)?.map(|password| StoredLogin { session, password }))
 }
 
 /// Stores the password in the credential store, then writes the config file.
 /// If the config file cannot be written, the password is removed again.
 pub fn save(config_dir: &Path, session: &SavedSession, password: &str) -> Result<(), SessionError> {
-    let entry = keyring_entry(session)?;
-    entry.set_password(password)?;
+    credentials::set(session, password)?;
 
     if let Err(e) = write_config(config_dir, session) {
-        let _ = entry.delete_credential();
+        let _ = credentials::delete(session);
         return Err(e);
     }
     Ok(())
@@ -83,10 +79,7 @@ pub fn save(config_dir: &Path, session: &SavedSession, password: &str) -> Result
 pub fn clear(config_dir: &Path) -> Result<(), SessionError> {
     // A corrupted config file is still deleted, even if we can't find its password.
     if let Ok(Some(session)) = read_config(config_dir) {
-        match keyring_entry(&session)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(e) => return Err(e.into()),
-        }
+        credentials::delete(&session)?;
     }
 
     match fs::remove_file(config_dir.join(CONFIG_FILE)) {
@@ -96,11 +89,64 @@ pub fn clear(config_dir: &Path) -> Result<(), SessionError> {
     }
 }
 
-// One entry per user and server. On Windows it appears in Credential Manager
-// as "{username}@{server_url}.com.ryanbordin.parloplayer".
-fn keyring_entry(session: &SavedSession) -> Result<keyring::Entry, SessionError> {
-    let account = format!("{}@{}", session.username, session.server_url);
-    Ok(keyring::Entry::new(KEYRING_SERVICE, &account)?)
+/// The OS credential store, through the `keyring` crate.
+#[cfg(desktop)]
+mod credentials {
+    use super::{SavedSession, SessionError};
+
+    const KEYRING_SERVICE: &str = "com.ryanbordin.parloplayer";
+
+    impl From<keyring::Error> for SessionError {
+        fn from(error: keyring::Error) -> Self {
+            SessionError::CredentialStore(error.to_string())
+        }
+    }
+
+    // One entry per user and server. On Windows it appears in Credential Manager
+    // as "{username}@{server_url}.com.ryanbordin.parloplayer".
+    fn entry(session: &SavedSession) -> Result<keyring::Entry, SessionError> {
+        let account = format!("{}@{}", session.username, session.server_url);
+        Ok(keyring::Entry::new(KEYRING_SERVICE, &account)?)
+    }
+
+    pub fn get(session: &SavedSession) -> Result<Option<String>, SessionError> {
+        match entry(session)?.get_password() {
+            Ok(password) => Ok(Some(password)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn set(session: &SavedSession, password: &str) -> Result<(), SessionError> {
+        Ok(entry(session)?.set_password(password)?)
+    }
+
+    /// Succeeds if there was nothing to remove.
+    pub fn delete(session: &SavedSession) -> Result<(), SessionError> {
+        match entry(session)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+/// No credential store on mobile yet (Android Keystore comes later): the
+/// password is never kept, so `load` finds no login and the app asks again.
+#[cfg(mobile)]
+mod credentials {
+    use super::{SavedSession, SessionError};
+
+    pub fn get(_: &SavedSession) -> Result<Option<String>, SessionError> {
+        Ok(None)
+    }
+
+    pub fn set(_: &SavedSession, _: &str) -> Result<(), SessionError> {
+        Ok(())
+    }
+
+    pub fn delete(_: &SavedSession) -> Result<(), SessionError> {
+        Ok(())
+    }
 }
 
 fn read_config(config_dir: &Path) -> Result<Option<SavedSession>, SessionError> {
@@ -181,6 +227,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(desktop)]
     #[ignore = "writes to the real OS credential store"]
     fn save_load_clear_with_real_credential_store() {
         let dir = temp_dir("keyring");
@@ -197,10 +244,7 @@ mod tests {
 
         clear(&dir).unwrap();
         assert_eq!(load(&dir).unwrap(), None);
-        assert!(matches!(
-            keyring_entry(&session).unwrap().get_password(),
-            Err(keyring::Error::NoEntry)
-        ));
+        assert_eq!(credentials::get(&session).unwrap(), None);
         let _ = fs::remove_dir_all(&dir);
     }
 }
