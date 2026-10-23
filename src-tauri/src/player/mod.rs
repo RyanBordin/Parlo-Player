@@ -12,11 +12,9 @@
 //! Each song is loaded with its own ReplayGain options (see `audio`); the
 //! output device and the exclusive mode apply to the whole player.
 
-pub mod audio;
-mod events;
-pub mod listen;
-pub mod queue;
-pub mod resume;
+// The engine-independent parts live in parlo-core, shared with Android.
+use parlo_core::player::events;
+pub use parlo_core::player::{audio, listen, queue, resume};
 
 pub use audio::{AudioDevice, Gain};
 pub use events::{PlaybackError, PlaybackStatus, PlayerEvent, PlayerState, Position, Track};

@@ -114,7 +114,7 @@ npm run tauri build
 | Comando | O que faz |
 | --- | --- |
 | `npm run check` | Checagem de tipos da interface (Svelte + TypeScript) |
-| `cargo test` (dentro de `src-tauri/`) | Testes do backend Rust |
+| `cargo test --workspace` (dentro de `src-tauri/`) | Testes do backend Rust (app e `parlo-core`) |
 | `cargo test -- --ignored` | Testes de integração contra um servidor real (copie `.env.example` para `.env` e preencha) |
 | `npm run tauri:perf` | Abre uma biblioteca fictícia de 50 mil faixas para medir desempenho |
 | `npm run licenses` | Gera a lista de licenças de terceiros |
@@ -140,11 +140,15 @@ Parlo-Player/
 ├── src/                  Interface (Svelte + TypeScript)
 │   ├── routes/           Telas (Início, Álbuns, Artistas, Músicas, Favoritos, Busca...)
 │   └── lib/              Componentes, estado e chamadas ao backend
-├── src-tauri/            Backend (Rust)
-│   └── src/
-│       ├── subsonic/     Cliente da API Subsonic (token + salt, endpoints, tipos)
-│       ├── player/       Reprodução com libmpv, fila, gapless, retomada
-│       ├── db/           Cache SQLite (biblioteca, histórico, preferências)
+├── src-tauri/            Backend (Rust, workspace Cargo)
+│   ├── crates/parlo-core/  Lógica compartilhada com o app Android (sem Tauri, sem libmpv)
+│   │   └── src/
+│   │       ├── subsonic/ Cliente da API Subsonic (token + salt, endpoints, tipos)
+│   │       ├── player/   Fila, retomada, tempo ouvido, ReplayGain
+│   │       ├── db/       Cache SQLite (biblioteca, histórico, preferências)
+│   │       └── settings.rs  Preferências do app
+│   └── src/              App desktop
+│       ├── player/       Reprodução com libmpv, gapless
 │       ├── sync/         Sincronização completa e leve com o servidor
 │       └── covers/       Cache de capas no disco
 ├── messages/             Textos da interface (pt-BR e en)

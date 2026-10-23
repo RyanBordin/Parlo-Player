@@ -166,7 +166,7 @@ impl SongSort {
     /// Last added first.
     pub const DEFAULT: SongSort = SongSort { key: SongSortKey::Added, direction: SortDirection::Desc, seed: 0 };
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn new(key: SongSortKey, direction: SortDirection) -> Self {
         Self { key, direction, seed: 0 }
     }

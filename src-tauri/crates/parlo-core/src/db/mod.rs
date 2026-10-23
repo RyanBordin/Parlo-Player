@@ -54,7 +54,7 @@ pub fn open(path: &Path) -> DbResult<Connection> {
 }
 
 /// In-memory database with the full schema, for tests.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 pub fn open_in_memory() -> DbResult<Connection> {
     let mut conn = Connection::open_in_memory()?;
     migrations::migrate(&mut conn)?;
