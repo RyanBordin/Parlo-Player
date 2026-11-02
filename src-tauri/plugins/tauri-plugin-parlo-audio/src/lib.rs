@@ -14,7 +14,7 @@ use tauri::Runtime;
 #[cfg(target_os = "android")]
 mod android;
 #[cfg(target_os = "android")]
-pub use android::{AudioPlayer, Error, PlayRequest};
+pub use android::{AudioPlayer, Error, PlayRequest, Song};
 
 /// What the Media3 player is doing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -37,6 +37,8 @@ pub enum AudioEvent {
     Position { position_ms: u64, duration_ms: Option<u64> },
     /// The position was moved (from the app or the system media controls).
     Seeked,
+    /// ExoPlayer moved on to the queued next song, without a gap.
+    Advanced,
     /// ExoPlayer could not play the song (network, format...).
     Error { message: String },
 }
@@ -67,6 +69,7 @@ mod tests {
             AudioEvent::Position { position_ms: 1500, duration_ms: None }
         );
         assert_eq!(parse(r#"{"kind":"seeked"}"#), AudioEvent::Seeked);
+        assert_eq!(parse(r#"{"kind":"advanced"}"#), AudioEvent::Advanced);
         assert_eq!(
             parse(r#"{"kind":"error","message":"Source error"}"#),
             AudioEvent::Error { message: "Source error".into() }

@@ -17,16 +17,24 @@ const PLUGIN_IDENTIFIER: &str = "com.ryanbordin.parloplayer.audio";
 #[error("Media3 player: {0}")]
 pub struct Error(#[from] tauri::plugin::mobile::PluginInvokeError);
 
-/// A song to load. `url` has credentials: the Kotlin side never logs it.
+/// A song for the player. `url` has credentials: the Kotlin side never logs it.
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlayRequest<'a> {
+pub struct Song<'a> {
     pub url: &'a str,
     /// Shown by the system media controls.
     pub title: &'a str,
     pub artist: Option<&'a str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayRequest<'a> {
+    #[serde(flatten)]
+    pub song: Song<'a>,
     pub start_ms: u64,
     pub paused: bool,
+    /// Queued after `song`, so ExoPlayer moves to it without a gap.
+    pub next: Option<Song<'a>>,
 }
 
 pub struct AudioPlayer<R: Runtime>(PluginHandle<R>);
@@ -45,6 +53,11 @@ impl<R: Runtime> AudioPlayer<R> {
     /// Replaces whatever is playing with this song.
     pub fn play(&self, request: &PlayRequest<'_>) -> Result<(), Error> {
         self.run("play", request)
+    }
+
+    /// Replaces the song queued after the current one (`None` removes it).
+    pub fn set_next(&self, next: Option<&Song<'_>>) -> Result<(), Error> {
+        self.run("setNext", json!({ "next": next }))
     }
 
     pub fn toggle_pause(&self) -> Result<(), Error> {
