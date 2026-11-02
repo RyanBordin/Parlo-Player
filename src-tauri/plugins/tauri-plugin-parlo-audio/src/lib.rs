@@ -39,6 +39,8 @@ pub enum AudioEvent {
     Seeked,
     /// ExoPlayer moved on to the queued next song, without a gap.
     Advanced,
+    /// Next or previous from the notification, lock screen or headset buttons.
+    Skip { next: bool },
     /// ExoPlayer could not play the song (network, format...).
     Error { message: String },
 }
@@ -70,6 +72,7 @@ mod tests {
         );
         assert_eq!(parse(r#"{"kind":"seeked"}"#), AudioEvent::Seeked);
         assert_eq!(parse(r#"{"kind":"advanced"}"#), AudioEvent::Advanced);
+        assert_eq!(parse(r#"{"kind":"skip","next":false}"#), AudioEvent::Skip { next: false });
         assert_eq!(
             parse(r#"{"kind":"error","message":"Source error"}"#),
             AudioEvent::Error { message: "Source error".into() }

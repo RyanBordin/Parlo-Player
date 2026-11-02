@@ -178,6 +178,8 @@ fn handle(audio: &AudioPlayer<Wry>, shared: &Mutex<Shared>, sink: &EventSink, ev
 
         AudioEvent::Seeked => vec![PlayerEvent::Seeked],
 
+        AudioEvent::Skip { next } => vec![PlayerEvent::SkipRequested { next }],
+
         // Without a gap, as mpv does with its preloaded entry: the status stays.
         AudioEvent::Advanced => {
             let mut shared = lock(shared);

@@ -144,10 +144,14 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
   }
 
   override fun load(webView: WebView) {
+    PlaybackService.onSkip = { next ->
+      main.post { send(JSObject().put("kind", "skip").put("next", next)) }
+    }
     main.post { connect() }
   }
 
   override fun onDestroy(activity: AppCompatActivity) {
+    PlaybackService.onSkip = null
     main.removeCallbacks(positionTicker)
     controller?.release()
     controller = null
