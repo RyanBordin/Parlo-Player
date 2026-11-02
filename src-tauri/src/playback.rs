@@ -178,11 +178,10 @@ impl Playback {
         let player: Box<dyn AudioEngine> = Box::new(crate::player::Player::new(&[], move |event| {
             let _ = tx.send(event);
         })?);
-        #[cfg(mobile)]
-        let player: Box<dyn AudioEngine> = {
-            drop(tx);
-            Box::new(crate::player::NoEngine)
-        };
+        #[cfg(target_os = "android")]
+        let player: Box<dyn AudioEngine> = Box::new(crate::player::Media3Engine::new(&app, move |event| {
+            let _ = tx.send(event);
+        })?);
 
         let (saver, jobs) = mpsc::channel::<SaveJob>();
         let writing = Arc::new(Mutex::new(()));

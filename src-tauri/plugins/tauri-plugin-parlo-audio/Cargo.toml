@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-parlo-audio"
+version = "0.1.0"
+description = "Audio playback for Parlo Player on Android, with Media3 (ExoPlayer + MediaSession)"
+authors = ["Ryan Bordin"]
+edition = "2024"
+# Tauri's plugin build script needs `links` to pass the Android project to the app.
+links = "tauri-plugin-parlo-audio"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0.21"
+log = "0.4.34"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
