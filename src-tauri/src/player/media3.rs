@@ -5,8 +5,9 @@
 //! mpv one (status, song, position, volume) and turns the plugin's events into
 //! `PlayerEvent`s on its own thread, so the queue logic is the same on both.
 //!
-//! No gapless yet: the next song is only remembered, and loaded when the
-//! current one ends (the plugin reports that as `Ended`).
+//! Gapless: like mpv's playlist, ExoPlayer's always holds the current song
+//! and, when there is one, the next song of the queue. ExoPlayer moves to it
+//! without a gap and the plugin reports `Advanced`.
 
 use super::audio::{AudioDevice, Gain};
 use super::events::{PlaybackError, PlaybackStatus, PlayerEvent, PlayerState, Position, Track, clamp_volume};
@@ -17,7 +18,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 
 use tauri::{AppHandle, Manager, Wry};
-use tauri_plugin_parlo_audio::{AudioEvent, AudioPlayer, AudioState, PlayRequest};
+use tauri_plugin_parlo_audio::{AudioEvent, AudioPlayer, AudioState, PlayRequest, Song};
 
 type EventSink = Arc<dyn Fn(PlayerEvent) + Send + Sync>;
 
@@ -25,7 +26,7 @@ type EventSink = Arc<dyn Fn(PlayerEvent) + Send + Sync>;
 struct Shared {
     status: PlaybackStatus,
     track: Option<Track>,
-    /// Loaded when the current song ends.
+    /// Queued after the current song in ExoPlayer's playlist.
     next: Option<(Track, Media)>,
     volume: f64,
     muted: bool,
@@ -96,40 +97,56 @@ impl Media3Engine {
     }
 }
 
-/// Loads `track` in the Kotlin player. The URL has credentials: it only goes to the plugin.
-fn load(audio: &AudioPlayer<Wry>, track: &Track, media: &Media, start_secs: f64, paused: bool) -> Result<(), EngineError> {
+/// The URL has credentials: it only goes to the plugin.
+fn song<'a>(track: &'a Track, media: &'a Media) -> Song<'a> {
+    Song { url: media.url.expose(), title: &track.title, artist: track.artist.as_deref() }
+}
+
+/// Loads `track` in the Kotlin player, with `next` queued after it.
+fn load(
+    audio: &AudioPlayer<Wry>,
+    track: &Track,
+    media: &Media,
+    next: Option<&(Track, Media)>,
+    start_secs: f64,
+    paused: bool,
+) -> Result<(), EngineError> {
     let request = PlayRequest {
-        url: media.url.expose(),
-        title: &track.title,
-        artist: track.artist.as_deref(),
+        song: song(track, media),
         start_ms: (start_secs * 1000.0) as u64,
         paused,
+        next: next.map(|(track, media)| song(track, media)),
     };
     audio.play(&request).map_err(engine_error)
 }
 
+/// Loads the remembered next song itself, when ExoPlayer could not move to
+/// it (the current song failed). The queue then queues the following one.
+/// `None` when there is no next song.
+fn advance(audio: &AudioPlayer<Wry>, shared: &Mutex<Shared>) -> Option<Vec<PlayerEvent>> {
+    let mut shared = lock(shared);
+    let (track, media) = shared.next.take()?;
+    shared.start(track.clone(), PlaybackStatus::Loading, 0.0);
+    let state = PlayerEvent::State(shared.snapshot());
+    drop(shared);
+    if let Err(error) = load(audio, &track, &media, None, 0.0, false) {
+        log::warn!("media3: could not load the next song: {error}");
+    }
+    Some(vec![PlayerEvent::Advanced(track), state])
+}
+
 fn handle(audio: &AudioPlayer<Wry>, shared: &Mutex<Shared>, sink: &EventSink, event: AudioEvent) {
     let emitted = match event {
-        AudioEvent::State { state: AudioState::Ended } => {
-            let mut shared = lock(shared);
-            match shared.next.take() {
-                Some((track, media)) => {
-                    shared.start(track.clone(), PlaybackStatus::Loading, 0.0);
-                    let state = PlayerEvent::State(shared.snapshot());
-                    drop(shared);
-                    if let Err(error) = load(audio, &track, &media, 0.0, false) {
-                        log::warn!("media3: could not load the next song: {error}");
-                    }
-                    vec![PlayerEvent::Advanced(track), state]
-                }
-                None => {
-                    shared.status = PlaybackStatus::Idle;
-                    let finished = shared.track.as_ref().map(|t| PlayerEvent::Finished { song_id: t.id.clone() });
-                    let state = PlayerEvent::State(shared.snapshot());
-                    finished.into_iter().chain([state]).collect()
-                }
+        AudioEvent::State { state: AudioState::Ended } => match advance(audio, shared) {
+            Some(events) => events,
+            None => {
+                let mut shared = lock(shared);
+                shared.status = PlaybackStatus::Idle;
+                let finished = shared.track.as_ref().map(|t| PlayerEvent::Finished { song_id: t.id.clone() });
+                let state = PlayerEvent::State(shared.snapshot());
+                finished.into_iter().chain([state]).collect()
             }
-        }
+        },
 
         AudioEvent::State { state } => {
             let status = match state {
@@ -161,17 +178,33 @@ fn handle(audio: &AudioPlayer<Wry>, shared: &Mutex<Shared>, sink: &EventSink, ev
 
         AudioEvent::Seeked => vec![PlayerEvent::Seeked],
 
-        AudioEvent::Error { message } => {
+        // Without a gap, as mpv does with its preloaded entry: the status stays.
+        AudioEvent::Advanced => {
             let mut shared = lock(shared);
-            if shared.status == PlaybackStatus::Idle {
+            let Some((track, _)) = shared.next.take() else {
                 return;
-            }
-            shared.status = PlaybackStatus::Idle;
-            let song_id = shared.track.as_ref().map(|t| t.id.clone());
-            vec![
-                PlayerEvent::Error(PlaybackError { song_id, detail: message }),
-                PlayerEvent::State(shared.snapshot()),
-            ]
+            };
+            let status = shared.status;
+            shared.start(track.clone(), status, 0.0);
+            vec![PlayerEvent::Advanced(track), PlayerEvent::State(shared.snapshot())]
+        }
+
+        // Like mpv: report the failed song, then move on to the next one if
+        // there is one (`message` comes from ExoPlayer and has no URL).
+        AudioEvent::Error { message } => {
+            let failed = {
+                let mut shared = lock(shared);
+                if shared.status == PlaybackStatus::Idle {
+                    return;
+                }
+                shared.status = PlaybackStatus::Idle;
+                let song_id = shared.track.as_ref().map(|t| t.id.clone());
+                vec![
+                    PlayerEvent::Error(PlaybackError { song_id, detail: message }),
+                    PlayerEvent::State(shared.snapshot()),
+                ]
+            };
+            failed.into_iter().chain(advance(audio, shared).unwrap_or_default()).collect()
         }
     };
 
@@ -198,10 +231,13 @@ impl AudioEngine for Media3Engine {
             shared.snapshot()
         };
         (self.sink)(PlayerEvent::State(state));
-        load(&self.audio, &track, media, start_secs, paused)
+        let next = lock(&self.shared).next.clone();
+        load(&self.audio, &track, media, next.as_ref(), start_secs, paused)
     }
 
     fn set_next(&self, next: Option<(Track, Media)>) -> Result<(), EngineError> {
+        let request = next.as_ref().map(|(track, media)| song(track, media));
+        self.audio.set_next(request.as_ref()).map_err(engine_error)?;
         lock(&self.shared).next = next;
         Ok(())
     }
