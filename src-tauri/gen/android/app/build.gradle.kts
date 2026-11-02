@@ -18,7 +18,9 @@ android {
     compileSdk = 37
     namespace = "com.ryanbordin.parloplayer"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        // Navidrome often runs on plain http on the home network: the API calls
+        // and Media3's streams must reach it in release builds too.
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "com.ryanbordin.parloplayer"
         minSdk = 24
         targetSdk = 37
