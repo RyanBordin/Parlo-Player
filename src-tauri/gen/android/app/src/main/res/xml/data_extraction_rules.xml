@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and newer. The saved password (encrypted with a key that never
+     leaves this device's Keystore) is useless elsewhere: keep it out. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="parlo_credentials.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="parlo_credentials.xml" />
+    </device-transfer>
+</data-extraction-rules>

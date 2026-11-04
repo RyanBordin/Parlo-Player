@@ -3001,6 +3001,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-opener",
  "tauri-plugin-parlo-audio",
+ "tauri-plugin-parlo-credentials",
  "thiserror 2.0.21",
  "tokio",
 ]
@@ -4514,6 +4515,17 @@ name = "tauri-plugin-parlo-audio"
 version = "0.1.0"
 dependencies = [
  "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tauri-plugin-parlo-credentials"
+version = "0.1.0"
+dependencies = [
  "serde",
  "serde_json",
  "tauri",

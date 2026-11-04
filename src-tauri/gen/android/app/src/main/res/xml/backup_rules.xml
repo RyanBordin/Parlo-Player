@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older. The saved password (encrypted with a key that never
+     leaves this device's Keystore) is useless elsewhere: keep it out. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="parlo_credentials.xml" />
+</full-backup-content>
