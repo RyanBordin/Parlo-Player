@@ -6,7 +6,7 @@
 >
 > Sempre que este documento for fornecido como contexto, todas as decisões de interface (UI), experiência do usuário (UX), fluxos de navegação, regras de reprodução, integrações de API e tecnologias abaixo devem ser estritamente respeitadas.
 
-**Última atualização:** 22/10/2026
+**Última atualização:** 04/11/2026
 
 ---
 
@@ -84,6 +84,8 @@ O projeto nasce da análise prática de vários players, extraindo os pontos for
 | Controles de mídia do sistema | crate **`souvlaki`** (MPRIS no Linux, SMTC no Windows) |
 | Banco local | **SQLite** |
 | Senha | Cofre do sistema (Gerenciador de Credenciais no Windows, Secret Service no Linux) |
+| Áudio no Android | **Media3 / ExoPlayer** (Kotlin, num plugin Tauri), com `MediaSessionService` |
+| Senha no Android | **Android Keystore** (a senha fica cifrada com uma chave que nunca sai do Keystore) |
 
 * O áudio é tocado **pelo backend Rust**, nunca pela tag `<audio>` do webview (evita limitações do WebKitGTK no Linux).
 * Botões na miniatura da barra de tarefas do Windows (Thumbnail Toolbar) são implementados no backend Rust via API do Windows.
@@ -92,7 +94,7 @@ O projeto nasce da análise prática de vários players, extraindo os pontos for
 
 ## 4. Arquitetura Global da Janela (App Shell)
 
-A Barra Lateral Esquerda e a Barra de Reprodução Inferior estão **sempre visíveis** em qualquer tela:
+A Barra Lateral Esquerda e a Barra de Reprodução Inferior estão **sempre visíveis** em qualquer tela (no celular, o layout muda: Seção 4.5):
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -264,6 +266,82 @@ Referência visual: tela "Tocando agora" do YouTube Music.
   3. **Álbuns de [Artista]:** carrossel de cards de álbum.
   4. **Mesmo gênero ([Gênero]):** carrossel de cards de álbum do gênero.
   * Clicar numa faixa toca a lista daquela seção a partir dela (Seção 5.1); clicar num álbum abre a página dele.
+
+### 4.5. Layout de Celular (Android)
+
+O app Android tem as mesmas funções do desktop (escopo da Seção 14) e o mesmo visual (Seção 1.1). Muda só a forma de navegar e de tocar na tela. Referências: **YouTube Music** (estrutura) e **Symfonium** (usabilidade).
+
+```
++-------------------------------+
+| (status do Android)           |
+| [<]  Título da página   [👤]  | <- Topbar
+|                               |
+|                               |
+|        CONTEÚDO DA PÁGINA     |
+|                               |
+|                               |
++-------------------------------+
+| [Capa] Título        (▶)  ▷| | <- Mini Player
+|        Artista                |
+| ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ |
++-------------------------------+
+| [🏠]    [🔍]    [📚]    [❤️]  | <- Abas
+| Início  Busca  Biblioteca Fav.|
++-------------------------------+
+| (barra de gestos do Android)  |
++-------------------------------+
+```
+
+#### Quando usar
+
+* O layout de celular entra quando a tela tem **menos de ~700px de largura**. A partir disso, vale o layout de desktop (Seções 4.1 a 4.4), que serve para tablet deitado. A largura mínima de 1000px (Seção 4.3) vale só para a janela do desktop.
+* **Área segura:** nada fica embaixo da barra de status nem da barra de gestos do Android. A Topbar começa abaixo da barra de status, e as abas ficam acima da barra de gestos.
+
+#### Abas (no lugar da barra lateral)
+
+Exatamente **4 abas**, nesta ordem:
+
+1. **`Início`** — Seção 6.1.
+2. **`Busca`** — Seção 6.9, com o campo de busca no topo da página. No celular não existe Ctrl+K, então a busca ganha uma aba fixa.
+3. **`Biblioteca`** — abas no topo da página: **Músicas** (6.3), **Álbuns** (6.4), **Artistas** (6.6) e **Playlists**. Playlists é a lista da zona inferior da barra lateral (Seção 4.2), com o botão **`+ Nova playlist`** no topo. A aba escolhida é lembrada.
+4. **`Favoritos`** — Seção 6.2.
+
+* A aba ativa usa o mesmo estilo do item ativo da barra lateral (pílula cinza escura, ícone e texto em branco).
+* **Baixados** `[v0.2]` entra como aba da Biblioteca quando existir.
+* Tocar na aba já ativa volta ao topo da página dela.
+
+#### Topbar
+
+* Título da página e, nas páginas internas (álbum, artista, playlist), uma seta de voltar à esquerda.
+* **Perfil** à direita: abre **Configurações** (Seção 6.10), o servidor e a conta, e **Sair**.
+* O **gesto de voltar** do Android volta para a página anterior. Na primeira página, leva o app para o fundo e a música continua (Seção 12.2).
+
+#### Mini Player (no lugar da Player Bar)
+
+* Fica acima das abas, em todas as telas, e só aparece quando há uma fila.
+* Mostra a capa, o título e o artista da faixa atual, **Play/Pause** e **Próxima**, com uma linha fina de progresso na base.
+* Tocar em qualquer outro ponto abre o **Tocando Agora**.
+* Volume pelos botões físicos do celular (não há controle de volume na tela).
+
+#### Tocando Agora (tela cheia)
+
+Sobe cobrindo a tela inteira, inclusive as abas.
+
+* **Topo:** seta **˅** para fechar (o gesto de voltar também fecha) e o contexto "Tocando de: [contexto]".
+* **Capa** grande, quadrada, com o brilho ambiente da Seção 4.4 atrás da tela inteira.
+* **Título** e **artista** (clicável → página do artista, fechando a tela), com **Favoritar** ao lado.
+* **Progresso:** tempo decorrido, barra arrastável e tempo total.
+* **Transporte:** Aleatório, Anterior, **Play/Pause** em destaque, Próxima, Repetir.
+* **Ações:** Adicionar à playlist e menu `...` da faixa atual.
+* **A Seguir, Letra e Relacionados:** as mesmas 3 abas da Seção 4.4, numa **gaveta que sobe por baixo** ao tocar no nome da aba ou arrastá-la para cima. Na A Seguir, reordenar pela alça à direita da linha; remover pelo `...` da linha.
+
+#### Toque no lugar do mouse
+
+* **Toque** faz o que o clique faz (Seção 5.1: tocar uma faixa toca o contexto inteiro).
+* **Menu `...`:** cada linha e card mostra o botão `...` sempre visível, porque não existe hover. O conteúdo é o da Seção 8.
+* **Seleção múltipla:** **segurar** uma faixa entra no modo de seleção (como no Symfonium); depois, cada toque marca ou desmarca. Uma barra no topo mostra "N faixas selecionadas", com as ações da Seção 8.1 e um **X** para sair. O gesto de voltar também sai.
+* O que no desktop aparece só ao passar o mouse (ícone de play sobre a capa, botões da linha) fica sempre visível ou passa para o menu `...`.
+* Atalhos de teclado e a roda do mouse não se aplicam.
 
 ---
 
@@ -695,6 +773,7 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 * **Windows:** SMTC (painel de mídia, teclas de mídia, tela de bloqueio) e **botões na miniatura da barra de tarefas** (Anterior, Play/Pause, Próxima) `[v0.2]`.
 * **Segundo plano:** fechar a janela **não encerra** o app; ele continua tocando, com ícone e controles na bandeja. Na primeira vez, uma notificação avisa o usuário. Para encerrar: "Sair" no menu da bandeja.
 * **Atalhos:** Espaço (play/pause), Ctrl+K (busca), Ctrl+B (abrir/fechar Tocando Agora), Ctrl+→ / Ctrl+← (próxima/anterior), ← / → (±5 s).
+* **Android:** controles na notificação, na tela de bloqueio e nos botões do fone (Anterior e Próxima passam pela fila do app). Pausa ao desconectar o fone e durante ligações, voltando sozinho no fim da ligação. Continua tocando com a tela apagada e ao sair do app pelo gesto de voltar ou pelo botão Home. Fechar o app pela lista de recentes **para a música** (limitação do Tauri, que não recria a tela no mesmo processo).
 * `[Depois]` Discord Rich Presence.
 
 ### 12.3. Desempenho (metas)
@@ -838,3 +917,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 22/10/2026 | Player Bar redesenhada pelo autor, simétrica em 5 zonas: faixa atual; Adicionar à playlist, Repetir e Aleatório; transporte; Favoritar, Volume (slider em popover) e `...`; próxima faixa espelhada à direita. Seta ▲/▼ removida. Sem rótulo na próxima faixa; clicar nela toca a próxima; área vazia abre/fecha o Tocando Agora; roda do mouse sobre a barra ajusta o volume. |
 | 22/10/2026 | Atalho Ctrl+B abre e fecha o Tocando Agora, para o acesso pelo teclado sem a seta ▲/▼. |
 | 22/10/2026 | Três jeitos de tocar com nomes fixos em todo o app: Tocar tudo, Em ordem aleatória (ordem dos grupos) e **Mix Incrível / Awesome Mix** (todas as faixas misturadas, até 100), que substitui "Mix aleatório" e "Aleatório". O botão Aleatório da Player Bar continua sendo o modo de embaralhar a fila. |
+| 04/11/2026 | Layout de celular (Android) abaixo de ~700px: 4 abas embaixo (Início, Busca, Biblioteca, Favoritos), Configurações no Perfil, Mini Player acima das abas, Tocando Agora em tela cheia com A Seguir/Letra/Relacionados numa gaveta, `...` sempre visível e seleção múltipla segurando uma faixa. Referências: YouTube Music e Symfonium. |
