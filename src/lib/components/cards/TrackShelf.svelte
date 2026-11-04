@@ -17,6 +17,7 @@
     empty,
     columns = 3,
     playAll = true,
+    large = false,
     onerror,
   }: {
     title: string;
@@ -27,6 +28,8 @@
     columns?: number;
     /** The "Play all" button (Home sections). */
     playAll?: boolean;
+    /** The phone Now Playing drawer's bigger lines (spec 4.5). */
+    large?: boolean;
     onerror?: (error: unknown) => void;
   } = $props();
 
@@ -55,7 +58,7 @@
   {#each pages as page, p (p)}
     <ul class="page" style:--columns={shownColumns}>
       {#each page as { song, index } (song.id)}
-        <li><TrackRow {song} contextLabel={title} onplay={() => play(index)} /></li>
+        <li><TrackRow {song} contextLabel={title} onplay={() => play(index)} {large} /></li>
       {/each}
     </ul>
   {/each}

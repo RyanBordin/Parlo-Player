@@ -78,3 +78,9 @@ export function activeTab(pathname: string): string {
   if (pathname === "/favorites" || pathname.startsWith("/favorites/")) return "favorites";
   return "home";
 }
+
+/**
+ * Song lines in the phone Now Playing drawer (Up next, Related): a third
+ * bigger than the desktop's, for a finger. Font and icon sizes in pixels.
+ */
+export const PHONE_LIST = { scale: 4 / 3, title: 17, subtitle: 14, icon: 19 } as const;

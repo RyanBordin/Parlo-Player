@@ -23,19 +23,17 @@
   import { getLocale } from "#lib/paraglide/runtime.js";
   import { player, queue } from "#lib/player.svelte.ts";
   import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
-  import { layout } from "#lib/shell/phone.svelte.ts";
+  import { layout, PHONE_LIST } from "#lib/shell/phone.svelte.ts";
 
   /** Near the list's top or bottom edge while dragging, it scrolls. */
   const EDGE = 48;
   const EDGE_SPEED = 12;
 
-  /** Phone (spec 4.5): rows a third bigger, for a finger. */
-  const PHONE_SCALE = 4 / 3;
-
   // List density (spec 6.10).
-  let rowHeight = $derived(Math.round(songRowHeight() * (layout.phone ? PHONE_SCALE : 1)));
-  let coverSize = $derived(Math.round(songCoverSize() * (layout.phone ? PHONE_SCALE : 1)));
-  let iconSize = $derived(layout.phone ? 19 : 16);
+  // Phone (spec 4.5): the drawer's bigger lines.
+  let rowHeight = $derived(Math.round(songRowHeight() * (layout.phone ? PHONE_LIST.scale : 1)));
+  let coverSize = $derived(Math.round(songCoverSize() * (layout.phone ? PHONE_LIST.scale : 1)));
+  let iconSize = $derived(layout.phone ? PHONE_LIST.icon : 16);
   let scroller = $state<HTMLElement>();
   let rows = $state<HTMLElement>();
   let error = $state<ErrorMessage | null>(null);
@@ -231,6 +229,8 @@
       class:touch={layout.phone}
       bind:this={rows}
       style:--cover={`${coverSize}px`}
+      style:--phone-title={`${PHONE_LIST.title}px`}
+      style:--phone-subtitle={`${PHONE_LIST.subtitle}px`}
     >
       <VirtualList {items} height={() => rowHeight} key={(item) => `${item.index}-${item.track.id}`}>
         {#snippet row({ track, index }: (typeof items)[number])}
@@ -498,12 +498,12 @@
   }
 
   .touch .title {
-    font-size: 17px;
+    font-size: var(--phone-title);
   }
 
   .touch .artist,
   .touch .duration {
-    font-size: 14px;
+    font-size: var(--phone-subtitle);
   }
 
   .drop {
