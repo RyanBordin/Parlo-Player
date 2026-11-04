@@ -2,8 +2,8 @@
 //!
 //! - Server URL and username: `config.json` in the app config directory.
 //! - Password: the OS credential store (Windows Credential Manager, Secret
-//!   Service on Linux). It is never written to disk by the app. Android has
-//!   no store yet, so there the password is not kept and each launch asks again.
+//!   Service on Linux; on Android, encrypted with a key kept in the Android
+//!   Keystore). It is never written to disk in the clear by the app.
 
 use std::fmt;
 use std::fs;
@@ -47,10 +47,19 @@ pub enum SessionError {
     #[error("invalid config file: {0}")]
     InvalidConfig(#[from] serde_json::Error),
 
-    #[cfg(desktop)]
     #[error("credential store error: {0}")]
     CredentialStore(String),
 }
+
+/// One credential per user and server, the same on every platform.
+fn account(session: &SavedSession) -> String {
+    format!("{}@{}", session.username, session.server_url)
+}
+
+/// Android: the credential store comes from the `parlo-credentials` plugin,
+/// handed over once the app starts.
+#[cfg(target_os = "android")]
+pub use credentials::init as init_credentials;
 
 /// Returns the saved session, or `None` if there is no config file or its
 /// password is missing from the credential store.
@@ -92,7 +101,7 @@ pub fn clear(config_dir: &Path) -> Result<(), SessionError> {
 /// The OS credential store, through the `keyring` crate.
 #[cfg(desktop)]
 mod credentials {
-    use super::{SavedSession, SessionError};
+    use super::{SavedSession, SessionError, account};
 
     const KEYRING_SERVICE: &str = "com.ryanbordin.parloplayer";
 
@@ -105,8 +114,7 @@ mod credentials {
     // One entry per user and server. On Windows it appears in Credential Manager
     // as "{username}@{server_url}.com.ryanbordin.parloplayer".
     fn entry(session: &SavedSession) -> Result<keyring::Entry, SessionError> {
-        let account = format!("{}@{}", session.username, session.server_url);
-        Ok(keyring::Entry::new(KEYRING_SERVICE, &account)?)
+        Ok(keyring::Entry::new(KEYRING_SERVICE, &account(session))?)
     }
 
     pub fn get(session: &SavedSession) -> Result<Option<String>, SessionError> {
@@ -130,22 +138,43 @@ mod credentials {
     }
 }
 
-/// No credential store on mobile yet (Android Keystore comes later): the
-/// password is never kept, so `load` finds no login and the app asks again.
-#[cfg(mobile)]
+/// The Android Keystore, through the `parlo-credentials` plugin.
+#[cfg(target_os = "android")]
 mod credentials {
-    use super::{SavedSession, SessionError};
+    use std::sync::OnceLock;
 
-    pub fn get(_: &SavedSession) -> Result<Option<String>, SessionError> {
-        Ok(None)
+    use tauri::Wry;
+    use tauri_plugin_parlo_credentials::{CredentialStore, Error};
+
+    use super::{SavedSession, SessionError, account};
+
+    static STORE: OnceLock<CredentialStore<Wry>> = OnceLock::new();
+
+    impl From<Error> for SessionError {
+        fn from(error: Error) -> Self {
+            SessionError::CredentialStore(error.to_string())
+        }
     }
 
-    pub fn set(_: &SavedSession, _: &str) -> Result<(), SessionError> {
-        Ok(())
+    pub fn init(store: CredentialStore<Wry>) {
+        let _ = STORE.set(store);
     }
 
-    pub fn delete(_: &SavedSession) -> Result<(), SessionError> {
-        Ok(())
+    fn store() -> Result<&'static CredentialStore<Wry>, SessionError> {
+        STORE.get().ok_or_else(|| SessionError::CredentialStore("the credential store is not ready".into()))
+    }
+
+    pub fn get(session: &SavedSession) -> Result<Option<String>, SessionError> {
+        Ok(store()?.get(&account(session))?)
+    }
+
+    pub fn set(session: &SavedSession, password: &str) -> Result<(), SessionError> {
+        Ok(store()?.set(&account(session), password)?)
+    }
+
+    /// Succeeds if there was nothing to remove.
+    pub fn delete(session: &SavedSession) -> Result<(), SessionError> {
+        Ok(store()?.delete(&account(session))?)
     }
 }
 

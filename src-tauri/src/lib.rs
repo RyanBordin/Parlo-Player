@@ -58,11 +58,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(locale::plugin())
         .manage(Arc::new(AppState::default()));
-    // Android plays through Media3 (see `player::media3`).
+    // Android plays through Media3 (see `player::media3`) and keeps the
+    // password with the Android Keystore (see `session`).
     #[cfg(target_os = "android")]
-    let builder = builder.plugin(tauri_plugin_parlo_audio::init());
+    let builder = builder
+        .plugin(tauri_plugin_parlo_audio::init())
+        .plugin(tauri_plugin_parlo_credentials::init());
     covers::register(builder)
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            session::init_credentials(
+                app.state::<tauri_plugin_parlo_credentials::CredentialStore<tauri::Wry>>().inner().clone(),
+            );
+
             // Spec 6.10: the preferences first, so the cover cache, the player
             // and the page start with them.
             if let Ok(config_dir) = app.path().app_config_dir() {
