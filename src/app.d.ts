@@ -10,6 +10,14 @@ declare global {
       selection?: boolean;
     }
   }
+
+  interface Window {
+    /**
+     * Android Back (MainActivity.kt): goes back in the app's history and
+     * returns true, or returns false on the first page with nothing open.
+     */
+    parloBack?: () => boolean;
+  }
 }
 
 export {};
