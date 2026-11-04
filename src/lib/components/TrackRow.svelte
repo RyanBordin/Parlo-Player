@@ -10,6 +10,8 @@
   import { openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
+  import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
+  import { PHONE_LIST } from "#lib/shell/phone.svelte.ts";
 
   const COVER = 48;
 
@@ -17,12 +19,17 @@
     song,
     contextLabel,
     onplay,
+    large = false,
   }: {
     song: SongSummary;
     /** "Playing from" if its menu starts a new queue. */
     contextLabel: string;
     onplay: () => void;
+    /** The phone Now Playing drawer's bigger line, as in Up next (spec 4.5). */
+    large?: boolean;
   } = $props();
+
+  let coverSize = $derived(large ? Math.round(songCoverSize() * PHONE_LIST.scale) : COVER);
 
   function onmenu(event: MouseEvent) {
     openSongsMenu(event, [song], { label: contextLabel });
@@ -35,9 +42,18 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions (the right click repeats the "..." button) -->
-<div class="row" class:current oncontextmenu={onmenu}>
+<div
+  class="row"
+  class:current
+  class:large
+  style:--large-height={large ? `${Math.round(songRowHeight() * PHONE_LIST.scale)}px` : undefined}
+  style:--large-cover={large ? `${coverSize}px` : undefined}
+  style:--large-title={large ? `${PHONE_LIST.title}px` : undefined}
+  style:--large-subtitle={large ? `${PHONE_LIST.subtitle}px` : undefined}
+  oncontextmenu={onmenu}
+>
   <span class="cover">
-    <Cover id={song.coverArt} size={COVER} radius="var(--radius-sm)" />
+    <Cover id={song.coverArt} size={coverSize} radius="var(--radius-sm)" />
     <span class="play" aria-hidden="true"><Play size={18} fill="currentColor" /></span>
   </span>
   <span class="text">
@@ -56,7 +72,7 @@
     {/if}
   </span>
   <button type="button" class="more" onclick={onmenu} aria-label={m.player_more()} title={m.player_more()} aria-haspopup="menu">
-    <Ellipsis size={18} />
+    <Ellipsis size={large ? PHONE_LIST.icon : 18} />
   </button>
 </div>
 
@@ -195,6 +211,25 @@
   .subtitle {
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
+  }
+
+  /* The phone drawer's bigger line (Up next's sizes). */
+  .large {
+    min-height: var(--large-height);
+    padding-block: 0;
+  }
+
+  .large .cover,
+  :global(:root[data-density="compact"]) .large .cover {
+    width: var(--large-cover);
+  }
+
+  .large .title {
+    font-size: var(--large-title);
+  }
+
+  .large .subtitle {
+    font-size: var(--large-subtitle);
   }
 
   /* Above the title's ::after, so it opens the artist instead of playing. */

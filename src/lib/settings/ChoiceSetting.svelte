@@ -3,6 +3,7 @@
   // keys move the choice), or a drop-down list when there are many (e.g. the
   // audio devices, later). Named by the setting row around it.
   import { getRowLabel } from "#lib/settings/registry.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   /** More choices than this: a drop-down list. */
   const MAX_SEGMENTS = 5;
@@ -31,7 +32,7 @@
 </script>
 
 {#if segmented}
-  <div class="segments" class:disabled role="radiogroup" aria-labelledby={labelledBy} aria-disabled={disabled}>
+  <div class="segments" class:disabled class:phone={layout.phone} role="radiogroup" aria-labelledby={labelledBy} aria-disabled={disabled}>
     {#each choices as choice (choice.value)}
       <label class:checked={choice.value === value}>
         <input type="radio" {name} {disabled} checked={choice.value === value} onchange={() => onchange(choice.value)} />
@@ -86,6 +87,17 @@
     margin: 0;
     opacity: 0;
     cursor: pointer;
+  }
+
+  /* Phone (spec 4.5): narrower buttons; a row too wide scrolls sideways. */
+  .segments.phone {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .segments.phone label {
+    padding: var(--space-1) var(--space-3);
   }
 
   .segments.disabled {

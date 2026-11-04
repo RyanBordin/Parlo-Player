@@ -8,6 +8,7 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { m } from "#lib/paraglide/messages.js";
   import { scrollBehavior } from "#lib/settings/app-settings.svelte.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   let {
     title,
@@ -60,7 +61,7 @@
   });
 </script>
 
-<section class="carousel" aria-label={title}>
+<section class="carousel" class:phone={layout.phone} aria-label={title}>
   <header>
     <h2 class="section-title">{title}</h2>
     {#if count > 0}
@@ -178,6 +179,33 @@
 
   .track > :global(*) {
     scroll-snap-align: start;
+  }
+
+  /* Touch screens scroll the row with a swipe: no arrows. */
+  @media (hover: none) {
+    .arrow {
+      display: none;
+    }
+  }
+
+  /* Phone (spec 4.5): the title on its own line, the buttons below it. */
+  .phone header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .phone .tools :global(.pill) {
+    margin-right: 0;
+  }
+
+  /* The next page of songs peeks at the edge, so a swipe is expected. */
+  .phone .track.paged {
+    gap: var(--space-4);
+  }
+
+  .phone .track.paged > :global(*) {
+    flex-basis: calc(100% - 40px);
   }
 
   .empty {

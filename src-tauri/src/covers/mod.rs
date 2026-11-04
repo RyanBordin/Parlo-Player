@@ -210,6 +210,10 @@ fn image(bytes: Vec<u8>) -> Response<Vec<u8>> {
         .header(header::CONTENT_TYPE, content_type)
         // Covers of an ID do not change: the webview can keep them in memory.
         .header(header::CACHE_CONTROL, "max-age=86400")
+        // The phone Now Playing reads a cover's pixels for its color (spec
+        // 4.5), which a canvas allows only for CORS images. The URL carries
+        // no credentials, so any origin may read it.
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(bytes)
         .unwrap_or_else(|_| status(StatusCode::INTERNAL_SERVER_ERROR))
 }

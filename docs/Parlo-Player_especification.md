@@ -327,10 +327,11 @@ Exatamente **4 abas**, nesta ordem:
 
 Sobe cobrindo a tela inteira, inclusive as abas.
 
-* **Topo:** seta **˅** para fechar (o gesto de voltar também fecha) e o contexto "Tocando de: [contexto]".
-* **Capa** grande, quadrada, com o brilho ambiente da Seção 4.4 atrás da tela inteira.
+* **Topo:** só a seta **˅** para fechar (o gesto de voltar também fecha). O contexto "Tocando de: [contexto]" fica só em A Seguir.
+* **Arrastar:** para baixo, a tela acompanha o dedo e fecha como a **˅** se passar de um limite ou se o gesto for rápido; se não, volta ao lugar. Para cima, abre a gaveta. Não vale na barra de progresso nem com a gaveta aberta (ela fecha arrastando os nomes das abas para baixo).
+* **Capa** grande, quadrada. **Fundo:** a cor predominante da capa (escurecida e menos saturada, para o texto branco ficar legível), forte no topo e fundindo-se no fundo escuro do tema embaixo, sem desfoque nem imagem; troca suave entre faixas (~600 ms). Segue a opção de fundo de Aparência; no desktop continua o brilho ambiente da Seção 4.4.
 * **Título** e **artista** (clicável → página do artista, fechando a tela), com **Favoritar** ao lado.
-* **Progresso:** tempo decorrido, barra arrastável e tempo total.
+* **Progresso:** tempo decorrido, barra arrastável e tempo total. A parte tocada é branca; o resto é um cinza discreto (branco translúcido), visível sobre qualquer cor de fundo.
 * **Transporte:** Aleatório, Anterior, **Play/Pause** em destaque, Próxima, Repetir.
 * **Ações:** Adicionar à playlist e menu `...` da faixa atual.
 * **A Seguir, Letra e Relacionados:** as mesmas 3 abas da Seção 4.4, numa **gaveta que sobe por baixo** ao tocar no nome da aba ou arrastá-la para cima. Na A Seguir, reordenar pela alça à direita da linha; remover pelo `...` da linha.
@@ -918,3 +919,5 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 22/10/2026 | Atalho Ctrl+B abre e fecha o Tocando Agora, para o acesso pelo teclado sem a seta ▲/▼. |
 | 22/10/2026 | Três jeitos de tocar com nomes fixos em todo o app: Tocar tudo, Em ordem aleatória (ordem dos grupos) e **Mix Incrível / Awesome Mix** (todas as faixas misturadas, até 100), que substitui "Mix aleatório" e "Aleatório". O botão Aleatório da Player Bar continua sendo o modo de embaralhar a fila. |
 | 04/11/2026 | Layout de celular (Android) abaixo de ~700px: 4 abas embaixo (Início, Busca, Biblioteca, Favoritos), Configurações no Perfil, Mini Player acima das abas, Tocando Agora em tela cheia com A Seguir/Letra/Relacionados numa gaveta, `...` sempre visível e seleção múltipla segurando uma faixa. Referências: YouTube Music e Symfonium. |
+| 04/11/2026 | Tocando Agora no celular: o brilho com a capa desfocada vira uma cor única, a predominante da capa, em degradê suave sobre o fundo (padrão do YouTube Music). O desktop mantém o brilho ambiente. |
+| 04/11/2026 | Tocando Agora no celular: o degradê cobre a tela inteira; o topo fica só com a **˅** ("Tocando de" só em A Seguir); arrastar para baixo fecha a tela e para cima abre a gaveta; a trilha da barra de progresso em cinza translúcido, como no YouTube Music. |

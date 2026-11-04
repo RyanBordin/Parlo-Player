@@ -6,6 +6,7 @@
   import MixIcon from "#lib/components/icons/MixIcon.svelte";
   import { playContext, playMix, type SongSortKey } from "#lib/api.ts";
   import ColumnPicker from "#lib/components/ColumnPicker.svelte";
+  import { layout } from "#lib/shell/phone.svelte.ts";
   import ListSearch from "#lib/components/ListSearch.svelte";
   import SortSelect from "#lib/components/SortSelect.svelte";
   import TrackTable from "#lib/components/TrackTable.svelte";
@@ -141,7 +142,10 @@
       otherLabel={m.songs_sort_by_column()}
       onredraw={preset === "random" ? drawSongOrder : undefined}
     />
-    <ColumnPicker columns={songsView.columns} onchange={setSongColumns} />
+    <!-- Phone (spec 4.5): the list shows no columns to pick. -->
+    {#if !layout.phone}
+      <ColumnPicker columns={songsView.columns} onchange={setSongColumns} />
+    {/if}
   </div>
 
   {#if error ?? songsView.error}

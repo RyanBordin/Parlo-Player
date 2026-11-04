@@ -10,9 +10,10 @@
   import BestResult, { type BestItem } from "#lib/components/search/BestResult.svelte";
   import { m } from "#lib/paraglide/messages.js";
   import { searchHref } from "#lib/search.svelte.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
-  /** Cover width of the cards, and how many each row shows (as on Home). */
-  const CARD = 160;
+  /** Cover width of the cards (as on Home), and how many each row shows. */
+  let CARD = $derived(layout.phone ? 140 : 160);
   const ROW_SIZE = 20;
 
   let {
@@ -44,7 +45,7 @@
 
 <div class="sections">
   {#if best}
-    <div class="top">
+    <div class="top" class:phone={layout.phone}>
       <section class="best" aria-labelledby="best-title">
         <header>
           <h2 id="best-title" class="section-title">{m.search_best_result()}</h2>
@@ -100,6 +101,11 @@
     grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
     gap: var(--space-6);
     align-items: start;
+  }
+
+  /* Phone (spec 4.5): the songs below the best result. */
+  .top.phone {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* Both titles on one line, as tall as the "See all" pill. */

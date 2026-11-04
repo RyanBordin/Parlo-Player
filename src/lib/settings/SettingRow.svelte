@@ -5,6 +5,7 @@
   // search leaves it out.
   import type { Snippet } from "svelte";
   import { findOption, getSettingsFilter, setRowLabel } from "#lib/settings/registry.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   let {
     option,
@@ -26,7 +27,7 @@
 </script>
 
 {#if filter.shows(option)}
-  <div class="row" class:stacked role="group" aria-labelledby={`${id}-label`} aria-describedby={info.description ? `${id}-text` : undefined}>
+  <div class="row" class:stacked class:phone={layout.phone} role="group" aria-labelledby={`${id}-label`} aria-describedby={info.description ? `${id}-text` : undefined}>
     <div class="text">
       <span class="label" id={`${id}-label`}>{info.label()}</span>
       {#if info.description}
@@ -81,5 +82,21 @@
 
   .stacked .control {
     flex: auto;
+  }
+
+  /* Phone (spec 4.5): the text takes the width; a narrow control (a switch)
+     stays on its right, a wide one (a choice) goes under it. */
+  .row.phone {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .phone:not(.stacked) .text {
+    flex: 1 1 14rem;
+  }
+
+  .phone .control {
+    max-width: 100%;
   }
 </style>

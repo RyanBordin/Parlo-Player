@@ -8,6 +8,7 @@
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
   import { keepRelated, relatedBySong } from "#lib/song-cache.svelte.ts";
 
   /** A song line needs about this much width. */
@@ -54,7 +55,7 @@
     {#if error}<p class="error">{error.message}</p>{/if}
 
     {#if related.similar.songs.length}
-      <TrackShelf title={m.related_similar()} row={related.similar} loaded empty="" {columns} playAll={false} onerror={showError} />
+      <TrackShelf title={m.related_similar()} row={related.similar} loaded empty="" {columns} playAll={false} large={layout.phone} onerror={showError} />
     {/if}
 
     {#if related.artist && related.artistSongs.songs.length}
@@ -64,7 +65,7 @@
         loaded
         empty=""
         {columns}
-        playAll={false}
+        playAll={false} large={layout.phone}
         onerror={showError}
       />
     {/if}

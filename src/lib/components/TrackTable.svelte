@@ -91,7 +91,15 @@
 
   let songCount = $derived(rows.reduce((count, row) => count + (row.kind === "song" ? 1 : 0), 0));
   // The "..." column comes last, when the page has menus.
-  let template = $derived(onmenu ? `${gridColumns(columns)} 40px` : gridColumns(columns));
+  // Phone (spec 4.5): the cover, the title with the artist below, the heart
+  // and "..."; the other columns and their header do not fit. Without covers
+  // (an album) the track number takes the cover's place.
+  let shown = $derived(
+    layout.phone
+      ? columns.filter((column) => column === "title" || column === "favorite" || (column === "number" && !showCover))
+      : columns,
+  );
+  let template = $derived(onmenu ? `${gridColumns(shown)} 40px` : gridColumns(shown));
   // List density (spec 6.10).
   let songHeight = $derived(songRowHeight());
   let coverSize = $derived(songCoverSize());
@@ -333,7 +341,7 @@
       {/if}
       <span class="text">
         <span class="title" title={song.title}>{song.title}</span>
-        {#if song.artist && artistBelow(song)}
+        {#if song.artist && (layout.phone || artistBelow(song))}
           <span class="subtitle" title={song.artist}>
             {#if song.artistId}
               <a href={`/artists/${encodeURIComponent(song.artistId)}`} onclick={stop}>{song.artist}</a>
@@ -389,12 +397,14 @@
 {/snippet}
 
 <div class="table" role="table" aria-rowcount={songCount} style:--columns={template} style:--cover={`${coverSize}px`}>
-  <div class="head grid" role="row">
-    {#each columns as column (column)}
-      {@render header(column)}
-    {/each}
-    {#if onmenu}<div role="columnheader"><span class="visually-hidden">{m.player_more()}</span></div>{/if}
-  </div>
+  {#if !layout.phone}
+    <div class="head grid" role="row">
+      {#each columns as column (column)}
+        {@render header(column)}
+      {/each}
+      {#if onmenu}<div role="columnheader"><span class="visually-hidden">{m.player_more()}</span></div>{/if}
+    </div>
+  {/if}
 
   <VirtualList
     items={rows}
@@ -422,7 +432,7 @@
             oncontextmenu={(event) => onRowContextMenu(event, index)}
             onkeydown={(event) => onRowKeydown(event, song, index)}
           >
-            {#each columns as column (column)}
+            {#each shown as column (column)}
               {@render cell(column, song, index)}
             {/each}
             {#if onmenu}

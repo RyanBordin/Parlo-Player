@@ -5,6 +5,7 @@
   import type { Snippet } from "svelte";
   import Cover from "#lib/components/Cover.svelte";
   import { coverUrl } from "#lib/covers.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   /** Width of the sharp cover. */
   const COVER = 208;
@@ -27,7 +28,7 @@
   let backdrop = $derived(coverArt ? coverUrl(coverArt, 128) : null);
 </script>
 
-<header class="hero">
+<header class="hero" class:phone={layout.phone}>
   {#if backdrop}
     <img class="backdrop" src={backdrop} alt="" aria-hidden="true" />
   {/if}
@@ -108,6 +109,37 @@
 
   .below {
     position: relative;
+  }
+
+  /* Phone (spec 4.5): the cover on top, centered, with the title and the
+     metadata below it. */
+  .phone {
+    padding-top: var(--space-4);
+  }
+
+  .phone .content {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+    text-align: center;
+  }
+
+  .phone .art {
+    width: min(240px, 70vw);
+  }
+
+  .phone .info {
+    align-items: center;
+    width: 100%;
+    padding-bottom: 0;
+  }
+
+  .phone .title {
+    font-size: 28px;
+  }
+
+  .phone .info :global(.meta) {
+    justify-content: center;
   }
 
   /* Metadata lines given by the page. */

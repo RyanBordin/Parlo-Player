@@ -23,15 +23,17 @@
   import { getLocale } from "#lib/paraglide/runtime.js";
   import { player, queue } from "#lib/player.svelte.ts";
   import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
-  import { layout } from "#lib/shell/phone.svelte.ts";
+  import { layout, PHONE_LIST } from "#lib/shell/phone.svelte.ts";
 
   /** Near the list's top or bottom edge while dragging, it scrolls. */
   const EDGE = 48;
   const EDGE_SPEED = 12;
 
   // List density (spec 6.10).
-  let rowHeight = $derived(songRowHeight());
-  let coverSize = $derived(songCoverSize());
+  // Phone (spec 4.5): the drawer's bigger lines.
+  let rowHeight = $derived(Math.round(songRowHeight() * (layout.phone ? PHONE_LIST.scale : 1)));
+  let coverSize = $derived(Math.round(songCoverSize() * (layout.phone ? PHONE_LIST.scale : 1)));
+  let iconSize = $derived(layout.phone ? PHONE_LIST.icon : 16);
   let scroller = $state<HTMLElement>();
   let rows = $state<HTMLElement>();
   let error = $state<ErrorMessage | null>(null);
@@ -206,7 +208,7 @@
 <svelte:window onkeydown={onWindowKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions (Esc for the rows inside) -->
-<div class="up-next" bind:this={scroller} onkeydown={onListKeydown}>
+<div class="up-next" class:phone={layout.phone} bind:this={scroller} onkeydown={onListKeydown}>
   {#if queue.tracks.length === 0}
     <p class="empty">{m.up_next_empty()}</p>
   {:else}
@@ -227,6 +229,8 @@
       class:touch={layout.phone}
       bind:this={rows}
       style:--cover={`${coverSize}px`}
+      style:--phone-title={`${PHONE_LIST.title}px`}
+      style:--phone-subtitle={`${PHONE_LIST.subtitle}px`}
     >
       <VirtualList {items} height={() => rowHeight} key={(item) => `${item.index}-${item.track.id}`}>
         {#snippet row({ track, index }: (typeof items)[number])}
@@ -267,7 +271,7 @@
               title={m.player_more()}
               aria-haspopup="menu"
             >
-              <Ellipsis size={16} />
+              <Ellipsis size={iconSize} />
             </button>
             <button
               type="button"
@@ -289,7 +293,7 @@
               aria-label={m.up_next_drag()}
               title={m.up_next_drag()}
             >
-              <GripVertical size={16} />
+              <GripVertical size={iconSize} />
             </button>
           </div>
         {/snippet}
@@ -485,6 +489,21 @@
 
   .touch .remove {
     display: none;
+  }
+
+  /* The header on the drawer's own gray, not the page's black. */
+  .phone header {
+    padding-left: var(--space-2);
+    background: var(--color-surface);
+  }
+
+  .touch .title {
+    font-size: var(--phone-title);
+  }
+
+  .touch .artist,
+  .touch .duration {
+    font-size: var(--phone-subtitle);
   }
 
   .drop {

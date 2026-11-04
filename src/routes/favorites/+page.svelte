@@ -16,11 +16,12 @@
   import { dropUnstarred, favorites, favoritesCount, isStarredNow, refreshFavorites } from "#lib/favorites.svelte.ts";
   import { openSongsMenu } from "#lib/menu/menus.ts";
   import { m } from "#lib/paraglide/messages.js";
+  import { layout } from "#lib/shell/phone.svelte.ts";
   import { startLightSync, syncState } from "#lib/sync.svelte.ts";
   import type { ColumnId, TableRow } from "#lib/track-columns.ts";
 
-  /** Cover width of the cards. */
-  const CARD = 160;
+  /** Cover width of the cards; a bit smaller on the phone (spec 4.5). */
+  let CARD = $derived(layout.phone ? 140 : 160);
   /** Songs in the table; "See all" has the rest. */
   const TABLE_SIZE = 10;
   const COLUMNS: ColumnId[] = ["number", "title", "artist", "album", "duration", "favorite"];

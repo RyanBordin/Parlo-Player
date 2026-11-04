@@ -13,11 +13,13 @@
   import { describeError } from "#lib/errors.ts";
   import { home, homeLayout, refreshHome, type HomeRowId } from "#lib/home.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
+  import { layout } from "#lib/shell/phone.svelte.ts";
   import { syncState } from "#lib/sync.svelte.ts";
 
-  /** Cover width of the standard and the large ("Listen again") cards. */
-  const CARD = 160;
-  const LARGE_CARD = 200;
+  /** Cover width of the standard and the large ("Listen again") cards;
+   * a bit smaller on the phone (spec 4.5). */
+  let CARD = $derived(layout.phone ? 140 : 160);
+  let LARGE_CARD = $derived(layout.phone ? 160 : 200);
 
   // The last data shows at once; then each opening and each sync refresh it.
   $effect(() => {
