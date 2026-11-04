@@ -23,6 +23,7 @@
   import { getLocale } from "#lib/paraglide/runtime.js";
   import { player, queue } from "#lib/player.svelte.ts";
   import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   /** Near the list's top or bottom edge while dragging, it scrolls. */
   const EDGE = 48;
@@ -220,7 +221,13 @@
       <p class="error">{error.message}</p>
     {/if}
 
-    <div class="rows" class:dragging={drag !== null} bind:this={rows} style:--cover={`${coverSize}px`}>
+    <div
+      class="rows"
+      class:dragging={drag !== null}
+      class:touch={layout.phone}
+      bind:this={rows}
+      style:--cover={`${coverSize}px`}
+    >
       <VirtualList {items} height={() => rowHeight} key={(item) => `${item.index}-${item.track.id}`}>
         {#snippet row({ track, index }: (typeof items)[number])}
           {@const current = index === queue.currentIndex}
@@ -264,7 +271,7 @@
             </button>
             <button
               type="button"
-              class="tool"
+              class="tool remove"
               onclick={(event) => {
                 event.stopPropagation();
                 run(() => removeFromQueue([index]));
@@ -462,6 +469,22 @@
   .tool:focus-visible,
   .lifted .tool {
     opacity: 1;
+  }
+
+  /* Phone (spec 4.5): no hover, so "..." and the handle are always there,
+     bigger for a finger; removing is in "...". */
+  .touch .row {
+    grid-template-columns: var(--cover) minmax(0, 1fr) auto 40px 40px;
+  }
+
+  .touch .tool {
+    width: 40px;
+    height: 40px;
+    opacity: 1;
+  }
+
+  .touch .remove {
+    display: none;
   }
 
   .drop {

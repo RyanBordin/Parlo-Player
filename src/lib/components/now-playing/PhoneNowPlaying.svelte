@@ -3,6 +3,10 @@
   // the Back gesture close it: opening adds a history entry for the same page,
   // so Back takes it away. The big cover sits on its glow (spec 4.4), then the
   // song, the progress, the transport and the song's actions.
+  //
+  // Up next, Lyrics and Related (spec 4.4) are named at the bottom: a tap on
+  // a name, or dragging it up, opens them in a drawer over almost the whole
+  // screen. Dragging down, a tap on the open tab or Back close it.
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
@@ -16,22 +20,46 @@
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { onMount } from "svelte";
   import { cubicOut } from "svelte/easing";
-  import { goto, pushState } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { cycleRepeat, next, previous, seek, setShuffle, setSongStarred, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import CoverGlow from "#lib/components/now-playing/CoverGlow.svelte";
+  import Lyrics from "#lib/components/now-playing/Lyrics.svelte";
+  import Related from "#lib/components/now-playing/Related.svelte";
+  import UpNext from "#lib/components/now-playing/UpNext.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
   import { openMenu } from "#lib/menu/menu.svelte.ts";
   import { addToPlaylistMenu, openSongsMenu } from "#lib/menu/menus.ts";
-  import { closeNowPlaying } from "#lib/now-playing.svelte.ts";
+  import {
+    closeNowPlaying,
+    NOW_PLAYING_TABS,
+    nowPlaying,
+    setNowPlayingTab,
+    type NowPlayingTab,
+  } from "#lib/now-playing.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player, queue } from "#lib/player.svelte.ts";
   import { appSettings, reducedMotion } from "#lib/settings/app-settings.svelte.ts";
 
   /** The cover is about the screen's width: asked in high resolution. */
   const COVER_SIZE = 600;
+  /** How far a finger moves on the tab names before it counts as a drag. */
+  const DRAG_PX = 30;
+
+  const LABELS: Record<NowPlayingTab, () => string> = {
+    upNext: m.now_playing_up_next,
+    lyrics: m.now_playing_lyrics,
+    related: m.now_playing_related,
+  };
+
+  let sheetOpen = $state(false);
+  /** ˅ with the drawer open goes back two entries at once: close everything. */
+  let closingAll = false;
+  /** Where a drag on the tab names started; a drag is not also a tap. */
+  let dragStart: number | null = null;
+  let dragged = false;
 
   let dragging = $state<number | null>(null);
   let commandError = $state<ErrorMessage | null>(null);
@@ -64,19 +92,69 @@
   // One entry per page: one left by an earlier opening (closed by a link)
   // serves again.
   onMount(() => {
-    if (!page.state.nowPlaying) pushState("", { nowPlaying: true });
+    if (!page.state.nowPlaying) addEntry({ nowPlaying: true });
   });
 
   function close() {
-    if (page.state.nowPlaying) history.back();
+    if (sheetOpen && page.state.sheet) {
+      closingAll = true;
+      history.go(-2);
+    } else if (page.state.nowPlaying) {
+      history.back();
+    } else {
+      closeNowPlaying();
+    }
+  }
+
+  /** Back: the drawer first, then the screen. */
+  function onpopstate() {
+    if (sheetOpen && !closingAll) sheetOpen = false;
     else closeNowPlaying();
+  }
+
+  function openSheet(tab: NowPlayingTab) {
+    setNowPlayingTab(tab);
+    if (sheetOpen) return;
+    sheetOpen = true;
+    addEntry({ nowPlaying: true, sheet: true });
+  }
+
+  /** A history entry for the same page (a shallow one), for Back to take away. */
+  function addEntry(state: App.PageState) {
+    goto(page.url.href, { state, shallow: true });
+  }
+
+  function closeSheet() {
+    if (page.state.sheet) history.back();
+    else sheetOpen = false;
+  }
+
+  function onTabClick(tab: NowPlayingTab) {
+    if (dragged) return;
+    if (sheetOpen && nowPlaying.tab === tab) closeSheet();
+    else openSheet(tab);
+  }
+
+  function onTabsPointerDown(event: PointerEvent) {
+    dragStart = event.clientY;
+    dragged = false;
+  }
+
+  function onTabsPointerUp(event: PointerEvent) {
+    if (dragStart === null) return;
+    const moved = event.clientY - dragStart;
+    dragStart = null;
+    if (Math.abs(moved) < DRAG_PX) return;
+    dragged = true;
+    if (moved < 0 && !sheetOpen) openSheet(nowPlaying.tab);
+    else if (moved > 0 && sheetOpen) closeSheet();
   }
 
   /** The artist's page replaces the entry, so Back does not land here again. */
   function openArtist(event: MouseEvent, href: string) {
     event.preventDefault();
     closeNowPlaying();
-    goto(href, { replaceState: true });
+    goto(href, { replace: true });
   }
 
   async function run(action: () => Promise<unknown>) {
@@ -136,8 +214,36 @@
   }
 </script>
 
-<!-- Any Back while open (the gesture, or ˅ below) closes it. -->
-<svelte:window onpopstate={closeNowPlaying} />
+<!-- Any Back while open (the gesture, or ˅ below) closes the drawer, then the screen. -->
+<svelte:window {onpopstate} />
+
+{#snippet tabNames()}
+  <!-- Tap a name, or drag the names up (down to close). -->
+  <div
+    class="sheet-tabs"
+    role="tablist"
+    tabindex="-1"
+    aria-label={m.now_playing_tabs()}
+    onpointerdown={onTabsPointerDown}
+    onpointerup={onTabsPointerUp}
+    onpointercancel={() => (dragStart = null)}
+  >
+    <span class="grabber" aria-hidden="true"></span>
+    <div class="names-row">
+      {#each NOW_PLAYING_TABS as tab (tab)}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={sheetOpen && nowPlaying.tab === tab}
+          class:active={sheetOpen && nowPlaying.tab === tab}
+          onclick={() => onTabClick(tab)}
+        >
+          {LABELS[tab]()}
+        </button>
+      {/each}
+    </div>
+  </div>
+{/snippet}
 
 <section class="now-playing" class:glowing transition:rise aria-label={m.now_playing_tabs()}>
   {#if glowing}
@@ -268,6 +374,26 @@
       <Ellipsis />
     </button>
   </div>
+
+  <div class="dock">
+    {@render tabNames()}
+  </div>
+
+  {#if sheetOpen}
+    <div class="sheet" transition:rise>
+      {@render tabNames()}
+      <div class="sheet-content" role="tabpanel">
+        <!-- Each tab loads only when it is opened. -->
+        {#if nowPlaying.tab === "upNext"}
+          <UpNext />
+        {:else if nowPlaying.tab === "lyrics"}
+          <Lyrics />
+        {:else}
+          <Related />
+        {/if}
+      </div>
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -415,6 +541,82 @@
     border-radius: var(--radius-pill);
     background: var(--color-text);
     color: var(--color-bg);
+  }
+
+  /* The tab names at the bottom of the screen. */
+  .dock {
+    margin-top: auto;
+  }
+
+  /* The drawer: from just below the top bar ("˅ Playing from") to the bottom. */
+  .sheet {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 64px);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-popover);
+  }
+
+  .sheet .sheet-tabs {
+    padding: 0 var(--page-gutter);
+  }
+
+  /* The desktop panels have no side margin of their own. */
+  .sheet-content {
+    flex: 1;
+    min-height: 0;
+    padding: 0 var(--space-4);
+  }
+
+  .sheet-tabs {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+    touch-action: none;
+  }
+
+  .grabber {
+    width: 36px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--color-border-focus);
+  }
+
+  .names-row {
+    width: 100%;
+    display: flex;
+  }
+
+  .names-row button {
+    flex: 1;
+    padding: var(--space-3) var(--space-2);
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .names-row button.active {
+    border-bottom-color: var(--color-text);
+    color: var(--color-text);
+  }
+
+  .glowing .names-row button:not(.active) {
+    color: var(--color-text-on-image);
   }
 
   .slider {

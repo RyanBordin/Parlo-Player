@@ -54,7 +54,9 @@
   // browser does not remember where each page was: keep it per history entry.
   const scrollPositions: number[] = [];
 
-  beforeNavigate(() => {
+  beforeNavigate((navigation) => {
+    // A shallow entry (phone Now Playing, spec 4.5) stays on the same page.
+    if (navigation.shallow) return;
     if (content) scrollPositions[navHistory.index] = content.scrollTop;
     // Spec 4.4: going to another page closes Now Playing.
     closeNowPlaying();
@@ -63,7 +65,7 @@
 
   afterNavigate(async (navigation) => {
     trackNavigation(navigation);
-    if (!content) return;
+    if (!content || navigation.shallow) return;
     if (navigation.type === "popstate") {
       // Back / Forward: where that page was. Pages with kept data (Home,
       // "See more") are already drawn, so the position fits.
