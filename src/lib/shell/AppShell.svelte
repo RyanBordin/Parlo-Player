@@ -1,10 +1,12 @@
 <script lang="ts">
   // App shell (spec 4): sidebar, Topbar over the scrolling content, and the
-  // Player Bar, always visible on every page.
+  // Player Bar, always visible on every page. On the phone (spec 4.5): phone
+  // Topbar, the Mini Player and the tabs at the bottom.
   import { tick, type Snippet } from "svelte";
   import { afterNavigate, beforeNavigate } from "$app/navigation";
   import { restoreQueue, type SavedSession } from "#lib/api.ts";
   import NowPlaying from "#lib/components/now-playing/NowPlaying.svelte";
+  import MiniPlayer from "#lib/components/MiniPlayer.svelte";
   import PerfMeter from "#lib/components/PerfMeter.svelte";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
   import SaveProgress from "#lib/components/SaveProgress.svelte";
@@ -13,7 +15,7 @@
   import { closeMenu } from "#lib/menu/menu.svelte.ts";
   import MenuDialogs from "#lib/menu/MenuDialogs.svelte";
   import { closeNowPlaying, nowPlaying } from "#lib/now-playing.svelte.ts";
-  import { listenToPlayer } from "#lib/player.svelte.ts";
+  import { listenToPlayer, queue } from "#lib/player.svelte.ts";
   import { listenToSaves } from "#lib/saves.svelte.ts";
   import { checkServer } from "#lib/server-info.svelte.ts";
   import { handleShortcut } from "#lib/shortcuts.ts";
@@ -128,11 +130,16 @@
       {/if}
     </div>
   </div>
-  <div class="player">
-    <PlayerBar />
-  </div>
   {#if layout.phone}
+    <!-- Spec 4.5: the Mini Player shows only when there is a queue. -->
+    {#if queue.tracks.length > 0}
+      <MiniPlayer />
+    {/if}
     <PhoneTabs onReselect={scrollToTop} />
+  {:else}
+    <div class="player">
+      <PlayerBar />
+    </div>
   {/if}
 </div>
 
@@ -157,7 +164,9 @@
   .shell.phone {
     min-width: 0;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) var(--player-bar-height) auto;
+    /* Content, then the Mini Player (when there is a queue) and the tabs. */
+    grid-template-rows: minmax(0, 1fr);
+    grid-auto-rows: auto;
   }
 
   /* Spec 4.5: on the tab pages the title is the phone Topbar's only. */
