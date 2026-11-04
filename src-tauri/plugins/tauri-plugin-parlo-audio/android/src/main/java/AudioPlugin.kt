@@ -99,6 +99,7 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
           Player.EVENT_PLAYBACK_STATE_CHANGED,
           Player.EVENT_PLAY_WHEN_READY_CHANGED,
           Player.EVENT_IS_PLAYING_CHANGED,
+          Player.EVENT_PLAYBACK_SUPPRESSION_REASON_CHANGED,
         )
       ) {
         sendState(player)
@@ -203,7 +204,9 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
   fun togglePause(invoke: Invoke) {
     onPlayer(invoke) {
       if (it.mediaItemCount == 0) return@onPlayer
-      if (it.playWhenReady) it.pause() else it.play()
+      // Follows what the app shows: during a call the song shows as paused
+      // and comes back by itself afterwards.
+      if (lastState == "playing" || lastState == "loading") it.pause() else it.play()
     }
   }
 
@@ -269,7 +272,9 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
 
   private fun sendState(player: Player) {
     val state = when (player.playbackState) {
-      Player.STATE_READY -> if (player.playWhenReady) "playing" else "paused"
+      // Not playing while ready and asked to play means the sound is held
+      // back (a phone call took the audio focus): show it as paused.
+      Player.STATE_READY -> if (player.isPlaying) "playing" else "paused"
       Player.STATE_BUFFERING -> if (player.playWhenReady) "loading" else "paused"
       Player.STATE_ENDED -> "ended"
       else -> "idle"
