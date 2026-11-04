@@ -413,8 +413,8 @@
 </section>
 
 <style>
-  /* The cover's color behind the page: full at the top, then melting into
-     the page's background below the controls. A new song's color fades in. */
+  /* The cover's color behind the whole page: full at the top, then darker
+     down to the bottom (the tab names). A new song's color fades in. */
   .tint {
     position: fixed;
     inset: 0;
@@ -422,8 +422,8 @@
     pointer-events: none;
     background-color: var(--tint);
     transition: background-color 600ms ease-out;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 85%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 85%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 25%, rgb(0 0 0 / 45%) 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 25%, rgb(0 0 0 / 45%) 100%);
   }
 
   .tint.instant {
