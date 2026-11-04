@@ -29,13 +29,13 @@
   const EDGE = 48;
   const EDGE_SPEED = 12;
 
-  /** Phone (spec 4.5): rows half again as big, for a finger. */
-  const PHONE_SCALE = 1.5;
+  /** Phone (spec 4.5): rows a third bigger, for a finger. */
+  const PHONE_SCALE = 4 / 3;
 
   // List density (spec 6.10).
   let rowHeight = $derived(Math.round(songRowHeight() * (layout.phone ? PHONE_SCALE : 1)));
   let coverSize = $derived(Math.round(songCoverSize() * (layout.phone ? PHONE_SCALE : 1)));
-  let iconSize = $derived(layout.phone ? 20 : 16);
+  let iconSize = $derived(layout.phone ? 19 : 16);
   let scroller = $state<HTMLElement>();
   let rows = $state<HTMLElement>();
   let error = $state<ErrorMessage | null>(null);
@@ -498,12 +498,12 @@
   }
 
   .touch .title {
-    font-size: 18px;
+    font-size: 17px;
   }
 
   .touch .artist,
   .touch .duration {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .drop {
