@@ -13,7 +13,7 @@
   import { m } from "#lib/paraglide/messages.js";
   import { player, queue } from "#lib/player.svelte.ts";
 
-  const COVER_SIZE = 58;
+  const COVER_SIZE = 51;
 
   let commandError = $state<ErrorMessage | null>(null);
 
@@ -69,13 +69,13 @@
       aria-label={player.status === "playing" ? m.player_pause() : m.player_play()}
     >
       {#if player.status === "playing"}
-        <Pause size={28} fill="currentColor" />
+        <Pause size={25} fill="currentColor" />
       {:else}
-        <Play size={28} fill="currentColor" />
+        <Play size={25} fill="currentColor" />
       {/if}
     </button>
     <button class="icon" type="button" onclick={() => run(next)} disabled={queue.tracks.length === 0} aria-label={m.player_next()}>
-      <SkipForward size={28} />
+      <SkipForward size={25} />
     </button>
   </div>
 
@@ -96,7 +96,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-3) var(--space-3) var(--page-gutter);
+    padding: 10px var(--space-3) 10px var(--page-gutter);
   }
 
   /* The cover fills its box. */
@@ -117,13 +117,13 @@
   }
 
   .title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: var(--font-weight-semibold);
   }
 
   .artist {
     color: var(--color-text-muted);
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .error {
@@ -133,8 +133,8 @@
 
   .icon {
     flex: none;
-    width: 56px;
-    height: 56px;
+    width: 50px;
+    height: 50px;
     display: grid;
     place-items: center;
     border: none;
