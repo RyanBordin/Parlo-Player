@@ -24,7 +24,7 @@
 </script>
 
 <div class="screen">
-  <img class="logo" src={logoWordmark} alt={m.login_logo_alt()} width="120" height="138" />
+  <img class="logo" src={logoWordmark} alt={m.login_logo_alt()} width="120" height="122" />
   <h1>{m.sync_first_title()}</h1>
   <p class="muted">{m.sync_first_subtitle()}</p>
 

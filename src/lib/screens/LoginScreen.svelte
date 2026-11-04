@@ -70,7 +70,7 @@
 
   <form class="card" {onsubmit}>
     <header>
-      <img class="logo" src={logoWordmark} alt={m.login_logo_alt()} width="160" height="184" />
+      <img class="logo" src={logoWordmark} alt={m.login_logo_alt()} width="160" height="163" />
       <h1>{m.login_title()}</h1>
       <p class="muted">{m.login_subtitle()}</p>
     </header>
