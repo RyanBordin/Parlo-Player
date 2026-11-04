@@ -17,6 +17,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Android draws the app under the status bar and the gesture bar: keep the
+   screens clear of them. The insets are 0 on desktop. */
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
 h1,
 h2,
 h3,
