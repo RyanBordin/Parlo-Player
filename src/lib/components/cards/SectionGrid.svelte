@@ -89,6 +89,14 @@
     margin-top: var(--space-6);
   }
 
+  /* Phone (spec 4.5): two cards side by side. */
+  @media (max-width: 699px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-5) var(--space-4);
+    }
+  }
+
   .sentinel {
     height: 1px;
   }

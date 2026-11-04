@@ -240,6 +240,14 @@
     gap: var(--space-6) var(--space-5);
   }
 
+  /* Phone (spec 4.5): two cards side by side. */
+  @media (max-width: 699px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-5) var(--space-4);
+    }
+  }
+
   .message {
     margin-top: var(--space-4);
     color: var(--color-text-muted);
