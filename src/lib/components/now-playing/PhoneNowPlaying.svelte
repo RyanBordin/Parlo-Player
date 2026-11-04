@@ -1,7 +1,7 @@
 <script lang="ts">
   // Now Playing on the phone (spec 4.5): full screen, over the tabs too. ˅ and
   // the Back gesture close it: opening adds a history entry for the same page,
-  // so Back takes it away. The big cover sits on its glow (spec 4.4), then the
+  // so Back takes it away. The big cover over its color (spec 4.5), then the
   // song, the progress, the transport and the song's actions.
   //
   // Up next, Lyrics and Related (spec 4.4) are named at the bottom: a tap on
@@ -24,7 +24,7 @@
   import { page } from "$app/state";
   import { cycleRepeat, next, previous, seek, setShuffle, setSongStarred, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
-  import CoverGlow from "#lib/components/now-playing/CoverGlow.svelte";
+  import { coverColor } from "#lib/cover-color.ts";
   import Lyrics from "#lib/components/now-playing/Lyrics.svelte";
   import Related from "#lib/components/now-playing/Related.svelte";
   import UpNext from "#lib/components/now-playing/UpNext.svelte";
@@ -71,6 +71,22 @@
   let hasQueue = $derived(queue.tracks.length > 0);
   let progress = $derived(player.duration ? Math.min(shownPosition / player.duration, 1) * 100 : 0);
   let glowing = $derived(appSettings.nowPlayingBackdrop && Boolean(track?.coverArt));
+
+  // Background (spec 4.5, after YouTube Music): the cover's predominant color,
+  // strong at the top and fading into the page's background. No color yet
+  // (or none found): the previous one stays.
+  let tint = $state<string | null>(null);
+  $effect(() => {
+    const id = glowing ? track?.coverArt : null;
+    if (!id) return;
+    let current = true;
+    coverColor(id).then((color) => {
+      if (current && color) tint = color;
+    });
+    return () => {
+      current = false;
+    };
+  });
   let repeatLabel = $derived(
     queue.repeat === "one"
       ? m.player_repeat_one()
@@ -247,7 +263,7 @@
 
 <section class="now-playing" class:glowing transition:rise aria-label={m.now_playing_tabs()}>
   {#if glowing}
-    <CoverGlow coverId={track?.coverArt} />
+    <div class="tint" class:instant={reducedMotion()} style:--tint={tint ?? "transparent"} aria-hidden="true"></div>
   {/if}
 
   <header class="top">
@@ -397,6 +413,23 @@
 </section>
 
 <style>
+  /* The cover's color behind the page: full at the top, then melting into
+     the page's background below the controls. A new song's color fades in. */
+  .tint {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: var(--tint);
+    transition: background-color 600ms ease-out;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 85%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 85%);
+  }
+
+  .tint.instant {
+    transition: none;
+  }
+
   /* Over everything, tabs included; clear of the system bars like the app. */
   .now-playing {
     position: fixed;
@@ -473,7 +506,7 @@
     text-decoration: none;
   }
 
-  /* Over the glow the muted gray is too faint on light covers (spec 4.4). */
+  /* Over the cover color the muted gray is too faint (spec 4.4). */
   .glowing .artist,
   .glowing .origin,
   .glowing .times {
