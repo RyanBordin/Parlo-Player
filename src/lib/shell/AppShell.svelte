@@ -6,6 +6,7 @@
   import { afterNavigate, beforeNavigate } from "$app/navigation";
   import { restoreQueue, type SavedSession } from "#lib/api.ts";
   import NowPlaying from "#lib/components/now-playing/NowPlaying.svelte";
+  import PhoneNowPlaying from "#lib/components/now-playing/PhoneNowPlaying.svelte";
   import MiniPlayer from "#lib/components/MiniPlayer.svelte";
   import PerfMeter from "#lib/components/PerfMeter.svelte";
   import PlayerBar from "#lib/components/PlayerBar.svelte";
@@ -122,7 +123,7 @@
       <main class="content" bind:this={content}>
         {@render children()}
       </main>
-      {#if nowPlaying.open}
+      {#if nowPlaying.open && !layout.phone}
         <NowPlaying />
       {/if}
       {#if testLibrary.enabled}
@@ -136,6 +137,10 @@
       <MiniPlayer />
     {/if}
     <PhoneTabs onReselect={scrollToTop} />
+    <!-- Spec 4.5: full screen, over the tabs too. -->
+    {#if nowPlaying.open}
+      <PhoneNowPlaying />
+    {/if}
   {:else}
     <div class="player">
       <PlayerBar />
