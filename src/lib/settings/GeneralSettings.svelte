@@ -9,6 +9,7 @@
   import SettingRow from "#lib/settings/SettingRow.svelte";
   import SettingsGroup from "#lib/settings/SettingsGroup.svelte";
   import { SHORTCUTS } from "#lib/shortcuts.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   const languages = [
     { value: "system" as const, label: m.settings_follow_system() },
@@ -23,22 +24,25 @@
   </SettingRow>
 </SettingsGroup>
 
-<SettingsGroup title={m.settings_group_keyboard()} options={["shortcuts"]}>
-  <SettingRow option="shortcuts" stacked>
-    <dl class="shortcuts">
-      {#each SHORTCUTS as shortcut (shortcut.label())}
-        <div class="shortcut">
-          <dt>
-            {#each shortcut.keys() as key, index (index)}
-              {#if index > 0}<span class="plus">+</span>{/if}<kbd>{key}</kbd>
-            {/each}
-          </dt>
-          <dd>{shortcut.label()}</dd>
-        </div>
-      {/each}
-    </dl>
-  </SettingRow>
-</SettingsGroup>
+<!-- Phone (spec 4.5): no keyboard, no shortcuts. -->
+{#if !layout.phone}
+  <SettingsGroup title={m.settings_group_keyboard()} options={["shortcuts"]}>
+    <SettingRow option="shortcuts" stacked>
+      <dl class="shortcuts">
+        {#each SHORTCUTS as shortcut (shortcut.label())}
+          <div class="shortcut">
+            <dt>
+              {#each shortcut.keys() as key, index (index)}
+                {#if index > 0}<span class="plus">+</span>{/if}<kbd>{key}</kbd>
+              {/each}
+            </dt>
+            <dd>{shortcut.label()}</dd>
+          </div>
+        {/each}
+      </dl>
+    </SettingRow>
+  </SettingsGroup>
+{/if}
 
 <style>
   .shortcuts {

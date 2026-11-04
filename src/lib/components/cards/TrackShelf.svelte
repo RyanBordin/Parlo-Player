@@ -5,6 +5,7 @@
   import Carousel from "#lib/components/cards/Carousel.svelte";
   import PlayAllButton from "#lib/components/cards/PlayAllButton.svelte";
   import TrackRow from "#lib/components/TrackRow.svelte";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   /** Lines per page (spec 6.1, 4.4). */
   const LINES = 4;
@@ -29,7 +30,9 @@
     onerror?: (error: unknown) => void;
   } = $props();
 
-  let pageSize = $derived(columns * LINES);
+  // Phone (spec 4.5): one column per page; the next page peeks at the edge.
+  let shownColumns = $derived(layout.phone ? 1 : columns);
+  let pageSize = $derived(shownColumns * LINES);
 
   let songs = $derived(row?.songs ?? []);
   let pages = $derived(
@@ -50,7 +53,7 @@
   {/snippet}
 
   {#each pages as page, p (p)}
-    <ul class="page" style:--columns={columns}>
+    <ul class="page" style:--columns={shownColumns}>
       {#each page as { song, index } (song.id)}
         <li><TrackRow {song} contextLabel={title} onplay={() => play(index)} /></li>
       {/each}
