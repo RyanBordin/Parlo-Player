@@ -1,17 +1,19 @@
 <script lang="ts">
   // Phone tabs (spec 4.5): exactly Home, Search, Library and Favorites, in
-  // place of the sidebar. Tapping the tab already open goes back to the top
-  // of its page.
+  // place of the sidebar. Tapping the tab already open starts it over: from
+  // an inner page (an artist, an album, "See more") it opens the tab's own
+  // page; on that page it goes back to the top.
   import { page } from "$app/state";
   import { m } from "#lib/paraglide/messages.js";
-  import { activeTab, libraryHref, PHONE_TABS } from "#lib/shell/phone.svelte.ts";
+  import { activeTab, isTabPage, libraryHref, PHONE_TABS } from "#lib/shell/phone.svelte.ts";
 
   let { onReselect }: { onReselect: () => void } = $props();
 
   let active = $derived(activeTab(page.url.pathname));
 
   function onclick(event: MouseEvent, id: string) {
-    if (id !== active) return;
+    // Another tab, or an inner page of this one: the link opens the tab's page.
+    if (id !== active || !isTabPage(page.url.pathname)) return;
     event.preventDefault();
     onReselect();
   }
