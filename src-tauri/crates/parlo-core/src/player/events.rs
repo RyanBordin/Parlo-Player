@@ -79,6 +79,9 @@ pub enum PlayerEvent {
     Seeked,
     /// The audio outputs changed (a device was plugged in or removed).
     DevicesChanged(Vec<AudioDevice>),
+    /// Next or previous from the system media controls (notification, lock
+    /// screen, headset buttons): the queue decides, as for the app's buttons.
+    SkipRequested { next: bool },
 }
 
 /// Limits `player-position` events: mpv reports the position many times per

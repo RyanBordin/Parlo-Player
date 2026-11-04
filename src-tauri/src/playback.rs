@@ -705,6 +705,12 @@ impl Playback {
                     self.report(&error);
                 }
             }
+            PlayerEvent::SkipRequested { next } => {
+                let result = if next { self.next() } else { self.previous() };
+                if let Err(error) = result {
+                    self.report(&error);
+                }
+            }
         }
     }
 
