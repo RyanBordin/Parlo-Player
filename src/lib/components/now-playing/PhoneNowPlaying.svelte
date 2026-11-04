@@ -48,6 +48,9 @@
   /** A swipe down further than this, or faster (px/ms), closes the screen. */
   const CLOSE_PX = 120;
   const CLOSE_SPEED = 0.5;
+  /** A swipe up from below the cover further than this, or faster, opens the drawer. */
+  const OPEN_PX = 80;
+  const OPEN_SPEED = 0.5;
   /** How far a finger moves on the tab names before it counts as a drag. */
   const DRAG_PX = 30;
 
@@ -227,7 +230,7 @@
   $effect(() => {
     const element = screen;
     if (!element) return;
-    let start: { x: number; y: number; time: number } | null = null;
+    let start: { x: number; y: number; time: number; belowCover: boolean } | null = null;
     let direction: "down" | "up" | null = null;
 
     function onTouchStart(event: TouchEvent) {
@@ -235,7 +238,11 @@
       start = null;
       if (sheetOpen || event.touches.length > 1 || target.closest(".slider, .sheet-tabs")) return;
       const touch = event.touches[0];
-      start = { x: touch.clientX, y: touch.clientY, time: event.timeStamp };
+      // Only from the song, the controls or the tab names: on the cover, a
+      // swipe up does nothing.
+      const cover = element?.querySelector(".frame")?.getBoundingClientRect();
+      const belowCover = !cover || touch.clientY >= cover.bottom;
+      start = { x: touch.clientX, y: touch.clientY, time: event.timeStamp, belowCover };
       direction = null;
     }
 
@@ -249,7 +256,7 @@
         const atTop = element.scrollTop <= 0;
         const atBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
         if (dy > 0 && atTop) direction = "down";
-        else if (dy < 0 && atBottom) direction = "up";
+        else if (dy < 0 && atBottom && start.belowCover) direction = "up";
         else {
           start = null;
           return;
@@ -271,7 +278,7 @@
       if (direction === "down") {
         if (dy > CLOSE_PX || (speed > CLOSE_SPEED && dy > DRAG_PX)) close();
         else pull = 0;
-      } else if (direction === "up" && -dy > DRAG_PX) {
+      } else if (direction === "up" && (-dy > OPEN_PX || (-speed > OPEN_SPEED && -dy > DRAG_PX))) {
         openSheet(nowPlaying.tab);
       }
     }
@@ -359,7 +366,9 @@
   </header>
 
   <div class="frame">
-    <Cover id={track?.coverArt} size={COVER_SIZE} radius="var(--radius-lg)" alt={track?.title ?? ""} />
+    <div class="art">
+      <Cover id={track?.coverArt} size={COVER_SIZE} radius="var(--radius-lg)" alt={track?.title ?? ""} />
+    </div>
   </div>
 
   <div class="song">
@@ -545,10 +554,22 @@
   }
 
   /* Square, as wide as the screen allows without pushing the controls away. */
+  /*
+   * The cover takes the room the rest leaves: the screen always fits, with
+   * the tab names above the system's gesture bar, on any phone height. The
+   * square is as big as the box allows (the box is a size container).
+   */
   .frame {
-    align-self: center;
-    width: min(100%, 52vh);
+    flex: 1 1 0;
+    min-height: 120px;
+    display: grid;
+    place-items: center;
     margin-top: var(--space-4);
+    container-type: size;
+  }
+
+  .art {
+    width: min(100cqw, 100cqh);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-cover);
   }
