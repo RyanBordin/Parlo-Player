@@ -7,6 +7,10 @@
   // whose song is not loaded yet shows a placeholder. "..." and a right click
   // open the song's menu; a right click on a selection, the selection's
   // (spec 8.1); the page builds the menu.
+  //
+  // On the phone (spec 4.5) a long press starts the selection instead; then
+  // each tap marks or unmarks a song, and the bar at the top shows the count
+  // and the actions. X, Back or unmarking the last song end it.
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import Clock3 from "@lucide/svelte/icons/clock-3";
@@ -14,8 +18,10 @@
   import Heart from "@lucide/svelte/icons/heart";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { setSongStarred, togglePause, type TrackListSong } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import VirtualList from "#lib/components/VirtualList.svelte";
@@ -23,6 +29,8 @@
   import { m } from "#lib/paraglide/messages.js";
   import { player } from "#lib/player.svelte.ts";
   import { songCoverSize, songRowHeight } from "#lib/settings/app-settings.svelte.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
+  import { touchSelection } from "#lib/touch-selection.svelte.ts";
   import { COLUMNS, gridColumns, type ColumnId, type TableRow, type TableSort } from "#lib/track-columns.ts";
 
   const DISC_HEIGHT = 48;
@@ -74,6 +82,12 @@
   const selected = new SvelteSet<string | number>();
   /** Where the last plain or Ctrl click was, for Shift + click ranges. */
   let anchor: number | null = null;
+  /** Phone: selecting with long presses and taps. */
+  let touchSelecting = $state(false);
+  /** The bar shows this list's selection. */
+  let showingBar = false;
+  /** What pressed the row last: a long press with a finger selects. */
+  let lastPointer = "mouse";
 
   let songCount = $derived(rows.reduce((count, row) => count + (row.kind === "song" ? 1 : 0), 0));
   // The "..." column comes last, when the page has menus.
@@ -93,6 +107,10 @@
 
   function onRowClick(event: MouseEvent | KeyboardEvent, song: TrackListSong, index: number) {
     const key = selectKey(index);
+    if (touchSelecting) {
+      toggleTouch(key);
+      return;
+    }
     if (event.ctrlKey || event.metaKey) {
       if (selected.has(key)) selected.delete(key);
       else selected.add(key);
@@ -122,6 +140,56 @@
     untrack(() => selected.clear());
   });
 
+  // --- Selection with long presses (phone, spec 4.5) ---
+
+  /** A long press: the first one starts the selection, with a history entry for Back. */
+  function startTouchSelection(index: number) {
+    if (!touchSelecting) {
+      touchSelecting = true;
+      selected.clear();
+      goto(page.url.href, { state: { ...page.state, selection: true }, shallow: true });
+    }
+    toggleTouch(selectKey(index));
+  }
+
+  /** Marks or unmarks a song; unmarking the last one ends the selection. */
+  function toggleTouch(key: string | number) {
+    if (selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    if (selected.size === 0) closeTouchSelection();
+  }
+
+  /** X or the last song unmarked: Back takes the entry away, which ends it. */
+  function closeTouchSelection() {
+    if (page.state.selection) history.back();
+    else endTouchSelection();
+  }
+
+  function endTouchSelection() {
+    touchSelecting = false;
+    selected.clear();
+  }
+
+  // The bar at the top shows this list's selection while it lasts.
+  $effect(() => {
+    if (!touchSelecting) {
+      if (showingBar) touchSelection.current = null;
+      showingBar = false;
+      return;
+    }
+    showingBar = true;
+    touchSelection.current = {
+      count: selected.size,
+      ids: () => selectedIndexes().flatMap((index) => songAt(index)?.id ?? []),
+      openMenu: (event) => onmenu?.(event, selectedIndexes()),
+      close: closeTouchSelection,
+    };
+  });
+
+  onDestroy(() => {
+    if (showingBar) touchSelection.current = null;
+  });
+
   /** Positions of the selected songs shown, in the list's order. */
   function selectedIndexes(): number[] {
     const indexes: number[] = [];
@@ -133,6 +201,12 @@
 
   // Spec 5.3, 8.1: on a selection, its menu; elsewhere, that song's alone.
   function onRowContextMenu(event: MouseEvent, index: number) {
+    // Android reports a long press as a context menu.
+    if (layout.phone && lastPointer === "touch") {
+      event.preventDefault();
+      startTouchSelection(index);
+      return;
+    }
     if (!onmenu) return;
     if (selected.has(selectKey(index)) && selected.size > 1) {
       onmenu(event, selectedIndexes());
@@ -196,7 +270,7 @@
   const stop = (event: Event) => event.stopPropagation();
 </script>
 
-<svelte:window onkeydown={onWindowKeydown} />
+<svelte:window onkeydown={onWindowKeydown} onpopstate={() => touchSelecting && endTouchSelection()} />
 
 {#snippet sortIcon(column: ColumnId)}
   {#if isSorted(column) && sort}
@@ -343,6 +417,7 @@
             tabindex="0"
             aria-rowindex={index + 1}
             aria-selected={selected.has(key)}
+            onpointerdown={(event) => (lastPointer = event.pointerType)}
             onclick={(event) => onRowClick(event, song, index)}
             oncontextmenu={(event) => onRowContextMenu(event, index)}
             onkeydown={(event) => onRowKeydown(event, song, index)}
@@ -480,13 +555,16 @@
     color: var(--color-text);
   }
 
-  /* On hover the number becomes a Play icon (spec 5.5). */
-  .song:hover .digits {
-    display: none;
-  }
+  /* On hover the number becomes a Play icon (spec 5.5). Mouse only: on a
+     touch screen the last row tapped would keep it. */
+  @media (hover: hover) {
+    .song:hover .digits {
+      display: none;
+    }
 
-  .song:hover .hover-play {
-    display: grid;
+    .song:hover .hover-play {
+      display: grid;
+    }
   }
 
   /* Current song: accent color (spec 5.5). */
@@ -604,6 +682,15 @@
   .favorite button:hover,
   .more button:hover {
     color: var(--color-text);
+  }
+
+  /* Touch screens have no hover (spec 4.5): the heart and "..." are always
+     there. A tap on the row plays it, so the number stays. */
+  @media (hover: none) {
+    .favorite button,
+    .more button {
+      opacity: 1;
+    }
   }
 
   .visually-hidden {
