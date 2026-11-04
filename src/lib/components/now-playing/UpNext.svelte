@@ -29,9 +29,13 @@
   const EDGE = 48;
   const EDGE_SPEED = 12;
 
+  /** Phone (spec 4.5): rows half again as big, for a finger. */
+  const PHONE_SCALE = 1.5;
+
   // List density (spec 6.10).
-  let rowHeight = $derived(songRowHeight());
-  let coverSize = $derived(songCoverSize());
+  let rowHeight = $derived(Math.round(songRowHeight() * (layout.phone ? PHONE_SCALE : 1)));
+  let coverSize = $derived(Math.round(songCoverSize() * (layout.phone ? PHONE_SCALE : 1)));
+  let iconSize = $derived(layout.phone ? 20 : 16);
   let scroller = $state<HTMLElement>();
   let rows = $state<HTMLElement>();
   let error = $state<ErrorMessage | null>(null);
@@ -206,7 +210,7 @@
 <svelte:window onkeydown={onWindowKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions (Esc for the rows inside) -->
-<div class="up-next" bind:this={scroller} onkeydown={onListKeydown}>
+<div class="up-next" class:phone={layout.phone} bind:this={scroller} onkeydown={onListKeydown}>
   {#if queue.tracks.length === 0}
     <p class="empty">{m.up_next_empty()}</p>
   {:else}
@@ -267,7 +271,7 @@
               title={m.player_more()}
               aria-haspopup="menu"
             >
-              <Ellipsis size={16} />
+              <Ellipsis size={iconSize} />
             </button>
             <button
               type="button"
@@ -289,7 +293,7 @@
               aria-label={m.up_next_drag()}
               title={m.up_next_drag()}
             >
-              <GripVertical size={16} />
+              <GripVertical size={iconSize} />
             </button>
           </div>
         {/snippet}
@@ -485,6 +489,21 @@
 
   .touch .remove {
     display: none;
+  }
+
+  /* The header on the drawer's own gray, not the page's black. */
+  .phone header {
+    padding-left: var(--space-2);
+    background: var(--color-surface);
+  }
+
+  .touch .title {
+    font-size: 18px;
+  }
+
+  .touch .artist,
+  .touch .duration {
+    font-size: 15px;
   }
 
   .drop {
