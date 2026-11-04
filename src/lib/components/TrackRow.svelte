@@ -135,6 +135,14 @@
     color: var(--color-text);
   }
 
+  /* Touch screens have no hover (spec 4.5): "..." is always there. A tap on
+     the row plays it, so the Play cue over the cover is not needed. */
+  @media (hover: none) {
+    .more {
+      opacity: 1;
+    }
+  }
+
   .text {
     min-width: 0;
     display: flex;

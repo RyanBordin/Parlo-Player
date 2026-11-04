@@ -65,4 +65,16 @@
   :global(.card:focus-within .badge) {
     opacity: 0;
   }
+
+  /* Touch screens have no hover (spec 4.5): "..." is always there, in the
+     badge's corner. Playing a card is in "..." too ("Play"). */
+  @media (hover: none) {
+    .more {
+      opacity: 1;
+    }
+
+    :global(.card .badge) {
+      opacity: 0;
+    }
+  }
 </style>

@@ -26,7 +26,9 @@
   import { isTabPage, layout, libraryTabOf } from "#lib/shell/phone.svelte.ts";
   import PhoneTabs from "#lib/shell/PhoneTabs.svelte";
   import PhoneTopbar from "#lib/shell/PhoneTopbar.svelte";
+  import SelectionBar from "#lib/shell/SelectionBar.svelte";
   import Sidebar from "#lib/shell/Sidebar.svelte";
+  import { touchSelection } from "#lib/touch-selection.svelte.ts";
   import Topbar from "#lib/shell/Topbar.svelte";
   import { syncState } from "#lib/sync.svelte.ts";
   import { checkTestLibrary, testLibrary } from "#lib/test-library.svelte.ts";
@@ -113,7 +115,12 @@
   {/if}
   <div class="main">
     {#if layout.phone}
-      <PhoneTopbar {session} />
+      <!-- Spec 4.5: while songs are selected, the selection bar takes the Topbar's place. -->
+      {#if touchSelection.current}
+        <SelectionBar selection={touchSelection.current} />
+      {:else}
+        <PhoneTopbar {session} />
+      {/if}
       {#if libraryTabs}
         <LibraryTabs />
       {/if}
