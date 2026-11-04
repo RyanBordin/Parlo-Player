@@ -42,9 +42,9 @@ O projeto nasce da análise prática de vários players, extraindo os pontos for
 
 ## 1.1. Identidade Visual
 
-* **Logo:** duas claves de sol em branco, uma invertida em relação à outra, cada uma com um arco em índigo que forma um "P". O par forma "PP" (**P**arlo **P**layer) com simetria de rotação.
+* **Logo:** uma clave estilizada em branco, com a haste subindo em índigo e terminando num círculo, como uma nota musical.
 * **Versões:** símbolo sozinho (ícone do app, barra lateral) e símbolo + nome "PARLO PLAYER" em serifa (tela de login, Sobre, instalador).
-* **Arquivos:** `assets/logo/` com as versões com fundo preto e sem fundo (`-SF`), de símbolo e de símbolo + nome.
+* **Arquivos:** `assets/logo/` com as versões com fundo preto e sem fundo (`-SF`), de símbolo e de símbolo + nome. Os ícones do app (desktop em `src-tauri/icons/`, Android em `mipmap-*`) usam o símbolo sobre fundo preto.
 * **Paleta base:**
 
 | Uso | Cor | Contraste |

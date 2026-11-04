@@ -21,7 +21,7 @@
 <aside class="sidebar">
   <!-- Spec 1.1: the symbol with the app name, like Swing Music. -->
   <div class="brand">
-    <img src={symbol} alt="" width="25" height="32" />
+    <img src={symbol} alt="" width="13" height="32" />
     <span>{m.app_name()}</span>
   </div>
 
