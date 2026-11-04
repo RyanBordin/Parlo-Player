@@ -1,11 +1,14 @@
 <script lang="ts">
   // Profile button of the Topbar: who is signed in, on which server, and sign out.
+  // On the phone it also opens Settings, which has no sidebar there (spec 4.5).
   import LogOut from "@lucide/svelte/icons/log-out";
+  import Settings from "@lucide/svelte/icons/settings";
   import UserRound from "@lucide/svelte/icons/user-round";
   import type { SavedSession } from "#lib/api.ts";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { signOut } from "#lib/session.svelte.ts";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   let { session }: { session: SavedSession } = $props();
 
@@ -64,6 +67,12 @@
         </div>
       </dl>
       <hr />
+      {#if layout.phone}
+        <a class="item" href="/settings" onclick={() => (open = false)}>
+          <Settings />
+          <span>{m.nav_settings()}</span>
+        </a>
+      {/if}
       <button class="item" type="button" onclick={onSignOut} disabled={busy}>
         <LogOut />
         <span>{m.home_sign_out()}</span>
@@ -151,6 +160,7 @@
     font: inherit;
     font-size: 14px;
     text-align: left;
+    text-decoration: none;
     cursor: pointer;
   }
 

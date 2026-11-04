@@ -17,7 +17,12 @@
   import { listenToSaves } from "#lib/saves.svelte.ts";
   import { checkServer } from "#lib/server-info.svelte.ts";
   import { handleShortcut } from "#lib/shortcuts.ts";
+  import { page } from "$app/state";
   import { navHistory, trackNavigation } from "#lib/shell/history.svelte.ts";
+  import LibraryTabs from "#lib/shell/LibraryTabs.svelte";
+  import { isTabPage, layout, libraryTabOf } from "#lib/shell/phone.svelte.ts";
+  import PhoneTabs from "#lib/shell/PhoneTabs.svelte";
+  import PhoneTopbar from "#lib/shell/PhoneTopbar.svelte";
   import Sidebar from "#lib/shell/Sidebar.svelte";
   import Topbar from "#lib/shell/Topbar.svelte";
   import { syncState } from "#lib/sync.svelte.ts";
@@ -26,6 +31,17 @@
   let { session, children }: { session: SavedSession; children: Snippet } = $props();
 
   let content = $state<HTMLElement>();
+
+  // Phone (spec 4.5): the Library's sections show their tabs at the top, not
+  // their sub-pages (an album, a playlist).
+  let libraryTabs = $derived(layout.phone && libraryTabOf(page.url.pathname)?.href === page.url.pathname);
+  // The phone Topbar already shows the tab pages' title: not twice.
+  let tabPage = $derived(layout.phone && isTabPage(page.url.pathname));
+
+  /** The tab already open was tapped again: back to the top of its page. */
+  function scrollToTop() {
+    content?.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   // A new sign in starts a new history.
   navHistory.index = 0;
@@ -86,10 +102,19 @@
 <!-- Spec 12.2: playback shortcuts on every page. -->
 <svelte:window onkeydown={onKeydown} />
 
-<div class="shell">
-  <Sidebar />
+<div class="shell" class:phone={layout.phone} class:tab-page={tabPage}>
+  {#if !layout.phone}
+    <Sidebar />
+  {/if}
   <div class="main">
-    <Topbar {session} />
+    {#if layout.phone}
+      <PhoneTopbar {session} />
+      {#if libraryTabs}
+        <LibraryTabs />
+      {/if}
+    {:else}
+      <Topbar {session} />
+    {/if}
     <!-- Now Playing rises over the main viewport; the Topbar stays (spec 4, 4.4). -->
     <div class="viewport">
       <main class="content" bind:this={content}>
@@ -106,6 +131,9 @@
   <div class="player">
     <PlayerBar />
   </div>
+  {#if layout.phone}
+    <PhoneTabs onReselect={scrollToTop} />
+  {/if}
 </div>
 
 <Toasts />
@@ -122,6 +150,19 @@
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) var(--player-bar-height);
     overflow: hidden;
+  }
+
+  /* Phone (spec 4.5): one column, the tabs at the bottom in place of the
+     sidebar. The desktop's 1000px minimum does not apply. */
+  .shell.phone {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) var(--player-bar-height) auto;
+  }
+
+  /* Spec 4.5: on the tab pages the title is the phone Topbar's only. */
+  .shell.tab-page :global(.content .page-title) {
+    display: none;
   }
 
   .main {
