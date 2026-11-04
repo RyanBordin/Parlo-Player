@@ -188,11 +188,16 @@
     }
   }
 
-  /* Phone (spec 4.5): the title on its own line, the buttons below it. */
+  /* Phone (spec 4.5): the title on its own line, the buttons below it on
+     the right, under the thumb of the right hand. */
   .phone header {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-2);
+  }
+
+  .phone .tools {
+    align-self: flex-end;
   }
 
   .phone .tools :global(.pill) {
