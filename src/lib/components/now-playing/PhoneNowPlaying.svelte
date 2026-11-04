@@ -45,6 +45,9 @@
 
   /** The cover is about the screen's width: asked in high resolution. */
   const COVER_SIZE = 600;
+  /** A swipe down further than this, or faster (px/ms), closes the screen. */
+  const CLOSE_PX = 120;
+  const CLOSE_SPEED = 0.5;
   /** How far a finger moves on the tab names before it counts as a drag. */
   const DRAG_PX = 30;
 
@@ -93,13 +96,6 @@
       : queue.repeat === "all"
         ? m.player_repeat_all()
         : m.player_repeat_off(),
-  );
-  let origin = $derived(
-    queue.continuingFrom === null
-      ? m.queue_playing_from({ label: queue.label })
-      : queue.continuingFrom
-        ? m.queue_continuing_from({ app: queue.continuingFrom })
-        : m.queue_continuing_from_other(),
   );
   let error = $derived(
     commandError ?? (player.error ? { message: m.error_playback(), detail: player.error.detail } : null),
@@ -220,12 +216,94 @@
     if (current) openMenu(event, () => addToPlaylistMenu({ kind: "songs", ids: [current.id] }));
   }
 
-  /** Rises from the bottom (and goes back down); at once with reduced motion. */
+  // Swipe on the screen (spec 4.5): down closes it, as ˅ does, following the
+  // finger; up opens the drawer. Not on the progress bar, nor with the drawer
+  // open (its tab names have their own drag).
+  let screen = $state<HTMLElement>();
+  /** How far the screen follows the finger down, in pixels. */
+  let pull = $state(0);
+  let pulling = $state(false);
+
+  $effect(() => {
+    const element = screen;
+    if (!element) return;
+    let start: { x: number; y: number; time: number } | null = null;
+    let direction: "down" | "up" | null = null;
+
+    function onTouchStart(event: TouchEvent) {
+      const target = event.target as Element;
+      start = null;
+      if (sheetOpen || event.touches.length > 1 || target.closest(".slider, .sheet-tabs")) return;
+      const touch = event.touches[0];
+      start = { x: touch.clientX, y: touch.clientY, time: event.timeStamp };
+      direction = null;
+    }
+
+    function onTouchMove(event: TouchEvent) {
+      if (!start || !element) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (direction === null) {
+        if (Math.abs(dy) < DRAG_PX || Math.abs(dy) < Math.abs(dx)) return;
+        const atTop = element.scrollTop <= 0;
+        const atBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
+        if (dy > 0 && atTop) direction = "down";
+        else if (dy < 0 && atBottom) direction = "up";
+        else {
+          start = null;
+          return;
+        }
+      }
+      if (direction === "down") {
+        event.preventDefault();
+        pulling = true;
+        pull = Math.max(0, dy);
+      }
+    }
+
+    function onTouchEnd(event: TouchEvent) {
+      if (!start) return;
+      const dy = (event.changedTouches[0]?.clientY ?? start.y) - start.y;
+      const speed = dy / Math.max(1, event.timeStamp - start.time);
+      start = null;
+      pulling = false;
+      if (direction === "down") {
+        if (dy > CLOSE_PX || (speed > CLOSE_SPEED && dy > DRAG_PX)) close();
+        else pull = 0;
+      } else if (direction === "up" && -dy > DRAG_PX) {
+        openSheet(nowPlaying.tab);
+      }
+    }
+
+    function onTouchCancel() {
+      start = null;
+      pulling = false;
+      pull = 0;
+    }
+
+    element.addEventListener("touchstart", onTouchStart, { passive: true });
+    element.addEventListener("touchmove", onTouchMove, { passive: false });
+    element.addEventListener("touchend", onTouchEnd);
+    element.addEventListener("touchcancel", onTouchCancel);
+    return () => {
+      element.removeEventListener("touchstart", onTouchStart);
+      element.removeEventListener("touchmove", onTouchMove);
+      element.removeEventListener("touchend", onTouchEnd);
+      element.removeEventListener("touchcancel", onTouchCancel);
+    };
+  });
+
+  /**
+   * Rises from the bottom (and goes back down); at once with reduced motion.
+   * Closing after a swipe goes on from where the finger left the screen.
+   */
   function rise(_node: Element) {
+    const from = pull;
     return {
       duration: reducedMotion() ? 0 : 280,
       easing: cubicOut,
-      css: (t: number) => `transform: translateY(${(1 - t) * 100}%)`,
+      css: (t: number) => `transform: translateY(calc(${(1 - t) * 100}% + ${t * from}px))`,
     };
   }
 </script>
@@ -261,7 +339,15 @@
   </div>
 {/snippet}
 
-<section class="now-playing" class:glowing transition:rise aria-label={m.now_playing_tabs()}>
+<section
+  class="now-playing"
+  class:glowing
+  class:pulling
+  bind:this={screen}
+  style:transform={pull ? `translateY(${pull}px)` : undefined}
+  transition:rise
+  aria-label={m.now_playing_tabs()}
+>
   {#if glowing}
     <div class="tint" class:instant={reducedMotion()} style:--tint={tint ?? "transparent"} aria-hidden="true"></div>
   {/if}
@@ -270,7 +356,6 @@
     <button class="icon" type="button" onclick={close} aria-label={m.now_playing_close()}>
       <ChevronDown size={26} />
     </button>
-    <p class="origin">{origin}</p>
   </header>
 
   <div class="frame">
@@ -444,6 +529,12 @@
     overflow-y: auto;
     background: var(--color-bg);
     -webkit-tap-highlight-color: transparent;
+    /* Back in place after a short swipe; while the finger moves, at once. */
+    transition: transform 200ms ease-out;
+  }
+
+  .now-playing.pulling {
+    transition: none;
   }
 
   .top {
@@ -451,17 +542,6 @@
     align-items: center;
     gap: var(--space-2);
     margin-left: calc(-1 * var(--space-2));
-  }
-
-  .origin {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    white-space: nowrap;
-    text-overflow: ellipsis;
   }
 
   /* Square, as wide as the screen allows without pushing the controls away. */
@@ -508,7 +588,6 @@
 
   /* Over the cover color the muted gray is too faint (spec 4.4). */
   .glowing .artist,
-  .glowing .origin,
   .glowing .times {
     color: var(--color-text-on-image);
   }
@@ -663,7 +742,8 @@
   .slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: var(--radius-pill);
-    background: linear-gradient(to right, var(--color-text) var(--fill, 0%), var(--color-border) var(--fill, 0%));
+    /* The rest of the song: a soft gray that shows on any cover color. */
+    background: linear-gradient(to right, var(--color-text) var(--fill, 0%), rgb(255 255 255 / 22%) var(--fill, 0%));
   }
 
   .slider::-webkit-slider-thumb {
