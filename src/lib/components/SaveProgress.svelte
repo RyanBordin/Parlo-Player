@@ -70,8 +70,8 @@
 <style>
   .save {
     position: fixed;
-    left: calc(var(--sidebar-width) + var(--space-5));
-    bottom: calc(var(--player-bar-height) + var(--space-4));
+    left: calc(var(--sidebar-width) + var(--space-5) + env(safe-area-inset-left));
+    bottom: calc(var(--player-bar-height) + var(--space-4) + env(safe-area-inset-bottom));
     z-index: 20;
     width: 320px;
     display: flex;

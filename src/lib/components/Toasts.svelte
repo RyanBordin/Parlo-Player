@@ -14,8 +14,8 @@
 <style>
   .toasts {
     position: fixed;
-    right: var(--space-5);
-    bottom: calc(var(--player-bar-height) + var(--space-4));
+    right: calc(var(--space-5) + env(safe-area-inset-right));
+    bottom: calc(var(--player-bar-height) + var(--space-4) + env(safe-area-inset-bottom));
     z-index: 20;
     display: flex;
     flex-direction: column;

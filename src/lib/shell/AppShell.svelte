@@ -115,7 +115,8 @@
 
 <style>
   .shell {
-    height: 100vh;
+    /* The body's height, without Android's system bars (global.css). */
+    height: 100%;
     min-width: 1000px;
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
