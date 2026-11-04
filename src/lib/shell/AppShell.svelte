@@ -21,7 +21,7 @@
   import { checkServer } from "#lib/server-info.svelte.ts";
   import { handleShortcut } from "#lib/shortcuts.ts";
   import { page } from "$app/state";
-  import { navHistory, trackNavigation } from "#lib/shell/history.svelte.ts";
+  import { canGoBack, navHistory, trackNavigation } from "#lib/shell/history.svelte.ts";
   import LibraryTabs from "#lib/shell/LibraryTabs.svelte";
   import { isTabPage, layout, libraryTabOf } from "#lib/shell/phone.svelte.ts";
   import PhoneTabs from "#lib/shell/PhoneTabs.svelte";
@@ -76,6 +76,21 @@
     } else {
       content.scrollTop = 0;
     }
+  });
+
+  // Android Back asks the page instead of the WebView: the WebView skips
+  // entries added without a tap (redirects, a restored session), so it could
+  // think there is nowhere to go and close the app. history.back() does not.
+  $effect(() => {
+    window.parloBack = () => {
+      const overlay = page.state.nowPlaying || page.state.sheet || page.state.selection;
+      if (!overlay && !canGoBack()) return false;
+      history.back();
+      return true;
+    };
+    return () => {
+      delete window.parloBack;
+    };
   });
 
   function onKeydown(event: KeyboardEvent) {

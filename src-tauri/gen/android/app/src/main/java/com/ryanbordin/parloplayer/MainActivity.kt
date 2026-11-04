@@ -19,8 +19,13 @@ class MainActivity : TauriActivity() {
     onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
       override fun handleOnBackPressed() {
         // Back goes to the previous page of the app; on the first page the
-        // app goes to the background, like other music players, and keeps playing.
-        if (webView.canGoBack()) webView.goBack() else moveTaskToBack(true)
+        // app goes to the background, like other music players, and keeps
+        // playing. The page decides (window.parloBack): WebView.canGoBack()
+        // skips history entries added without a tap, so it can say there is
+        // nowhere to go when there is.
+        webView.evaluateJavascript("window.parloBack ? window.parloBack() : false") { result ->
+          if (result != "true") moveTaskToBack(true)
+        }
       }
     })
   }
