@@ -10,11 +10,15 @@
   // of items scroll smoothly.
   import type { Snippet } from "svelte";
   import VirtualList from "#lib/components/VirtualList.svelte";
+  import { layout } from "#lib/shell/phone.svelte.ts";
 
   /** Narrowest card, and the space between cards and between rows. */
   const MIN_CARD = 160;
-  const GAP = 24;
+  const DESKTOP_GAP = 24;
   const ROW_GAP = 32;
+  /** Phone (spec 4.5): always two cards side by side, a little closer. */
+  const PHONE_COLUMNS = 2;
+  const PHONE_GAP = 16;
 
   let {
     items,
@@ -35,7 +39,10 @@
     if (width > 0) lastWidth = width;
   });
 
-  let columns = $derived(Math.max(1, Math.floor((width + GAP) / (MIN_CARD + GAP))));
+  let GAP = $derived(layout.phone ? PHONE_GAP : DESKTOP_GAP);
+  let columns = $derived(
+    layout.phone ? PHONE_COLUMNS : Math.max(1, Math.floor((width + GAP) / (MIN_CARD + GAP))),
+  );
   let cardWidth = $derived(width > 0 ? (width - GAP * (columns - 1)) / columns : MIN_CARD);
   let rowHeight = $derived(Math.ceil(cardWidth + textHeight + ROW_GAP));
   let rows = $derived(
