@@ -329,6 +329,7 @@ Sobe cobrindo a tela inteira, inclusive as abas.
 
 * **Topo:** só a seta **˅** para fechar (o gesto de voltar também fecha). O contexto "Tocando de: [contexto]" fica só em A Seguir.
 * **Arrastar:** para baixo, a tela acompanha o dedo e fecha como a **˅** se passar de um limite ou se o gesto for rápido; se não, volta ao lugar. Para cima, abre a gaveta. Não vale na barra de progresso nem com a gaveta aberta (ela fecha arrastando os nomes das abas para baixo).
+* **Gaveta:** arrastar para os lados troca de aba (da direita para a esquerda: A Seguir → Letra → Relacionados; ao contrário, o caminho inverso). O conteúdo acompanha o dedo; nas pontas, um efeito elástico. A alça de reordenar tem prioridade, e as fileiras de Relacionados rolam de lado (no início da fileira, arrastar para a direita volta uma aba).
 * **Capa** grande, quadrada. **Fundo:** a cor predominante da capa (escurecida e menos saturada, para o texto branco ficar legível), forte no topo e fundindo-se no fundo escuro do tema embaixo, sem desfoque nem imagem; troca suave entre faixas (~600 ms). Segue a opção de fundo de Aparência; no desktop continua o brilho ambiente da Seção 4.4.
 * **Título** e **artista** (clicável → página do artista, fechando a tela), com **Favoritar** ao lado.
 * **Progresso:** tempo decorrido, barra arrastável e tempo total. A parte tocada é branca; o resto é um cinza discreto (branco translúcido), visível sobre qualquer cor de fundo.
@@ -921,3 +922,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 04/11/2026 | Layout de celular (Android) abaixo de ~700px: 4 abas embaixo (Início, Busca, Biblioteca, Favoritos), Configurações no Perfil, Mini Player acima das abas, Tocando Agora em tela cheia com A Seguir/Letra/Relacionados numa gaveta, `...` sempre visível e seleção múltipla segurando uma faixa. Referências: YouTube Music e Symfonium. |
 | 04/11/2026 | Tocando Agora no celular: o brilho com a capa desfocada vira uma cor única, a predominante da capa, em degradê suave sobre o fundo (padrão do YouTube Music). O desktop mantém o brilho ambiente. |
 | 04/11/2026 | Tocando Agora no celular: o degradê cobre a tela inteira; o topo fica só com a **˅** ("Tocando de" só em A Seguir); arrastar para baixo fecha a tela e para cima abre a gaveta; a trilha da barra de progresso em cinza translúcido, como no YouTube Music. |
+| 06/11/2026 | Gaveta do Tocando Agora no celular: arrastar para os lados troca entre A Seguir, Letra e Relacionados. |
