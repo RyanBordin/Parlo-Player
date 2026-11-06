@@ -48,6 +48,13 @@
   /** A swipe down further than this, or faster (px/ms), closes the screen. */
   const CLOSE_PX = 120;
   const CLOSE_SPEED = 0.5;
+  /** How far a finger moves before a sideways swipe or a scroll is told apart. */
+  const SWIPE_SLOP_PX = 10;
+  /** A sideways swipe in the drawer further than this, or faster, changes tab. */
+  const TAB_SWIPE_PX = 70;
+  const TAB_SWIPE_SPEED = 0.4;
+  /** Past the first and last tab, the content follows the finger this much. */
+  const TAB_SWIPE_EDGE = 0.25;
   /** A swipe up from below the cover further than this, or faster, opens the drawer. */
   const OPEN_PX = 80;
   const OPEN_SPEED = 0.5;
@@ -301,6 +308,106 @@
     };
   });
 
+  // Sideways swipe in the drawer (spec 4.5): the content follows the finger
+  // and the next tab slides in from that side. Not from the handle that
+  // reorders Up next, and a row that scrolls sideways (Related) keeps the
+  // gesture, unless it is at its start and the swipe goes back a tab.
+  let sheetContent = $state<HTMLElement>();
+  /** How far the drawer's content follows the finger sideways, in pixels. */
+  let swipeX = $state(0);
+  let swiping = $state(false);
+
+  /** The tab `steps` away from the open one, if there is one. */
+  function tabAt(steps: number): NowPlayingTab | undefined {
+    return NOW_PLAYING_TABS[NOW_PLAYING_TABS.indexOf(nowPlaying.tab) + steps];
+  }
+
+  /** Opens the tab; it slides in from the side the finger came from. */
+  function slideToTab(tab: NowPlayingTab, from: number) {
+    setNowPlayingTab(tab);
+    if (reducedMotion()) {
+      swipeX = 0;
+      return;
+    }
+    swiping = true;
+    swipeX = from;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        swiping = false;
+        swipeX = 0;
+      }),
+    );
+  }
+
+  $effect(() => {
+    const element = sheetContent;
+    if (!element) return;
+    let start: { x: number; y: number; time: number; row: Element | null } | null = null;
+    let sideways = false;
+
+    function onTouchStart(event: TouchEvent) {
+      const target = event.target as Element;
+      start = null;
+      sideways = false;
+      if (event.touches.length > 1 || target.closest(".handle")) return;
+      const touch = event.touches[0];
+      start = { x: touch.clientX, y: touch.clientY, time: event.timeStamp, row: target.closest(".track") };
+    }
+
+    function onTouchMove(event: TouchEvent) {
+      if (!start) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (!sideways) {
+        if (Math.abs(dx) < SWIPE_SLOP_PX && Math.abs(dy) < SWIPE_SLOP_PX) return;
+        const backFromRowStart = dx > 0 && (start.row?.scrollLeft ?? 0) <= 1;
+        if (Math.abs(dx) < Math.abs(dy) * 1.5 || (start.row && !backFromRowStart)) {
+          start = null;
+          return;
+        }
+        sideways = true;
+        swiping = true;
+      }
+      if (event.cancelable) event.preventDefault();
+      swipeX = tabAt(dx < 0 ? 1 : -1) ? dx : dx * TAB_SWIPE_EDGE;
+    }
+
+    function onTouchEnd(event: TouchEvent) {
+      if (!start || !sideways) {
+        start = null;
+        return;
+      }
+      const dx = (event.changedTouches[0]?.clientX ?? start.x) - start.x;
+      const speed = Math.abs(dx) / Math.max(1, event.timeStamp - start.time);
+      start = null;
+      sideways = false;
+      swiping = false;
+      const tab = tabAt(dx < 0 ? 1 : -1);
+      const far = Math.abs(dx) > TAB_SWIPE_PX || (speed > TAB_SWIPE_SPEED && Math.abs(dx) > DRAG_PX);
+      if (tab && far) slideToTab(tab, dx < 0 ? element!.clientWidth : -element!.clientWidth);
+      else swipeX = 0;
+    }
+
+    function onTouchCancel() {
+      start = null;
+      sideways = false;
+      swiping = false;
+      swipeX = 0;
+    }
+
+    element.addEventListener("touchstart", onTouchStart, { passive: true });
+    element.addEventListener("touchmove", onTouchMove, { passive: false });
+    element.addEventListener("touchend", onTouchEnd);
+    element.addEventListener("touchcancel", onTouchCancel);
+    return () => {
+      element.removeEventListener("touchstart", onTouchStart);
+      element.removeEventListener("touchmove", onTouchMove);
+      element.removeEventListener("touchend", onTouchEnd);
+      element.removeEventListener("touchcancel", onTouchCancel);
+    };
+  });
+
   /**
    * Rises from the bottom (and goes back down); at once with reduced motion.
    * Closing after a swipe goes on from where the finger left the screen.
@@ -492,7 +599,13 @@
   {#if sheetOpen}
     <div class="sheet" transition:rise>
       {@render tabNames()}
-      <div class="sheet-content" role="tabpanel">
+      <div
+        class="sheet-content"
+        class:swiping
+        role="tabpanel"
+        bind:this={sheetContent}
+        style:transform={swipeX ? `translateX(${swipeX}px)` : undefined}
+      >
         <!-- Each tab loads only when it is opened. -->
         {#if nowPlaying.tab === "upNext"}
           <UpNext />
@@ -691,6 +804,8 @@
     z-index: 1;
     display: flex;
     flex-direction: column;
+    /* A sideways swipe moves the content past the edges. */
+    overflow: hidden;
     padding-bottom: env(safe-area-inset-bottom);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     background: var(--color-surface);
@@ -706,6 +821,12 @@
     flex: 1;
     min-height: 0;
     padding: 0 var(--space-4);
+    /* Into place after a sideways swipe; while the finger moves, at once. */
+    transition: transform 200ms ease-out;
+  }
+
+  .sheet-content.swiping {
+    transition: none;
   }
 
   .sheet-tabs {
