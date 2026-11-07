@@ -323,6 +323,12 @@ Exatamente **4 abas**, nesta ordem:
 * Tocar em qualquer outro ponto abre o **Tocando Agora**.
 * Volume pelos botões físicos do celular (não há controle de volume na tela).
 
+#### Puxar para atualizar
+
+No **Início**, no topo da página, puxar para baixo recarrega as seções e checa o servidor. No lugar do spinner, a **logo do Parlo** desce e cresce com o dedo e **pulsa** enquanto carrega. Só conta um gesto claramente vertical.
+
+Sem conexão com o servidor, o aviso do Início some sozinho quando o servidor volta: o app tenta de novo depois de 5 s, 10 s, 30 s e a cada 60 s, e na hora em que a rede ou o app voltam.
+
 #### Tocando Agora (tela cheia)
 
 Sobe cobrindo a tela inteira, inclusive as abas.
@@ -923,3 +929,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 04/11/2026 | Tocando Agora no celular: o brilho com a capa desfocada vira uma cor única, a predominante da capa, em degradê suave sobre o fundo (padrão do YouTube Music). O desktop mantém o brilho ambiente. |
 | 04/11/2026 | Tocando Agora no celular: o degradê cobre a tela inteira; o topo fica só com a **˅** ("Tocando de" só em A Seguir); arrastar para baixo fecha a tela e para cima abre a gaveta; a trilha da barra de progresso em cinza translúcido, como no YouTube Music. |
 | 06/11/2026 | Gaveta do Tocando Agora no celular: arrastar para os lados troca entre A Seguir, Letra e Relacionados. |
+| 07/11/2026 | Sem conexão com o servidor: o app tenta de novo sozinho (5 s, 10 s, 30 s e depois a cada 60 s, e ao voltar a rede ou o app) e o aviso some quando o servidor responde. No celular, puxar o Início para baixo recarrega a tela, com a logo do Parlo pulsando no lugar do spinner. |

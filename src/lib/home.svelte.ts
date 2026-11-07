@@ -49,14 +49,16 @@ export type SectionState = SectionItems & {
 export const sections = $state<Partial<Record<HomeSection, SectionState>>>({});
 
 /** Reads the Home rows again; the local ones come first. */
-export function refreshHome(): void {
+export async function refreshHome(): Promise<void> {
   home.error = null;
-  getHomeLibrary()
-    .then((rows) => (home.library = rows))
-    .catch((e) => (home.error = describeError(e)));
-  getHomeActivity()
-    .then((rows) => (home.activity = rows))
-    .catch((e) => (home.error = describeError(e)));
+  await Promise.all([
+    getHomeLibrary()
+      .then((rows) => (home.library = rows))
+      .catch((e) => (home.error = describeError(e))),
+    getHomeActivity()
+      .then((rows) => (home.activity = rows))
+      .catch((e) => (home.error = describeError(e))),
+  ]);
 }
 
 /** Reads a section's grid again, keeping how far it was drawn. */

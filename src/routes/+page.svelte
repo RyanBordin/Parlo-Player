@@ -11,10 +11,11 @@
   import TrackCard from "#lib/components/cards/TrackCard.svelte";
   import TrackShelf from "#lib/components/cards/TrackShelf.svelte";
   import { describeError } from "#lib/errors.ts";
+  import PullToRefresh from "#lib/components/PullToRefresh.svelte";
   import { home, homeLayout, refreshHome, type HomeRowId } from "#lib/home.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { layout } from "#lib/shell/phone.svelte.ts";
-  import { syncState } from "#lib/sync.svelte.ts";
+  import { startLightSync, syncState } from "#lib/sync.svelte.ts";
 
   /** Cover width of the standard and the large ("Listen again") cards;
    * a bit smaller on the phone (spec 4.5). */
@@ -29,6 +30,12 @@
 
   function showError(e: unknown) {
     home.error = describeError(e);
+  }
+
+  /** Pull to refresh (spec 4.5): the rows, and what changed on the server. */
+  function pullRefresh() {
+    startLightSync();
+    return refreshHome();
   }
 
   /** A song section plays its whole list, from `index` ("Playing from" its title). */
@@ -51,6 +58,10 @@
 {#snippet seeMore(href: string)}
   <a class="pill" {href}>{m.home_see_more()}</a>
 {/snippet}
+
+{#if layout.phone}
+  <PullToRefresh onrefresh={pullRefresh} />
+{/if}
 
 <div class="page">
   <h1 class="page-title">{m.nav_home()}</h1>

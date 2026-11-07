@@ -15,8 +15,10 @@
   import Menu from "#lib/menu/Menu.svelte";
   import { closeMenu } from "#lib/menu/menu.svelte.ts";
   import MenuDialogs from "#lib/menu/MenuDialogs.svelte";
+  import { home } from "#lib/home.svelte.ts";
   import { closeNowPlaying, nowPlaying } from "#lib/now-playing.svelte.ts";
   import { listenToPlayer, queue } from "#lib/player.svelte.ts";
+  import { watchConnection } from "#lib/reconnect.svelte.ts";
   import { listenToSaves } from "#lib/saves.svelte.ts";
   import { checkServer } from "#lib/server-info.svelte.ts";
   import { handleShortcut } from "#lib/shortcuts.ts";
@@ -76,6 +78,12 @@
     } else {
       content.scrollTop = 0;
     }
+  });
+
+  // While the server is out of reach, it is asked again until it answers.
+  let offline = $derived(home.activity?.offline ?? false);
+  $effect(() => {
+    if (offline) return watchConnection();
   });
 
   // Android Back asks the page instead of the WebView: the WebView skips
