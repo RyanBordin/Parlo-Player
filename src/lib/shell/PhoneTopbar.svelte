@@ -77,15 +77,18 @@
     flex: 1;
   }
 
+  /* The text sits on the symbol's foot: its baseline is the image's
+     bottom edge, not centered beside it (Ryan's choice). */
   .brand {
     flex: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: var(--space-2);
-    /* In capitals, a third bigger than the large text, so it stands as tall
-       as the symbol beside it (Ryan's choice); the symbol keeps its size. */
-    font-size: 24px;
+    /* In capitals, a little bigger than the large text (Ryan's choice);
+       the symbol keeps its size. */
+    font-size: 20px;
+    line-height: 1;
     font-weight: var(--font-weight-bold);
     letter-spacing: 0.04em;
     text-transform: uppercase;
