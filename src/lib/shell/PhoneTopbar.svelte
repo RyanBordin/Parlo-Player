@@ -83,8 +83,9 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    /* In capitals (Ryan's choice). */
-    font-size: var(--font-size-lg);
+    /* In capitals, a third bigger than the large text, so it stands as tall
+       as the symbol beside it (Ryan's choice); the symbol keeps its size. */
+    font-size: 24px;
     font-weight: var(--font-weight-bold);
     letter-spacing: 0.04em;
     text-transform: uppercase;
