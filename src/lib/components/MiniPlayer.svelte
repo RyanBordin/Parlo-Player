@@ -1,12 +1,13 @@
 <script lang="ts">
   // Mini Player (spec 4.5): the phone's Player Bar, above the tabs. Cover,
   // title and artist, Play/Pause and Next, with a thin progress line at the
-  // bottom; a tap anywhere else opens Now Playing. Volume is on the phone's
+  // bottom that a tap or a drag moves (a taller invisible strip takes the
+  // finger); a tap anywhere else opens Now Playing. Volume is on the phone's
   // own buttons, so there is no volume control here.
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-  import { next, togglePause } from "#lib/api.ts";
+  import { next, seek, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { toggleNowPlaying } from "#lib/now-playing.svelte.ts";
@@ -19,7 +20,11 @@
 
   let track = $derived(player.track);
   let canControl = $derived(track !== null && player.status !== "idle");
-  let progress = $derived(player.duration ? Math.min(player.position / player.duration, 1) * 100 : 0);
+  /** Where the finger is while it drags the line, in seconds. */
+  let dragging = $state<number | null>(null);
+  let shownPosition = $derived(dragging ?? player.position);
+  let progress = $derived(player.duration ? Math.min(shownPosition / player.duration, 1) * 100 : 0);
+  let canSeek = $derived(canControl && Boolean(player.duration));
   let error = $derived(
     commandError ?? (player.error ? { message: m.error_playback(), detail: player.error.detail } : null),
   );
@@ -34,7 +39,32 @@
   }
 
   function onclick(event: MouseEvent) {
-    if (!(event.target as HTMLElement).closest("button")) toggleNowPlaying();
+    if (!(event.target as HTMLElement).closest("button, .seek")) toggleNowPlaying();
+  }
+
+  /** The position under the finger, in seconds. */
+  function positionAt(event: PointerEvent): number {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const ratio = Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1);
+    return ratio * (player.duration ?? 0);
+  }
+
+  function onSeekDown(event: PointerEvent) {
+    if (!canSeek) return;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    dragging = positionAt(event);
+  }
+
+  function onSeekMove(event: PointerEvent) {
+    if (dragging !== null) dragging = positionAt(event);
+  }
+
+  function onSeekUp() {
+    if (dragging === null) return;
+    const target = dragging;
+    player.position = target;
+    dragging = null;
+    run(() => seek(target));
   }
 </script>
 
@@ -79,8 +109,28 @@
     </button>
   </div>
 
-  <div class="line" aria-hidden="true">
-    <div class="fill" style:width={`${progress}%`}></div>
+  <!-- A taller strip than the line takes the finger: a tap or a drag seeks. -->
+  <div
+    class="seek"
+    class:active={dragging !== null}
+    role="slider"
+    tabindex="-1"
+    aria-label={m.player_seek()}
+    aria-valuemin={0}
+    aria-valuemax={Math.round(player.duration ?? 0)}
+    aria-valuenow={Math.round(shownPosition)}
+    aria-disabled={!canSeek}
+    onpointerdown={onSeekDown}
+    onpointermove={onSeekMove}
+    onpointerup={onSeekUp}
+    onpointercancel={() => (dragging = null)}
+  >
+    <div class="line">
+      <div class="fill" style:width={`${progress}%`}></div>
+      {#if dragging !== null}
+        <span class="knob" style:left={`${progress}%`}></span>
+      {/if}
+    </div>
   </div>
 </footer>
 
@@ -148,17 +198,44 @@
   }
 
   /* Thin progress line along the bottom edge. */
-  .line {
+  /* Over the line and a little past it on both sides: about 20 px for the
+     finger, the line itself stays thin. Above the tabs below. */
+  .seek {
     position: absolute;
     right: 0;
-    bottom: 0;
+    bottom: -9px;
     left: 0;
+    z-index: 1;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    touch-action: none;
+  }
+
+  .line {
+    position: relative;
+    width: 100%;
     height: 2px;
     background: var(--color-border);
+    transition: height var(--transition-fast);
+  }
+
+  .seek.active .line {
+    height: 4px;
   }
 
   .fill {
     height: 100%;
     background: var(--color-text);
+  }
+
+  .knob {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: var(--radius-pill);
+    background: var(--color-text);
+    transform: translate(-50%, -50%);
   }
 </style>
