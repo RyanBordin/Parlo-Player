@@ -42,7 +42,7 @@
     <!-- The page's name stays for screen readers. -->
     <h1 class="visually-hidden">{title}</h1>
     <div class="brand" aria-hidden="true">
-      <img src={symbol} alt="" width="17" height="43" />
+      <img src={symbol} alt="" width="13" height="32" />
       <span>{m.app_name()}</span>
     </div>
   {/if}
@@ -83,8 +83,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    /* A third bigger than the large text, in capitals (Ryan's choice). */
-    font-size: 24px;
+    /* In capitals (Ryan's choice). */
+    font-size: var(--font-size-lg);
     font-weight: var(--font-weight-bold);
     letter-spacing: 0.04em;
     text-transform: uppercase;
