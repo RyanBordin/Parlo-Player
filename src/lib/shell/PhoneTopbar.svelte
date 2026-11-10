@@ -79,19 +79,24 @@
 
   /* The text sits on the symbol's foot: its baseline is the image's
      bottom edge, not centered beside it (Ryan's choice). */
+  /* The desktop sidebar's brand (spec 1.1): the same thin border, rounded
+     corners and inner space, around the symbol and the name. The text is a
+     little bigger than the large text (Ryan's choice); the symbol keeps its
+     size. The space after it pushes Profile to the right. */
   .brand {
-    flex: 1;
-    min-width: 0;
+    flex: none;
+    max-width: 100%;
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    /* In capitals, a little bigger than the large text (Ryan's choice);
-       the symbol keeps its size. */
+    margin-right: auto;
+    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg);
     font-size: 20px;
     line-height: 1;
     font-weight: var(--font-weight-bold);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     white-space: nowrap;
   }
 
