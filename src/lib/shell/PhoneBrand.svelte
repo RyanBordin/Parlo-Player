@@ -12,9 +12,9 @@
 </div>
 
 <style>
-  /* The desktop brand's thin border, rounded corners and inner space, on the
-     page's dark background, so it reads on Now Playing's cover color too.
-     The text is a little bigger than the large text (Ryan's choice) and
+  /* The desktop brand's thin border, rounded corners and inner space, with
+     no background of its own: on Now Playing the cover color shows through
+     (Ryan's choice). The text is a little bigger than the large text and
      centered on the symbol. */
   .brand {
     flex: none;
@@ -25,7 +25,6 @@
     padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    background: var(--color-bg);
     font-size: 20px;
     line-height: 1;
     font-weight: var(--font-weight-bold);
