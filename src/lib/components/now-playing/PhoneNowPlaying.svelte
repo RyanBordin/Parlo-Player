@@ -25,6 +25,7 @@
   import { cycleRepeat, next, previous, seek, setShuffle, setSongStarred, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
   import { coverColor } from "#lib/cover-color.ts";
+  import PhoneBrand from "#lib/shell/PhoneBrand.svelte";
   import Lyrics from "#lib/components/now-playing/Lyrics.svelte";
   import Related from "#lib/components/now-playing/Related.svelte";
   import UpNext from "#lib/components/now-playing/UpNext.svelte";
@@ -470,6 +471,8 @@
     <button class="icon" type="button" onclick={close} aria-label={m.now_playing_close()}>
       <ChevronDown size={26} />
     </button>
+    <!-- The app's brand next to ˅ (spec 4.5). -->
+    <PhoneBrand />
   </header>
 
   <div class="frame">

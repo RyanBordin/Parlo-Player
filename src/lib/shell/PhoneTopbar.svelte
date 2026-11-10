@@ -5,12 +5,12 @@
   // tab the search field takes the logo's place (spec 4.5, 6.9).
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import { goto } from "$app/navigation";
-  import symbol from "#lib/assets/logo-symbol.png";
   import { page } from "$app/state";
   import type { SavedSession } from "#lib/api.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { canGoBack } from "#lib/shell/history.svelte.ts";
   import { activeTab, isTabPage, PHONE_TABS } from "#lib/shell/phone.svelte.ts";
+  import PhoneBrand from "#lib/shell/PhoneBrand.svelte";
   import ProfileMenu from "#lib/shell/ProfileMenu.svelte";
   import SearchField from "#lib/shell/SearchField.svelte";
 
@@ -41,10 +41,8 @@
   {:else}
     <!-- The page's name stays for screen readers. -->
     <h1 class="visually-hidden">{title}</h1>
-    <div class="brand" aria-hidden="true">
-      <img src={symbol} alt="" width="13" height="32" />
-      <span>{m.app_name()}</span>
-    </div>
+    <PhoneBrand />
+    <span class="spacer"></span>
   {/if}
 
   <ProfileMenu {session} />
@@ -79,31 +77,6 @@
 
   /* The text sits on the symbol's foot: its baseline is the image's
      bottom edge, not centered beside it (Ryan's choice). */
-  /* The desktop sidebar's brand (spec 1.1): the same thin border, rounded
-     corners and inner space, around the symbol and the name. The text is a
-     little bigger than the large text (Ryan's choice); the symbol keeps its
-     size. The space after it pushes Profile to the right. */
-  .brand {
-    flex: none;
-    max-width: 100%;
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    margin-right: auto;
-    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-bg);
-    font-size: 20px;
-    line-height: 1;
-    font-weight: var(--font-weight-bold);
-    white-space: nowrap;
-  }
-
-  .brand img {
-    flex: none;
-  }
-
   .visually-hidden {
     position: absolute;
     width: 1px;
