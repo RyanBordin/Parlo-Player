@@ -7,7 +7,6 @@
   // Up next, Lyrics and Related (spec 4.4) are named at the bottom: a tap on
   // a name, or dragging it up, opens them in a drawer over almost the whole
   // screen. Dragging down, a tap on the open tab or Back close it.
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
   import ListPlus from "@lucide/svelte/icons/list-plus";
@@ -467,11 +466,11 @@
     <div class="tint" class:instant={reducedMotion()} style:--tint={tint ?? "transparent"} aria-hidden="true"></div>
   {/if}
 
+  <!-- The app's brand where the Home Topbar has it (spec 4.5). Swiping down
+       and Back close the screen; the close button is there for screen
+       readers only. -->
   <header class="top">
-    <button class="icon" type="button" onclick={close} aria-label={m.now_playing_close()}>
-      <ChevronDown size={26} />
-    </button>
-    <!-- The app's brand next to ˅ (spec 4.5). -->
+    <button class="visually-hidden" type="button" onclick={close}>{m.now_playing_close()}</button>
     <PhoneBrand />
   </header>
 
@@ -662,11 +661,23 @@
     transition: none;
   }
 
+  /* Same place as on the Home Topbar: that bar starts 12 px below the
+     system bar and the screen 8 px below it, hence the 4 px here; the side
+     margin is the page gutter on both. */
   .top {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    margin-left: calc(-1 * var(--space-2));
+    min-height: 60px;
+    padding-top: var(--space-1);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   /* Square, as wide as the screen allows without pushing the controls away. */
