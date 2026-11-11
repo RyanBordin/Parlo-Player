@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Phone Topbar (spec 4.5): the page title, a back arrow on the inner pages
-  // (album, artist, playlist...) and Profile on the right. On the Search tab
-  // the search field takes the title's place (spec 4.5, 6.9).
+  // Phone Topbar (spec 4.5): on the tab pages the Parlo logo, like YouTube
+  // Music (the tabs below already name the page); a back arrow on the inner
+  // pages (album, artist, playlist...); Profile on the right. On the Search
+  // tab the search field takes the logo's place (spec 4.5, 6.9).
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -9,6 +10,7 @@
   import { m } from "#lib/paraglide/messages.js";
   import { canGoBack } from "#lib/shell/history.svelte.ts";
   import { activeTab, isTabPage, PHONE_TABS } from "#lib/shell/phone.svelte.ts";
+  import PhoneBrand from "#lib/shell/PhoneBrand.svelte";
   import ProfileMenu from "#lib/shell/ProfileMenu.svelte";
   import SearchField from "#lib/shell/SearchField.svelte";
 
@@ -34,8 +36,13 @@
 
   {#if pathname === "/search"}
     <SearchField phone />
+  {:else if inner}
+    <span class="spacer"></span>
   {:else}
-    <h1 class="title">{title}</h1>
+    <!-- The page's name stays for screen readers. -->
+    <h1 class="visually-hidden">{title}</h1>
+    <PhoneBrand />
+    <span class="spacer"></span>
   {/if}
 
   <ProfileMenu {session} />
@@ -64,14 +71,18 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .title {
+  .spacer {
     flex: 1;
-    min-width: 0;
-    margin: 0;
+  }
+
+  /* The text sits on the symbol's foot: its baseline is the image's
+     bottom edge, not centered beside it (Ryan's choice). */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
     overflow: hidden;
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
+    clip-path: inset(50%);
     white-space: nowrap;
-    text-overflow: ellipsis;
   }
 </style>
