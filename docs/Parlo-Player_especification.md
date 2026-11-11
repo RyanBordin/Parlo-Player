@@ -326,7 +326,7 @@ Exatamente **4 abas**, nesta ordem:
 #### Topo e Mini Player
 
 * **Topo:** nas páginas das abas (Início, Biblioteca, Favoritos), a **marca do Parlo** (símbolo e "Parlo Player", na mesma moldura arredondada da marca do desktop, com o texto centralizado no símbolo) fica à esquerda no lugar do título, como no YouTube Music, e o Perfil à direita. Na Busca, o campo de busca. Nas páginas internas, a seta de voltar.
-* **Mini Player:** tocar ou arrastar a linha de progresso muda a posição da música (a área de toque é mais alta que a linha; enquanto arrasta, a linha engrossa e mostra a bolinha). O resto da barra abre o Tocando Agora.
+* **Mini Player:** tocar ou arrastar a linha de progresso muda a posição da música (a área de toque é mais alta que a linha; enquanto arrasta, a linha engrossa e mostra a bolinha). O resto da barra abre o Tocando Agora. O fundo do Mini Player tem a mesma cor da capa e o mesmo degradê do Tocando Agora (segue a mesma opção de Aparência).
 
 #### Puxar para atualizar
 
@@ -938,3 +938,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 09/11/2026 | Celular: no topo das páginas das abas, a logo do Parlo (símbolo e nome) substitui o título, como no YouTube Music (a Busca mantém o campo). A linha de progresso do Mini Player aceita toque e arrasto para mudar a posição da música. |
 | 10/11/2026 | Celular: a marca do Parlo ganha a moldura da marca do desktop e aparece também no topo do Tocando Agora, ao lado da seta de fechar. |
 | 11/11/2026 | Tocando Agora no celular: sem a seta de fechar; a marca do Parlo fica no mesmo lugar que no topo do Início. Fechar: arrastar para baixo ou voltar do Android. |
+| 11/11/2026 | Mini Player no celular: fundo com a cor da capa e o mesmo degradê do Tocando Agora. |

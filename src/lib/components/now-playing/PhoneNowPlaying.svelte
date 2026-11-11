@@ -23,7 +23,7 @@
   import { page } from "$app/state";
   import { cycleRepeat, next, previous, seek, setShuffle, setSongStarred, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
-  import { coverColor } from "#lib/cover-color.ts";
+  import CoverTint from "#lib/components/CoverTint.svelte";
   import PhoneBrand from "#lib/shell/PhoneBrand.svelte";
   import Lyrics from "#lib/components/now-playing/Lyrics.svelte";
   import Related from "#lib/components/now-playing/Related.svelte";
@@ -85,21 +85,6 @@
   let progress = $derived(player.duration ? Math.min(shownPosition / player.duration, 1) * 100 : 0);
   let glowing = $derived(appSettings.nowPlayingBackdrop && Boolean(track?.coverArt));
 
-  // Background (spec 4.5, after YouTube Music): the cover's predominant color,
-  // strong at the top and fading into the page's background. No color yet
-  // (or none found): the previous one stays.
-  let tint = $state<string | null>(null);
-  $effect(() => {
-    const id = glowing ? track?.coverArt : null;
-    if (!id) return;
-    let current = true;
-    coverColor(id).then((color) => {
-      if (current && color) tint = color;
-    });
-    return () => {
-      current = false;
-    };
-  });
   let repeatLabel = $derived(
     queue.repeat === "one"
       ? m.player_repeat_one()
@@ -462,8 +447,9 @@
   transition:rise
   aria-label={m.now_playing_tabs()}
 >
+  <!-- Background (spec 4.5): the cover's color over the whole screen. -->
   {#if glowing}
-    <div class="tint" class:instant={reducedMotion()} style:--tint={tint ?? "transparent"} aria-hidden="true"></div>
+    <CoverTint coverId={track?.coverArt} fixed />
   {/if}
 
   <!-- The app's brand where the Home Topbar has it (spec 4.5). Swiping down
@@ -622,23 +608,6 @@
 </section>
 
 <style>
-  /* The cover's color behind the whole page: full at the top, then darker
-     down to the bottom (the tab names). A new song's color fades in. */
-  .tint {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-color: var(--tint);
-    transition: background-color 600ms ease-out;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 25%, rgb(0 0 0 / 45%) 100%);
-    mask-image: linear-gradient(to bottom, #000 0%, #000 25%, rgb(0 0 0 / 45%) 100%);
-  }
-
-  .tint.instant {
-    transition: none;
-  }
-
   /* Over everything, tabs included; clear of the system bars like the app. */
   .now-playing {
     position: fixed;
