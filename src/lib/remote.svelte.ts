@@ -34,10 +34,22 @@ export const remote = $state<{
 let unlisten: UnlistenFn[] = [];
 let looking = false;
 
+/**
+ * Back on screen after the phone slept: Android drops the connection with
+ * the screen off, so it comes back by itself (to the same computer).
+ */
+function onVisibilityChange() {
+  const status = remote.status;
+  if (document.visibilityState !== "visible" || status?.status !== "closed" || status.problem !== "lost") return;
+  const device = remote.devices.find((d) => d.id === status.deviceId);
+  if (device) connectRemote(device).catch(() => {});
+}
+
 /** Now Playing opened: listen to the events and look for computers. */
 export async function startRemote(): Promise<void> {
   if (looking) return;
   looking = true;
+  document.addEventListener("visibilitychange", onVisibilityChange);
   unlisten = await Promise.all([
     listen<RemoteDevice[]>(REMOTE_DEVICES_EVENT, (event) => (remote.devices = event.payload)),
     listen<RemoteStatus>(REMOTE_STATUS_EVENT, (event) => {
@@ -69,6 +81,7 @@ export async function startRemote(): Promise<void> {
 export function stopRemote(): void {
   if (!looking) return;
   looking = false;
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   stopListening();
   remote.devices = [];
   remote.status = null;
