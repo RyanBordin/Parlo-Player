@@ -33,6 +33,7 @@ use crate::player::listen::ListenTracker;
 use crate::player::queue::{Queue, Removed, RepeatMode, Step};
 use crate::player::resume::{self, SavedQueue, ServerQueue, Source};
 use crate::player::{AudioEngine, EngineError, Media, PlaybackStatus, PlayerEvent, Track};
+use crate::remote::{self, RemoteQueue};
 use crate::settings::AppSettings;
 use crate::state::{ActiveLibrary, AppState};
 use crate::subsonic::{SubsonicClient, SubsonicError};
@@ -41,9 +42,9 @@ pub const QUEUE_CHANGED_EVENT: &str = "queue-changed";
 /// Sent instead of `queue-changed` when the songs are the same and only the
 /// current one or the modes changed: a queue of 50 000 songs is not sent
 /// again at every song (spec 12.3).
-const QUEUE_POSITION_EVENT: &str = "queue-position";
-const PLAYER_STATE_EVENT: &str = "player-state";
-const PLAYER_POSITION_EVENT: &str = "player-position";
+pub const QUEUE_POSITION_EVENT: &str = "queue-position";
+pub const PLAYER_STATE_EVENT: &str = "player-state";
+pub const PLAYER_POSITION_EVENT: &str = "player-position";
 const PLAYER_ERROR_EVENT: &str = "player-error";
 /// Payload: the audio outputs (`AudioDevice` list), when they change.
 const AUDIO_DEVICES_EVENT: &str = "audio-devices";
@@ -402,6 +403,34 @@ impl Playback {
 
     pub fn queue_state(&self) -> QueueState {
         queue_state(&self.lock())
+    }
+
+    /// What a phone controlling this computer shows of the queue (spec
+    /// 12.8): the current song and the next ones, not the whole queue.
+    pub fn remote_queue(&self) -> RemoteQueue {
+        let inner = self.lock();
+        let ids = inner.queue.ids_in_order();
+        let current_index = inner.queue.current_position();
+        let window = remote::queue_window(ids.len(), current_index);
+        RemoteQueue {
+            label: inner.queue.label().to_string(),
+            continuing_from: inner.queue.continuing_from().map(str::to_string),
+            offset: window.start,
+            tracks: ids[window].iter().filter_map(|id| inner.tracks.get(*id).cloned()).collect(),
+            current_index,
+            total: ids.len(),
+            shuffle: inner.queue.shuffle(),
+            repeat: inner.queue.repeat(),
+        }
+    }
+
+    /// A song of Up next tapped on a phone (spec 12.8): only if it is still
+    /// at that position, as the queue may have changed in the meantime.
+    pub fn jump_to_song(&self, index: usize, song_id: &str) -> Result<(), PlaybackError> {
+        if self.lock().queue.id_at(index) != Some(song_id) {
+            return Ok(());
+        }
+        self.jump_to(index)
     }
 
     /// Stops playback and empties the queue (sign out). The saved queue is

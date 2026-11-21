@@ -28,7 +28,8 @@ export type CommandError =
   | { kind: "emptyLibrary"; reported: number }
   | { kind: "songNotFound" }
   | { kind: "playback"; detail: string }
-  | { kind: "testLibrary" };
+  | { kind: "testLibrary" }
+  | { kind: "remote"; detail: string };
 
 /** Mirrors `LibraryStatus` in src-tauri/src/commands.rs. Dates are Unix seconds. */
 export type LibraryStatus = {
@@ -966,4 +967,70 @@ export function isNavidrome(): Promise<boolean> {
 /** The item's page in Navidrome's web interface, in the default browser. A song opens its album. */
 export function openInNavidrome(kind: "song" | "album" | "artist", id: string): Promise<void> {
   return invoke("open_in_navidrome", { kind, id });
+}
+
+// Remote control on the network (spec 12.8): the phone controls a computer.
+// Mirrors src-tauri/src/remote/client.rs and crates/parlo-core/src/remote.rs.
+
+/** A computer found on the network, signed in with the same account. */
+export type RemoteDevice = { id: string; name: string };
+
+/** Payload of `remote-status`. */
+export type RemoteStatus = {
+  deviceId: string;
+  name: string;
+  status: "connecting" | "connected" | "closed";
+  /** Why it closed, when it was not the phone's choice. */
+  problem: "unreachable" | "wrongAccount" | "signedOut" | "version" | "lost" | null;
+};
+
+/** Payload of `remote-queue`: the current song and the next ones, not the whole queue. */
+export type RemoteQueue = {
+  label: string;
+  continuingFrom: string | null;
+  /** Position in the whole queue of `tracks[0]`. */
+  offset: number;
+  tracks: Track[];
+  /** Position in the whole queue. */
+  currentIndex: number | null;
+  /** Songs in the whole queue. */
+  total: number;
+  shuffle: boolean;
+  repeat: RepeatMode;
+};
+
+export type RemoteCommand =
+  | { action: "togglePause" }
+  | { action: "next" }
+  | { action: "previous" }
+  | { action: "setVolume"; volume: number }
+  | { action: "jumpTo"; index: number; songId: string };
+
+/** Payload: `RemoteDevice[]`, whenever the list changes. */
+export const REMOTE_DEVICES_EVENT = "remote-devices";
+export const REMOTE_STATUS_EVENT = "remote-status";
+/** Payloads as `player-state`, `player-position`, but from the computer. */
+export const REMOTE_STATE_EVENT = "remote-state";
+export const REMOTE_POSITION_EVENT = "remote-position";
+export const REMOTE_QUEUE_EVENT = "remote-queue";
+
+/** Starts looking for computers; returns those already found. */
+export function startRemoteDiscovery(): Promise<RemoteDevice[]> {
+  return invoke("start_remote_discovery");
+}
+
+export function stopRemoteDiscovery(): Promise<void> {
+  return invoke("stop_remote_discovery");
+}
+
+export function remoteConnect(deviceId: string): Promise<void> {
+  return invoke("remote_connect", { deviceId });
+}
+
+export function remoteDisconnect(): Promise<void> {
+  return invoke("remote_disconnect");
+}
+
+export function remoteCommand(command: RemoteCommand): Promise<void> {
+  return invoke("remote_command", { command });
 }

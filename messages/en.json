@@ -722,5 +722,19 @@
   "player_volume_value": "{value}%",
   "play_random_order": "Random order",
   "awesome_mix": "Awesome Mix",
-  "mix_context": "Awesome Mix: {origin}"
+  "mix_context": "Awesome Mix: {origin}",
+  "error_remote": "Remote control is not available.",
+  "remote_open": "Control a computer",
+  "remote_choose": "Choose a computer",
+  "remote_playing_on": "Playing on {name}",
+  "remote_connecting": "Connecting to {name}…",
+  "remote_problem_unreachable": "Could not reach {name}. Check that the phone and the computer are on the same network and that the computer's firewall allows Parlo.",
+  "remote_problem_wrong_account": "{name} is signed in with another account.",
+  "remote_problem_signed_out": "Nobody is signed in to Parlo on {name}.",
+  "remote_problem_version": "Update Parlo on the phone and on {name} to control it.",
+  "remote_problem_lost": "The connection to {name} was lost.",
+  "remote_retry": "Try again",
+  "remote_close": "Close the remote control",
+  "remote_more_songs": "And {count} more songs",
+  "remote_switch": "Switch"
 }

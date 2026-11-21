@@ -722,5 +722,19 @@
   "player_volume_value": "{value}%",
   "play_random_order": "Em ordem aleatória",
   "awesome_mix": "Mix Incrível",
-  "mix_context": "Mix Incrível: {origin}"
+  "mix_context": "Mix Incrível: {origin}",
+  "error_remote": "O controle remoto não está disponível.",
+  "remote_open": "Controlar um computador",
+  "remote_choose": "Escolha um computador",
+  "remote_playing_on": "Tocando em {name}",
+  "remote_connecting": "Conectando a {name}…",
+  "remote_problem_unreachable": "Não foi possível alcançar {name}. Confira se o celular e o computador estão na mesma rede e se o firewall do computador libera o Parlo.",
+  "remote_problem_wrong_account": "{name} está conectado com outra conta.",
+  "remote_problem_signed_out": "Ninguém está conectado ao Parlo em {name}.",
+  "remote_problem_version": "Atualize o Parlo no celular e em {name} para controlá-lo.",
+  "remote_problem_lost": "A conexão com {name} caiu.",
+  "remote_retry": "Tentar de novo",
+  "remote_close": "Fechar o controle remoto",
+  "remote_more_songs": "E mais {count} músicas",
+  "remote_switch": "Trocar"
 }

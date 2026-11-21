@@ -2,12 +2,13 @@
 
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::audio::{AudioDevice, ReplayGainData};
 
-/// Song being played, with what the UI shows.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+/// Song being played, with what the UI shows. Read back by the phone that
+/// controls a computer (spec 12.8).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     pub id: String,
@@ -26,7 +27,7 @@ pub struct Track {
     pub replay_gain: Option<ReplayGainData>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackStatus {
     Idle,
@@ -36,7 +37,7 @@ pub enum PlaybackStatus {
 }
 
 /// Payload of `player-state`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerState {
     pub status: PlaybackStatus,
@@ -47,7 +48,7 @@ pub struct PlayerState {
 }
 
 /// Payload of `player-position`. Seconds.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Position {
     pub position: f64,

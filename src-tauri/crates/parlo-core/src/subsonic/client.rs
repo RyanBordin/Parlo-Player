@@ -155,6 +155,16 @@ impl SubsonicClient {
         &self.base_url
     }
 
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    /// The answer to a computer's nonce for remote control (spec 12.8), so
+    /// the password stays inside the client.
+    pub fn remote_proof(&self, server_nonce: &str, client_nonce: &str) -> String {
+        crate::remote::proof(&self.password, server_nonce, client_nonce)
+    }
+
     /// `GET /rest/ping` — checks that the server is reachable and the
     /// credentials are valid.
     pub async fn ping(&self) -> Result<ServerInfo, SubsonicError> {

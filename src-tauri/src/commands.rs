@@ -40,6 +40,7 @@ use crate::subsonic::{
     Album, AlbumListType, Extension, MusicFolder, PlaylistUpdate, ServerInfo, StarItem, SubsonicClient, SubsonicError,
 };
 use crate::sync::{self, FullSync, SyncError, SyncProgress};
+use crate::remote::{RemoteClient, RemoteCommand, RemoteDevice, RemoteError};
 use crate::test_library;
 
 /// Event with a `SyncProgress` payload, sent while a sync runs.
@@ -65,6 +66,8 @@ pub enum CommandError {
     Playback { detail: String },
     /// Signing in and out are off in the performance test mode.
     TestLibrary,
+    /// Remote control (spec 12.8): mDNS unavailable, or no computer connected.
+    Remote { detail: String },
 }
 
 impl From<EngineError> for CommandError {
@@ -99,6 +102,15 @@ impl From<SubsonicError> for CommandError {
             SubsonicError::InvalidUrl(_) => Self::InvalidUrl,
             SubsonicError::InvalidResponse(_) => Self::InvalidResponse,
             SubsonicError::Api { code, message } => Self::Api { code, message },
+        }
+    }
+}
+
+impl From<RemoteError> for CommandError {
+    fn from(error: RemoteError) -> Self {
+        match error {
+            RemoteError::NotLoggedIn => Self::NotLoggedIn,
+            other => Self::Remote { detail: other.to_string() },
         }
     }
 }
@@ -1379,6 +1391,43 @@ pub fn toggle_mute(playback: State<'_, PlaybackSlot>) -> Result<bool, CommandErr
 #[tauri::command]
 pub fn set_volume(playback: State<'_, PlaybackSlot>, volume: f64) -> Result<f64, CommandError> {
     Ok(playback_of(&playback)?.player().set_volume(volume)?)
+}
+
+/// Remote control (spec 12.8), phone side: starts looking for the computers
+/// signed in with the same account; returns those already found. The list
+/// then comes with `remote-devices` events.
+#[tauri::command]
+pub fn start_remote_discovery(
+    app: AppHandle,
+    remote: State<'_, Arc<RemoteClient>>,
+) -> Result<Vec<RemoteDevice>, CommandError> {
+    Ok(remote.start_discovery(&app)?)
+}
+
+#[tauri::command]
+pub fn stop_remote_discovery(app: AppHandle, remote: State<'_, Arc<RemoteClient>>) {
+    remote.stop_discovery(&app);
+}
+
+/// Connects to a computer found; the result comes with `remote-status` events.
+#[tauri::command]
+pub fn remote_connect(
+    app: AppHandle,
+    remote: State<'_, Arc<RemoteClient>>,
+    device_id: String,
+) -> Result<(), CommandError> {
+    Ok(remote.connect(&app, &device_id)?)
+}
+
+#[tauri::command]
+pub fn remote_disconnect(remote: State<'_, Arc<RemoteClient>>) {
+    remote.disconnect();
+}
+
+/// Play/pause, next, previous, volume or a song of Up next, on the computer.
+#[tauri::command]
+pub fn remote_command(remote: State<'_, Arc<RemoteClient>>, command: RemoteCommand) -> Result<(), CommandError> {
+    Ok(remote.send(command)?)
 }
 
 /// Current state, for a screen that opens while something is playing.

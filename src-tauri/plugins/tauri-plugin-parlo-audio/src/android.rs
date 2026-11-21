@@ -77,6 +77,12 @@ impl<R: Runtime> AudioPlayer<R> {
         self.run("setVolume", json!({ "volume": volume }))
     }
 
+    /// Holds (or lets go of) the Wi-Fi multicast lock, without which Android
+    /// drops the mDNS answers of the computers on the network (spec 12.8).
+    pub fn set_multicast(&self, enabled: bool) -> Result<(), Error> {
+        self.run("setMulticast", json!({ "enabled": enabled }))
+    }
+
     /// Sends every player event to `handler`, from a Tauri thread.
     pub fn set_event_handler(&self, handler: impl Fn(AudioEvent) + Send + Sync + 'static) -> Result<(), Error> {
         let channel: Channel = Channel::new(move |body| {

@@ -1,6 +1,6 @@
 //! Client for the Subsonic / OpenSubsonic API (target server: Navidrome).
 
-mod auth;
+pub(crate) mod auth;
 mod client;
 mod error;
 mod response;
