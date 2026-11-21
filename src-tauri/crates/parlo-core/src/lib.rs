@@ -4,6 +4,7 @@
 
 pub mod db;
 pub mod player;
+pub mod remote;
 pub mod settings;
 pub mod subsonic;
 pub mod time;

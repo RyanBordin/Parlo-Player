@@ -6,6 +6,8 @@ declare global {
       nowPlaying?: boolean;
       /** Its drawer (Up next, Lyrics, Related) is open too: Back closes the drawer first. */
       sheet?: boolean;
+      /** Phone (spec 12.8): the remote control of a computer is open over Now Playing. */
+      remote?: boolean;
       /** Phone: songs are being selected with long presses, so Back ends the selection. */
       selection?: boolean;
     }

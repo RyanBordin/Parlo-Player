@@ -11,6 +11,7 @@
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Heart from "@lucide/svelte/icons/heart";
   import ListPlus from "@lucide/svelte/icons/list-plus";
+  import MonitorSpeaker from "@lucide/svelte/icons/monitor-speaker";
   import Pause from "@lucide/svelte/icons/pause";
   import Play from "@lucide/svelte/icons/play";
   import Repeat from "@lucide/svelte/icons/repeat";
@@ -18,7 +19,7 @@
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { cubicOut } from "svelte/easing";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -28,6 +29,7 @@
   import PhoneBrand from "#lib/shell/PhoneBrand.svelte";
   import Lyrics from "#lib/components/now-playing/Lyrics.svelte";
   import Related from "#lib/components/now-playing/Related.svelte";
+  import RemoteControl from "#lib/components/now-playing/RemoteControl.svelte";
   import UpNext from "#lib/components/now-playing/UpNext.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { formatDuration } from "#lib/format.ts";
@@ -42,6 +44,7 @@
   } from "#lib/now-playing.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player, queue } from "#lib/player.svelte.ts";
+  import { connectRemote, remote, startRemote, stopRemote } from "#lib/remote.svelte.ts";
   import { appSettings, reducedMotion } from "#lib/settings/app-settings.svelte.ts";
 
   /** The cover is about the screen's width: asked in high resolution. */
@@ -69,6 +72,8 @@
   };
 
   let sheetOpen = $state(false);
+  /** The remote control of a computer (spec 12.8), over the whole screen. */
+  let remoteOpen = $state(false);
   /** ˅ with the drawer open goes back two entries at once: close everything. */
   let closingAll = false;
   /** Where a drag on the tab names started; a drag is not also a tap. */
@@ -116,7 +121,11 @@
   // serves again.
   onMount(() => {
     if (!page.state.nowPlaying) addEntry({ nowPlaying: true });
+    // Spec 12.8: the computers on the network, while the screen is open.
+    startRemote();
   });
+
+  onDestroy(stopRemote);
 
   function close() {
     if (sheetOpen && page.state.sheet) {
@@ -129,9 +138,10 @@
     }
   }
 
-  /** Back: the drawer first, then the screen. */
+  /** Back: the remote control or the drawer first, then the screen. */
   function onpopstate() {
-    if (sheetOpen && !closingAll) sheetOpen = false;
+    if (remoteOpen) remoteOpen = false;
+    else if (sheetOpen && !closingAll) sheetOpen = false;
     else closeNowPlaying();
   }
 
@@ -220,6 +230,21 @@
 
   function openTrackMenu(event: MouseEvent) {
     if (track) openSongsMenu(event, [track], { label: queue.label });
+  }
+
+  /** One computer: straight to it. Several: the list to choose from. */
+  function openRemote() {
+    const [only, ...others] = remote.devices;
+    if (only && others.length === 0 && remote.status?.deviceId !== only.id) {
+      connectRemote(only).catch((e) => (commandError = describeError(e)));
+    }
+    remoteOpen = true;
+    addEntry({ nowPlaying: true, remote: true });
+  }
+
+  function closeRemote() {
+    if (page.state.remote) history.back();
+    else remoteOpen = false;
   }
 
   function openAddToPlaylist(event: MouseEvent) {
@@ -590,6 +615,12 @@
     >
       <ListPlus />
     </button>
+    <!-- Spec 12.8: only when a computer with the same account is on the network. -->
+    {#if remote.devices.length > 0}
+      <button class="icon" type="button" onclick={openRemote} aria-label={m.remote_open()}>
+        <MonitorSpeaker />
+      </button>
+    {/if}
     <button class="icon" type="button" onclick={openTrackMenu} disabled={!track} aria-label={m.player_more()} aria-haspopup="menu">
       <Ellipsis />
     </button>
@@ -619,6 +650,10 @@
         {/if}
       </div>
     </div>
+  {/if}
+
+  {#if remoteOpen}
+    <RemoteControl onclose={closeRemote} />
   {/if}
 </section>
 

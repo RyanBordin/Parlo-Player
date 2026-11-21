@@ -44,6 +44,8 @@ export function describeError(error: unknown): ErrorMessage {
       return { message: m.error_playback(), detail: error.detail };
     case "testLibrary":
       return { message: m.error_test_library() };
+    case "remote":
+      return { message: m.error_remote(), detail: error.detail };
   }
 }
 
