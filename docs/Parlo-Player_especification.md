@@ -338,8 +338,8 @@ Sem conexão com o servidor, o aviso do Início some sozinho quando o servidor v
 
 Sobe cobrindo a tela inteira, inclusive as abas.
 
-* **Topo:** a seta **˅** para fechar (o gesto de voltar também fecha) e, ao lado dela, a marca do Parlo (símbolo e "Parlo Player" na moldura da marca do desktop). O contexto "Tocando de: [contexto]" fica só em A Seguir.
-* **Arrastar:** para baixo, a tela acompanha o dedo e fecha como a **˅** se passar de um limite ou se o gesto for rápido; se não, volta ao lugar. Para cima, abre a gaveta. Não vale na barra de progresso nem com a gaveta aberta (ela fecha arrastando os nomes das abas para baixo).
+* **Topo:** só a marca do Parlo (símbolo e "Parlo Player" na moldura da marca do desktop), no mesmo lugar que no topo do Início. Sem seta de fechar: a tela fecha arrastando para baixo ou com o voltar do Android (para leitores de tela há um botão de fechar invisível). O contexto "Tocando de: [contexto]" fica só em A Seguir.
+* **Arrastar:** para baixo, a tela acompanha o dedo e fecha a tela se passar de um limite ou se o gesto for rápido; se não, volta ao lugar. Para cima, abre a gaveta. Não vale na barra de progresso nem com a gaveta aberta (ela fecha arrastando os nomes das abas para baixo).
 * **Gaveta:** arrastar para os lados troca de aba (da direita para a esquerda: A Seguir → Letra → Relacionados; ao contrário, o caminho inverso). O conteúdo acompanha o dedo; nas pontas, um efeito elástico. A alça de reordenar tem prioridade, e as fileiras de Relacionados rolam de lado (no início da fileira, arrastar para a direita volta uma aba).
 * **Capa** grande, quadrada. **Fundo:** a cor predominante da capa (escurecida e menos saturada, para o texto branco ficar legível), forte no topo e fundindo-se no fundo escuro do tema embaixo, sem desfoque nem imagem; troca suave entre faixas (~600 ms). Segue a opção de fundo de Aparência; no desktop continua o brilho ambiente da Seção 4.4.
 * **Título** e **artista** (clicável → página do artista, fechando a tela), com **Favoritar** ao lado.
@@ -937,3 +937,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 07/11/2026 | Sem conexão com o servidor: o app tenta de novo sozinho (5 s, 10 s, 30 s e depois a cada 60 s, e ao voltar a rede ou o app) e o aviso some quando o servidor responde. No celular, puxar o Início para baixo recarrega a tela, com a logo do Parlo pulsando no lugar do spinner. |
 | 09/11/2026 | Celular: no topo das páginas das abas, a logo do Parlo (símbolo e nome) substitui o título, como no YouTube Music (a Busca mantém o campo). A linha de progresso do Mini Player aceita toque e arrasto para mudar a posição da música. |
 | 10/11/2026 | Celular: a marca do Parlo ganha a moldura da marca do desktop e aparece também no topo do Tocando Agora, ao lado da seta de fechar. |
+| 11/11/2026 | Tocando Agora no celular: sem a seta de fechar; a marca do Parlo fica no mesmo lugar que no topo do Início. Fechar: arrastar para baixo ou voltar do Android. |
