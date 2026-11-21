@@ -34,6 +34,12 @@ tauri-plugin-log = "2.10.1"
 tauri-plugin-opener = "2.7.2"
 log = "0.4.34"
 tauri-plugin-dialog = "2.8.3"
+# Remote control on the network (spec 12.8): mDNS discovery and a WebSocket
+# between the phone and the computer.
+mdns-sd = "0.22.0"
+tokio-tungstenite = "0.30.0"
+futures-util = { version = "0.3.34", default-features = false, features = ["std", "sink"] }
+tokio = { version = "1.53.3", features = ["net", "sync", "time", "macros"] }
 
 # Desktop only: Android plays through Media3 and saves the password with the
 # Android Keystore (the two plugins below).

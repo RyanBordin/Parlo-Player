@@ -2,6 +2,8 @@ package com.ryanbordin.parloplayer.audio
 
 import android.app.Activity
 import android.content.ComponentName
+import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
@@ -59,6 +61,11 @@ class VolumeArgs {
 }
 
 @InvokeArg
+class MulticastArgs {
+  var enabled: Boolean = false
+}
+
+@InvokeArg
 class EventHandlerArgs {
   lateinit var channel: Channel
 }
@@ -84,6 +91,9 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
   // reason (AUTO) when items are removed or added around the current one.
   private var nextItemId = 0L
   private var currentItemId: String? = null
+  // Android drops multicast packets unless an app holds this lock: the app
+  // needs them to find the computers on the network (mDNS).
+  private var multicastLock: WifiManager.MulticastLock? = null
 
   private val positionTicker = object : Runnable {
     override fun run() {
@@ -154,6 +164,8 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
   override fun onDestroy(activity: AppCompatActivity) {
     PlaybackService.onSkip = null
     main.removeCallbacks(positionTicker)
+    multicastLock?.takeIf { it.isHeld }?.release()
+    multicastLock = null
     controller?.release()
     controller = null
   }
@@ -232,6 +244,24 @@ class AudioPlugin(private val activity: Activity) : Plugin(activity) {
     val args = invoke.parseArgs(VolumeArgs::class.java)
     onPlayer(invoke) {
       it.volume = (args.volume / 100.0).toFloat().coerceIn(0f, 1f)
+    }
+  }
+
+  /** Holds the Wi-Fi multicast lock while the app looks for computers to control. */
+  @Command
+  fun setMulticast(invoke: Invoke) {
+    val args = invoke.parseArgs(MulticastArgs::class.java)
+    main.post {
+      if (args.enabled) {
+        val lock = multicastLock ?: (activity.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+          .createMulticastLock("parlo-remote")
+          .apply { setReferenceCounted(false) }
+          .also { multicastLock = it }
+        if (!lock.isHeld) lock.acquire()
+      } else {
+        multicastLock?.takeIf { it.isHeld }?.release()
+      }
+      invoke.resolve()
     }
   }
 

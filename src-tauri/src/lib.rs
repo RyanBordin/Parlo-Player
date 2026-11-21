@@ -20,6 +20,7 @@ mod now_playing;
 mod playback;
 mod player;
 mod playlists;
+mod remote;
 mod session;
 mod settings;
 mod state;
@@ -57,7 +58,8 @@ pub fn run() {
         // "Save to computer" (spec 8.2): the system's file dialogs, opened by the backend.
         .plugin(tauri_plugin_dialog::init())
         .plugin(locale::plugin())
-        .manage(Arc::new(AppState::default()));
+        .manage(Arc::new(AppState::default()))
+        .manage(Arc::new(remote::RemoteClient::default()));
     // Android plays through Media3 (see `player::media3`) and keeps the
     // password with the Android Keystore (see `session`).
     #[cfg(target_os = "android")]
@@ -92,6 +94,9 @@ pub fn run() {
             let playback = Playback::start(app.handle().clone()).map_err(|e| e.to_string());
             app.manage(PlaybackSlot(playback));
             auto_sync::start(app.handle().clone());
+            // Spec 12.8: phones on the network can control this computer.
+            #[cfg(desktop)]
+            remote::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -164,6 +169,11 @@ pub fn run() {
             commands::toggle_mute,
             commands::set_volume,
             commands::get_player_state,
+            commands::start_remote_discovery,
+            commands::stop_remote_discovery,
+            commands::remote_connect,
+            commands::remote_disconnect,
+            commands::remote_command,
             commands::get_app_settings,
             commands::save_app_settings,
             commands::get_audio_devices,
@@ -183,10 +193,13 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             // Spec 5.6: save the queue one last time when the app closes.
-            if let RunEvent::Exit = event
-                && let Ok(playback) = &app.state::<PlaybackSlot>().0
-            {
-                playback.save_now();
+            if let RunEvent::Exit = event {
+                if let Ok(playback) = &app.state::<PlaybackSlot>().0 {
+                    playback.save_now();
+                }
+                // Spec 12.8: phones stop listing this computer at once.
+                #[cfg(desktop)]
+                remote::stop();
             }
         });
 }

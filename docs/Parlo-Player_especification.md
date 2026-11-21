@@ -826,6 +826,17 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 * Windows: instalador e versão portátil. Linux: AppImage e Flatpak.
 * `[Depois]` atualização automática.
 
+### 12.8. Controle remoto pela rede `[Depois do v0.1]`
+
+O celular mostra e controla o que o computador está tocando, quando os dois estão na **mesma rede**.
+
+* **No computador:** o app abre um servidor local (WebSocket, porta 47410, ou outra se estiver ocupada) e se anuncia por **mDNS** (`_parlo-remote._tcp`) enquanto há alguém conectado ao servidor de música. O anúncio leva o nome do computador e um código da conta (hash do usuário), nunca o usuário ou a senha. Ao fechar o app, o anúncio sai na hora. Na primeira vez, o Windows pede para liberar o Parlo no firewall (redes privadas).
+* **No celular:** enquanto o Tocando Agora está aberto, o app procura computadores e lista só os **da mesma conta**. Aparece então um botão de computador entre "Adicionar à playlist" e "Mais opções". Com um computador, o toque conecta direto; com vários, abre a lista para escolher.
+* **Tela de controle** (sobre o Tocando Agora; Voltar ou ˅ fecham): "Tocando em [computador]", capa, música e artista, progresso (só mostra), Anterior, Play/Pause, Próxima, **volume do computador** e A seguir (a música atual e as próximas 100; tocar numa delas pula para ela no computador). Tudo atualiza ao vivo.
+* **Segurança:** o computador manda um número aleatório e o celular responde com um hash dele com a senha da conta (`md5("parlo-remote:" + número do PC + ":" + número do celular + ":" + senha)`). A senha não trafega, e o prefixo fixo impede que a resposta sirva como token Subsonic. Uma resposta errada espera 1 s. No máximo 8 celulares ao mesmo tempo.
+* **Erros na tela:** computador inalcançável (rede ou firewall), outra conta, ninguém conectado no computador, versões diferentes do app, conexão perdida; com "Tentar de novo".
+* `[Depois]` **Por usuário, fora da rede:** a API Subsonic não tem canal de controle ao vivo (`savePlayQueue` só guarda fila e posição; `jukeboxControl` toca no próprio servidor). O caminho previsto é digitar o endereço do computador, que funciona por VPN (ex.: Tailscale) com o mesmo protocolo; um servidor intermediário (relay) só se isso não bastar.
+
 ---
 
 ## 13. Limitações Conhecidas do Navidrome (API Subsonic)
@@ -938,3 +949,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 09/11/2026 | Celular: no topo das páginas das abas, a logo do Parlo (símbolo e nome) substitui o título, como no YouTube Music (a Busca mantém o campo). A linha de progresso do Mini Player aceita toque e arrasto para mudar a posição da música. |
 | 10/11/2026 | Celular: a marca do Parlo ganha a moldura da marca do desktop e aparece também no topo do Tocando Agora, ao lado da seta de fechar. |
 | 11/11/2026 | Tocando Agora no celular: sem a seta de fechar; a marca do Parlo fica no mesmo lugar que no topo do Início. Fechar: arrastar para baixo ou voltar do Android. |
+| 21/11/2026 | Controle remoto pela rede (Seção 12.8): o celular encontra por mDNS o computador da mesma conta e controla play/pause, anterior/próxima, volume e A seguir. Por usuário fora da rede fica para depois (endereço manual via VPN). |
