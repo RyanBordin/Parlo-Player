@@ -735,5 +735,6 @@
   "remote_problem_lost": "A conexão com {name} caiu.",
   "remote_retry": "Tentar de novo",
   "remote_close": "Fechar o controle remoto",
-  "remote_more_songs": "E mais {count} músicas"
+  "remote_more_songs": "E mais {count} músicas",
+  "remote_switch": "Trocar"
 }

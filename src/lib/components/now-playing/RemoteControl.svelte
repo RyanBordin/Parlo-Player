@@ -41,7 +41,12 @@
   let progress = $derived(duration ? Math.min(remote.position.position / duration, 1) * 100 : 0);
   let volume = $derived(draggingVolume ?? playing?.volume ?? 0);
   /** The device list: nothing chosen yet, or the chosen one failed. */
-  let choosing = $derived(status === null || (status.status === "closed" && remote.devices.length > 1));
+  /** "Switch computer" tapped: the list, over the connected one. */
+  let switching = $state(false);
+  let choosing = $derived(
+    switching || status === null || (status.status === "closed" && remote.devices.length > 1),
+  );
+  let canSwitch = $derived(!choosing && remote.devices.length > 1);
   let problem = $derived.by(() => {
     if (status?.status !== "closed" || !status.problem) return null;
     const name = status.name;
@@ -84,6 +89,9 @@
 
   async function choose(device: RemoteDevice) {
     commandError = null;
+    switching = false;
+    // Already connected to it: only back to its controls.
+    if (status?.deviceId === device.id && status.status !== "closed") return;
     try {
       await connectRemote(device);
     } catch (e) {
@@ -129,6 +137,10 @@
         {m.remote_playing_on({ name: status.name })}
       {/if}
     </p>
+    <!-- Several computers on the network: another one can be chosen. -->
+    {#if canSwitch}
+      <button type="button" class="switch" onclick={() => (switching = true)}>{m.remote_switch()}</button>
+    {/if}
   </header>
 
   {#if commandError}
@@ -277,6 +289,18 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     font-weight: var(--font-weight-bold);
+  }
+
+  .switch {
+    margin-left: auto;
+    flex: none;
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border-focus);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-sm);
   }
 
   .message {
