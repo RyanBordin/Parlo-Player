@@ -727,6 +727,8 @@
   "remote_open": "Controlar um computador",
   "remote_choose": "Escolha um computador",
   "remote_playing_on": "Tocando em {name}",
+  "remote_pill_on": "Tocando em {name}:",
+  "remote_pill_label": "Controlar {name}, tocando {title}",
   "remote_connecting": "Conectando a {name}…",
   "remote_problem_unreachable": "Não foi possível alcançar {name}. Confira se o celular e o computador estão na mesma rede e se o firewall do computador libera o Parlo.",
   "remote_problem_wrong_account": "{name} está conectado com outra conta.",
