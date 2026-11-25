@@ -9,16 +9,22 @@
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { next, seek, togglePause } from "#lib/api.ts";
   import Cover from "#lib/components/Cover.svelte";
+  import CoverTint from "#lib/components/CoverTint.svelte";
   import { describeError, type ErrorMessage } from "#lib/errors.ts";
   import { toggleNowPlaying } from "#lib/now-playing.svelte.ts";
   import { m } from "#lib/paraglide/messages.js";
   import { player, queue } from "#lib/player.svelte.ts";
+  import { appSettings } from "#lib/settings/app-settings.svelte.ts";
 
   const COVER_SIZE = 51;
 
   let commandError = $state<ErrorMessage | null>(null);
 
   let track = $derived(player.track);
+
+  // The cover's color, as behind Now Playing (spec 4.5): the same tone and
+  // fade. The Appearance backdrop option turns both off.
+  let tinted = $derived(appSettings.nowPlayingBackdrop && Boolean(track?.coverArt));
   let canControl = $derived(track !== null && player.status !== "idle");
   /** Where the finger is while it drags the line, in seconds. */
   let dragging = $state<number | null>(null);
@@ -71,6 +77,9 @@
 <!-- The whole bar opens Now Playing; its buttons do their own thing. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 <footer class="mini" {onclick}>
+  {#if tinted}
+    <CoverTint coverId={track?.coverArt} />
+  {/if}
   <div class="row">
     <div class="thumb" style:width={`${COVER_SIZE}px`}>
       <Cover id={track?.coverArt ?? null} size={COVER_SIZE} radius="var(--radius-sm)" />
@@ -137,6 +146,7 @@
 <style>
   .mini {
     position: relative;
+    isolation: isolate;
     border-top: 1px solid var(--color-border);
     background: var(--color-bg);
     -webkit-tap-highlight-color: transparent;
