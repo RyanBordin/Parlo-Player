@@ -830,6 +830,8 @@ Criadas e configuradas em **Configurações → Playlists automáticas**. Aparec
 
 O celular mostra e controla o que o computador está tocando, quando os dois estão na **mesma rede**.
 
+**Botão no Tocando Agora (celular):** sem conexão, o ícone do controle remoto fica numa moldura arredondada de borda fina, como a da marca do Parlo. Conectado, o botão vira uma pílula mais larga (cerca de 2/3 da linha) com a capa da música do computador, "Tocando em [computador]:" em letra pequena e o nome da música embaixo. Tocar nele abre o controle remoto.
+
 * **No computador:** o app abre um servidor local (WebSocket, porta 47410, ou outra se estiver ocupada) e se anuncia por **mDNS** (`_parlo-remote._tcp`) enquanto há alguém conectado ao servidor de música. O anúncio leva o nome do computador e um código da conta (hash do usuário), nunca o usuário ou a senha. Ao fechar o app, o anúncio sai na hora. Na primeira vez, o Windows pede para liberar o Parlo no firewall (redes privadas).
 * **No celular:** enquanto o Tocando Agora está aberto, o app procura computadores e lista só os **da mesma conta**. Aparece então um botão de computador entre "Adicionar à playlist" e "Mais opções". Com um computador, o toque conecta direto; com vários, abre a lista para escolher.
 * **Tela de controle** (sobre o Tocando Agora; Voltar ou ˅ fecham): "Tocando em [computador]", capa, música e artista, progresso (só mostra), Anterior, Play/Pause, Próxima, **volume do computador** e A seguir (a música atual e as próximas 100; tocar numa delas pula para ela no computador). Tudo atualiza ao vivo.
@@ -951,3 +953,4 @@ Verificado na documentação oficial (navidrome.org/docs/developers/subsonic-api
 | 11/11/2026 | Tocando Agora no celular: sem a seta de fechar; a marca do Parlo fica no mesmo lugar que no topo do Início. Fechar: arrastar para baixo ou voltar do Android. |
 | 11/11/2026 | Mini Player no celular: fundo com a cor da capa e o mesmo degradê do Tocando Agora. |
 | 21/11/2026 | Controle remoto pela rede (Seção 12.8): o celular encontra por mDNS o computador da mesma conta e controla play/pause, anterior/próxima, volume e A seguir. Por usuário fora da rede fica para depois (endereço manual via VPN). |
+| 22/11/2026 | Botão do controle remoto no Tocando Agora do celular: sem conexão, o ícone numa moldura como a da marca do Parlo; conectado, vira uma pílula com a capa, "Tocando em [computador]:" e o nome da música. |

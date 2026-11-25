@@ -727,6 +727,8 @@
   "remote_open": "Control a computer",
   "remote_choose": "Choose a computer",
   "remote_playing_on": "Playing on {name}",
+  "remote_pill_on": "Playing on {name}:",
+  "remote_pill_label": "Control {name}, playing {title}",
   "remote_connecting": "Connecting to {name}…",
   "remote_problem_unreachable": "Could not reach {name}. Check that the phone and the computer are on the same network and that the computer's firewall allows Parlo.",
   "remote_problem_wrong_account": "{name} is signed in with another account.",

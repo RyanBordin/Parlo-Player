@@ -216,6 +216,10 @@
     if (track) openSongsMenu(event, [track], { label: queue.label });
   }
 
+  /** Connected to a computer: what it plays shows on the remote button. */
+  let remoteName = $derived(remote.status?.status === "connected" ? remote.status.name : null);
+  let remoteTrack = $derived(remoteName ? (remote.player?.track ?? null) : null);
+
   /** One computer: straight to it. Several: the list to choose from. */
   function openRemote() {
     const [only, ...others] = remote.devices;
@@ -602,9 +606,26 @@
     </button>
     <!-- Spec 12.8: only when a computer with the same account is on the network. -->
     {#if remote.devices.length > 0}
-      <button class="icon" type="button" onclick={openRemote} aria-label={m.remote_open()}>
-        <MonitorSpeaker />
-      </button>
+      {#if remoteName}
+        <!-- Connected: the computer's song and its name; opens the remote. -->
+        <button
+          class="remote-pill"
+          type="button"
+          onclick={openRemote}
+          aria-label={m.remote_pill_label({ name: remoteName, title: remoteTrack?.title ?? "" })}
+        >
+          <span class="remote-cover"><Cover id={remoteTrack?.coverArt} size={40} radius="4px" /></span>
+          <span class="remote-text">
+            <span class="remote-on">{m.remote_pill_on({ name: remoteName })}</span>
+            <span class="remote-title">{remoteTrack?.title ?? ""}</span>
+          </span>
+        </button>
+      {:else}
+        <!-- Not connected: the icon in the brand's frame. -->
+        <button class="icon remote-frame" type="button" onclick={openRemote} aria-label={m.remote_open()}>
+          <MonitorSpeaker />
+        </button>
+      {/if}
     {/if}
     <button class="icon" type="button" onclick={openTrackMenu} disabled={!track} aria-label={m.player_more()} aria-haspopup="menu">
       <Ellipsis />
@@ -764,9 +785,69 @@
     justify-content: space-between;
   }
 
+  /* As tall as the connected remote pill, so the row never jumps. */
   .actions {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: var(--space-2);
+    min-height: 56px;
+  }
+
+  /* Spec 12.8: the remote button, not connected: in the frame of the Parlo
+     brand (thin border, rounded corners, no fill). */
+  .icon.remote-frame {
+    width: 52px;
+    height: 52px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+
+  /* Connected: a wider pill with the computer's cover, its name and song. */
+  .remote-pill {
+    flex: 0 1 66%;
+    min-width: 0;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 0 var(--space-4) 0 var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: rgb(255 255 255 / 6%);
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .remote-cover {
+    flex: none;
+    width: 40px;
+  }
+
+  .remote-text {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .remote-on,
+  .remote-title {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .remote-on {
+    color: var(--color-text-on-image);
+    font-size: var(--font-size-xs);
+  }
+
+  .remote-title {
+    font-size: 15px;
+    font-weight: var(--font-weight-medium);
   }
 
   .icon {
